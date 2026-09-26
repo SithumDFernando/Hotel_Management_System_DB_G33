@@ -1,0 +1,1 @@
+﻿-- TODO: Implement fn_calculate_nights.sql

@@ -1,0 +1,1 @@
+﻿-- TODO: Implement fn_get_current_rate.sql
