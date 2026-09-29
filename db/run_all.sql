@@ -1,1 +1,52 @@
-﻿-- TODO: Implement run_all.sql
+-- =============================================================================
+-- db/run_all.sql
+-- =============================================================================
+-- Purpose:
+--   Single entry point to (re)build the entire SkyNest database schema from
+--   scratch. Run this file in psql or any SQL client to:
+--     1. Drop and recreate enum types (if needed during development).
+--     2. Create all 13 tables in dependency order.
+--     3. Apply all CHECK, UNIQUE, and FK constraints.
+--     4. Create performance indexes.
+--     5. Install all stored functions (db/functions/).
+--     6. Install all stored procedures (db/procedures/).
+--     7. Install all triggers (db/triggers/).
+--     8. Create all reporting views (db/views/).
+--     9. (Optional) Load seed data (db/seed/).
+--
+-- Usage:
+--   psql -U <user> -d skynest -f db/run_all.sql
+--
+-- IMPORTANT: Paths below use \i (psql meta-command). All paths are relative
+--   to the db/ directory. Run psql from the project root OR set the search
+--   path accordingly.
+--
+-- Execution order matters — do NOT reorder these \i statements:
+--   Schema first (tables → constraints → indexes),
+--   then functions (no dependencies on procedures),
+--   then procedures (may call functions),
+--   then triggers (depend on procedures/functions),
+--   then views (read-only queries over tables),
+--   finally seed data (needs all tables to exist).
+-- =============================================================================
+
+-- TODO: Implement run_all.sql
+
+-- \i schema/01_tables.sql
+-- \i schema/02_constraints.sql
+-- \i schema/03_indexes.sql
+-- \i functions/fn_calculate_nights.sql
+-- \i functions/fn_calculate_tax.sql
+-- \i functions/fn_get_current_rate.sql
+-- \i functions/fn_get_room_charges.sql
+-- \i functions/fn_get_service_charges.sql
+-- \i functions/fn_get_outstanding_balance.sql
+-- \i procedures/booking.sql
+-- \i procedures/checkin_checkout.sql
+-- \i procedures/billing.sql
+-- \i procedures/payments.sql
+-- \i triggers/double_booking_trigger.sql
+-- \i triggers/room_status_trigger.sql
+-- \i triggers/service_usage_trigger.sql
+-- \i views/reports.sql
+-- \i seed/sample_data.sql

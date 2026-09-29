@@ -1,1 +1,48 @@
-﻿-- TODO: Implement 02_constraints.sql
+-- =============================================================================
+-- db/schema/02_constraints.sql
+-- =============================================================================
+-- Purpose:
+--   Adds all inter-table constraints (foreign keys), cross-column CHECK
+--   constraints, and UNIQUE constraints that cannot be declared inline in
+--   01_tables.sql without causing forward-reference issues.
+--
+--   Separating constraints from table creation makes it easy to:
+--     - Drop and re-add constraints during schema migrations.
+--     - Load large seed datasets faster (temporarily disable FKs then re-add).
+--
+-- Constraints to implement:
+--
+--   Foreign Keys:
+--     room.branch_id          → branch(branch_id)      ON DELETE RESTRICT
+--     room.room_type_id       → room_type(room_type_id) ON DELETE RESTRICT
+--     room_rate.branch_id     → branch(branch_id)      ON DELETE CASCADE
+--     room_rate.room_type_id  → room_type(room_type_id) ON DELETE CASCADE
+--     room_amenity.room_type_id → room_type(room_type_id) ON DELETE CASCADE
+--     room_amenity.amenity_id → amenity(amenity_id)    ON DELETE CASCADE
+--     user_account.guest_id   → guest(guest_id)        ON DELETE SET NULL
+--     user_account.branch_id  → branch(branch_id)      ON DELETE SET NULL
+--     booking.guest_id        → guest(guest_id)        ON DELETE RESTRICT
+--     booking.room_id         → room(room_id)          ON DELETE RESTRICT
+--     service_usage.booking_id → booking(booking_id)   ON DELETE CASCADE
+--     service_usage.service_id → service(service_id)   ON DELETE RESTRICT
+--     bill.booking_id         → booking(booking_id)    ON DELETE CASCADE
+--     payment.booking_id      → booking(booking_id)    ON DELETE CASCADE
+--
+--   CHECK Constraints:
+--     booking: CHECK (check_out_date > check_in_date)
+--     guest:   CHECK (guest_type <> 'Corporate' OR company_name IS NOT NULL)
+--     room_rate: CHECK (daily_rate > 0)
+--     room_amenity: CHECK (count > 0)
+--     service_usage: CHECK (quantity > 0)
+--     bill: CHECK (amount_paid >= 0 AND outstanding_balance >= 0)
+--     payment: CHECK (amount > 0)
+--
+--   UNIQUE Constraints:
+--     room:      UNIQUE (branch_id, room_number)
+--     room_rate: UNIQUE (branch_id, room_type_id)
+--     guest:     UNIQUE (nic_passport)
+--     user_account: UNIQUE (email)
+--     bill:      UNIQUE (booking_id)   — enforces 1:1 with booking
+-- =============================================================================
+
+-- TODO: Implement 02_constraints.sql

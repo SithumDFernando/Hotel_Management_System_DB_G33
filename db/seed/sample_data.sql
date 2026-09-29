@@ -1,1 +1,65 @@
-﻿-- TODO: Implement sample_data.sql
+-- =============================================================================
+-- db/seed/sample_data.sql
+-- =============================================================================
+-- Purpose:
+--   Populates the database with realistic sample data for development and
+--   testing. Run AFTER run_all.sql has built the full schema. This data
+--   allows the team to test the API, frontend pages, and reports without
+--   needing to manually create records through the UI.
+--
+-- Data to insert (in dependency order — parent rows before child rows):
+--
+--   1. BRANCH (3 rows)
+--      - SkyNest Colombo, SkyNest Kandy, SkyNest Galle
+--
+--   2. ROOM_TYPE (3–4 rows)
+--      - Single (capacity=1), Double (capacity=2), Suite (capacity=4), Deluxe (capacity=2)
+--
+--   3. AMENITY (6–8 rows)
+--      - WiFi, Air Conditioning, TV, Mini-bar, Balcony, King Bed, Pool Access, Jacuzzi
+--
+--   4. ROOM_AMENITY (junction rows linking room types to amenities)
+--
+--   5. ROOM_RATE (one per branch × room_type combination = ~12 rows)
+--      - e.g. Suite in Colombo = LKR 15,000/night, Single in Galle = LKR 5,000/night
+--
+--   6. ROOM (8–12 rooms spread across branches)
+--      - e.g. Colombo: 101 (Suite), 102 (Double), 103 (Single)
+--
+--   7. GUEST (4–6 guests, mix of Individual and Corporate)
+--      - John Silva (Individual), Nimal Perera (Individual),
+--        Lanka Exports Ltd (Corporate), etc.
+--
+--   8. USER_ACCOUNT (5–7 accounts)
+--      - 1 admin (admin@skynest.lk)
+--      - 1 manager per branch (manager.colombo@, manager.kandy@, ...)
+--      - 1–2 receptionists
+--      - 1–2 guest accounts linked to guest rows
+--      NOTE: Passwords should be bcrypt-hashed. Use the admin password 'admin123'
+--            hashed, or insert a known hash for testing.
+--
+--   9. BOOKING (3–5 bookings in various states)
+--      - One 'Checked-In', one 'Checked-Out', one 'Booked' future booking,
+--        one 'Cancelled'.
+--
+--   10. SERVICE (5–6 services)
+--       - Room Service (F&B, 1500.00), Spa Treatment (Wellness, 5000.00),
+--         Laundry (Housekeeping, 500.00), Airport Transfer (Transport, 3000.00),
+--         Minibar Restock (F&B, 2500.00)
+--
+--   11. SERVICE_USAGE (for the Checked-In / Checked-Out bookings)
+--
+--   12. BILL (for the Checked-Out booking — generated bill)
+--
+--   13. PAYMENT (partial payment against the Checked-Out booking)
+--
+-- Notes:
+--   - Use gen_random_uuid() for all UUIDs, or hardcode UUIDs for predictable
+--     test data (hardcoded UUIDs are easier to reference in unit tests).
+--   - Wrap in a transaction so seed can be rolled back cleanly:
+--       BEGIN;
+--       ... INSERT statements ...
+--       COMMIT;
+-- =============================================================================
+
+-- TODO: Implement sample_data.sql

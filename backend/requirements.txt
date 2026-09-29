@@ -1,1 +1,33 @@
-﻿# TODO: Configure this file
+# =============================================================================
+# backend/requirements.txt
+# =============================================================================
+# Purpose:
+#   Lists all Python package dependencies for the FastAPI backend.
+#   Install with: pip install -r requirements.txt
+#   (Recommended: use a virtual environment — python -m venv .venv)
+#
+# Core packages:
+#   fastapi             — Web framework (routing, dependency injection, OpenAPI docs)
+#   uvicorn[standard]   — ASGI server to run the FastAPI app
+#                         (includes WebSocket + HTTP/2 support via 'standard' extras)
+#
+# Database:
+#   asyncpg             — High-performance async PostgreSQL driver
+#                         (used with asyncpg.create_pool() in app/db.py)
+#
+# Configuration:
+#   pydantic-settings   — Loads environment variables into typed Settings class
+#                         (used in app/config.py)
+#
+# Authentication:
+#   passlib[bcrypt]     — Secure password hashing (bcrypt algorithm)
+#   PyJWT               — JWT token creation and decoding
+#
+# =============================================================================
+
+fastapi
+uvicorn[standard]
+asyncpg
+pydantic-settings
+passlib[bcrypt]
+PyJWT

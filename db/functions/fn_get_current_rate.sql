@@ -1,1 +1,45 @@
-﻿-- TODO: Implement fn_get_current_rate.sql
+-- =============================================================================
+-- db/functions/fn_get_current_rate.sql
+-- =============================================================================
+-- Purpose:
+--   Looks up the current daily room rate for a given (branch, room_type)
+--   combination from the room_rate table. Used at the point of booking creation
+--   to snapshot the rate into booking.rate_at_booking.
+--
+--   IMPORTANT: This function reads the LIVE rate. After the rate is snapshotted
+--   into booking.rate_at_booking, billing uses that snapshot — NOT this function.
+--   This preserves historical billing accuracy even if rates change later.
+--
+-- Function signature to implement:
+--   CREATE OR REPLACE FUNCTION fn_get_current_rate(
+--       p_branch_id    UUID,
+--       p_room_type_id UUID
+--   )
+--   RETURNS NUMERIC(10,2)
+--   LANGUAGE sql
+--   STABLE  -- Result depends on DB state; not IMMUTABLE
+--   AS $$
+--       SELECT daily_rate
+--       FROM   room_rate
+--       WHERE  branch_id    = p_branch_id
+--         AND  room_type_id = p_room_type_id;
+--   $$;
+--
+-- Parameters:
+--   p_branch_id    : UUID of the branch where the room is located.
+--   p_room_type_id : UUID of the room type (Suite, Double, Single, etc.)
+--
+-- Returns:
+--   NUMERIC(10,2) — current daily rate in LKR (or NULL if no rate configured).
+--
+-- Usage example:
+--   SELECT fn_get_current_rate(
+--       '550e8400-e29b-41d4-a716-446655440000',  -- branch_id
+--       'f47ac10b-58cc-4372-a567-0e02b2c3d479'   -- room_type_id
+--   );
+--
+-- Called by:
+--   create_booking() stored procedure to snapshot the rate at booking time.
+-- =============================================================================
+
+-- TODO: Implement fn_get_current_rate

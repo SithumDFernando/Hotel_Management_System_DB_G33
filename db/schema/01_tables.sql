@@ -1,1 +1,41 @@
-﻿-- TODO: Implement 01_tables.sql
+-- =============================================================================
+-- db/schema/01_tables.sql
+-- =============================================================================
+-- Purpose:
+--   Creates all 13 core tables for the SkyNest Hotel Reservation & Guest
+--   Services Management System (HRGSMS). Tables are declared in dependency
+--   order so that foreign-key targets always exist before their referencing
+--   tables.
+--
+-- Schema is in 3NF (see docs/specs/01_database_design.md for full rationale).
+--
+-- Tables to create (in order):
+--   1.  BRANCH          — Hotel branches (Colombo, Kandy, Galle, etc.)
+--   2.  ROOM_TYPE       — Room categories (Suite, Double, Single, etc.)
+--   3.  AMENITY         — Individual amenities (WiFi, TV, Mini-bar, etc.)
+--   4.  ROOM_AMENITY    — Junction: which amenities belong to which room types
+--   5.  ROOM_RATE       — Daily rate per (branch, room_type) combination
+--   6.  ROOM            — Individual physical rooms in a branch
+--   7.  GUEST           — Guest profiles (Individual & Corporate)
+--   8.  USER_ACCOUNT    — Login credentials + role for staff and guests
+--   9.  BOOKING         — Room reservations (Booked → Checked-In → Checked-Out)
+--   10. SERVICE         — Catalogue of chargeable hotel services
+--   11. SERVICE_USAGE   — Usage of services against a checked-in booking
+--   12. BILL            — Aggregated bill per booking (1:1 with BOOKING)
+--   13. PAYMENT         — Individual payment transactions against a booking
+--
+-- Enum types (create BEFORE tables):
+--   room_status    : 'Available' | 'Occupied' | 'Maintenance'
+--   booking_status : 'Booked' | 'Checked-In' | 'Checked-Out' | 'Cancelled'
+--   guest_type     : 'Individual' | 'Corporate'
+--   user_role      : 'admin' | 'manager' | 'receptionist' | 'guest'
+--
+-- Notes:
+--   - All PKs use UUID (gen_random_uuid()) for global uniqueness.
+--   - Constraints are split into 02_constraints.sql for clarity, but you may
+--     inline simple NOT NULL / DEFAULT constraints here.
+--   - rate_at_booking and unit_price are SNAPSHOTS — they are set at INSERT
+--     time and must not be recalculated later (price immutability).
+-- =============================================================================
+
+-- TODO: Implement 01_tables.sql

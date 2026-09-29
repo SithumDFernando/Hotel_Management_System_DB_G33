@@ -1,1 +1,57 @@
-﻿-- TODO: Implement reports.sql
+-- =============================================================================
+-- db/views/reports.sql
+-- =============================================================================
+-- Purpose:
+--   Defines the 5 PostgreSQL VIEWs that power the management reports required
+--   by the SRS. Each view JOINs multiple tables and pre-aggregates data so the
+--   API layer only needs to apply optional WHERE filters (branch, date range)
+--   on top of the view — keeping report logic in the database, not Python.
+--
+-- Views to implement (see docs/specs/05_views_and_reports.md for full specs):
+--
+--   1. v_room_occupancy
+--      Purpose: Shows current or date-range occupancy per room.
+--      Key JOINs: room → branch, room_type, LEFT JOIN booking (active only)
+--                 LEFT JOIN guest
+--      Used by: GET /api/reports/occupancy
+--               ManagerDashboard "Branch Overview" and "Occupancy Report" sections.
+--
+--   2. v_guest_billing_summary
+--      Purpose: Full billing breakdown per guest and booking, including
+--               outstanding balance flag for the "unpaid guests" report.
+--      Key JOINs: guest → booking → room → branch, LEFT JOIN bill
+--      Used by: GET /api/reports/billing-summary
+--               ManagerDashboard "Billing Summary" section.
+--
+--   3. v_service_usage_breakdown
+--      Purpose: Service usage grouped by room/guest/service with totals.
+--      Key JOINs: service_usage → booking → room → branch → guest → service
+--      GROUP BY: branch, room, guest, service, category
+--      Used by: GET /api/reports/service-usage
+--               ManagerDashboard "Service Analytics" section.
+--
+--   4. v_monthly_revenue
+--      Purpose: Revenue breakdown per branch per calendar month.
+--      Key JOINs: bill → booking → room → branch
+--      WHERE: booking.status = 'Checked-Out'
+--      GROUP BY: branch, EXTRACT(YEAR/MONTH FROM booking.check_out_date)
+--      Used by: GET /api/reports/monthly-revenue
+--               ManagerDashboard "Revenue Report" section.
+--
+--   5. v_top_services
+--      Purpose: Most-used services ranked by total quantity and revenue.
+--      Key JOINs: service_usage → service
+--      GROUP BY: service_name, category
+--      ORDER BY: total_quantity DESC
+--      Used by: GET /api/reports/top-services
+--               ManagerDashboard "Service Analytics" section.
+--
+-- Implementation notes:
+--   - Use CREATE OR REPLACE VIEW so this file can be re-run safely.
+--   - Views with heavy GROUP BY benefit from the indexes in 03_indexes.sql.
+--   - For parameterised date ranges, the API applies WHERE on top of the view:
+--       SELECT * FROM v_room_occupancy WHERE check_in_date <= :date AND check_out_date > :date
+--   - Managers see their branch only: API adds WHERE branch_name = :user_branch.
+-- =============================================================================
+
+-- TODO: Implement all 5 reporting views

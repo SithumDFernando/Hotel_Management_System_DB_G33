@@ -1,1 +1,36 @@
-﻿{"description": "TODO: Implement package.json"}
+{
+  "description": "SkyNest Hotel Frontend — React + Vite SPA",
+  "_comment_scripts": {
+    "dev":     "Start the Vite dev server on port 5173 with hot module replacement",
+    "build":   "Bundle for production into the dist/ directory",
+    "preview": "Preview the production build locally before deployment"
+  },
+  "_comment_dependencies": {
+    "react":              "Core React library",
+    "react-dom":          "React DOM renderer",
+    "react-router-dom":   "Client-side routing (BrowserRouter, Routes, Route, Navigate, Link, NavLink, Outlet, useParams, useNavigate, useLocation)",
+    "axios":              "HTTP client for API requests — configured in src/api/client.js"
+  },
+  "_comment_devDependencies": {
+    "vite":                "Frontend build tool and dev server",
+    "@vitejs/plugin-react":"Vite plugin for React JSX transform + Fast Refresh"
+  },
+  "name": "skynest-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.22.0",
+    "axios": "^1.6.0"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0",
+    "@vitejs/plugin-react": "^4.2.0"
+  }
+}

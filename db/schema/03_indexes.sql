@@ -1,1 +1,45 @@
-﻿-- TODO: Implement 03_indexes.sql
+-- =============================================================================
+-- db/schema/03_indexes.sql
+-- =============================================================================
+-- Purpose:
+--   Creates performance indexes on high-traffic query columns. Without these,
+--   the reporting views and booking availability queries would perform full
+--   table scans as data grows.
+--
+-- Indexing strategy (see docs/specs/06_indexing_strategy.md for full details):
+--
+--   booking table (most queried):
+--     idx_booking_room_id       ON booking(room_id)
+--       — Used by the double-booking check to find overlapping reservations.
+--     idx_booking_guest_id      ON booking(guest_id)
+--       — Used when fetching all bookings for a specific guest.
+--     idx_booking_status        ON booking(status)
+--       — Used by ReceptionistDashboard filters (Booked, Checked-In, etc.)
+--     idx_booking_check_in_date ON booking(check_in_date)
+--       — Used for "today's arrivals" queries.
+--     idx_booking_check_out_date ON booking(check_out_date)
+--       — Used for "today's departures" and monthly revenue reports.
+--
+--   service_usage table:
+--     idx_service_usage_booking_id ON service_usage(booking_id)
+--       — Used when fetching all services for a booking (billing).
+--     idx_service_usage_service_id ON service_usage(service_id)
+--       — Used by v_top_services view aggregation.
+--
+--   bill table:
+--     idx_bill_booking_id ON bill(booking_id)
+--       — Already unique but explicit index speeds up JOIN in billing report.
+--     idx_bill_balance_flag ON bill(balance_flag) WHERE balance_flag = TRUE
+--       — Partial index for quick "outstanding balance" report queries.
+--
+--   room table:
+--     idx_room_branch_id    ON room(branch_id)
+--     idx_room_status       ON room(status)
+--       — Used by availability filter in GET /api/rooms.
+--
+--   user_account table:
+--     idx_user_account_email ON user_account(email)
+--       — Used by login query (SELECT WHERE email = ?).
+-- =============================================================================
+
+-- TODO: Implement 03_indexes.sql

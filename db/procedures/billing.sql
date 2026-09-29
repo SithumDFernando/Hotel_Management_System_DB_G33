@@ -1,1 +1,69 @@
-﻿-- TODO: Implement billing.sql
+-- =============================================================================
+-- db/procedures/billing.sql
+-- =============================================================================
+-- Purpose:
+--   Stored procedure for generating (or regenerating) the bill for a booking.
+--   Aggregates room and service charges, applies tax, and UPSERTS the bill row.
+--   The 1:1 relationship between booking and bill is enforced by the UNIQUE
+--   constraint on bill.booking_id.
+--
+-- Procedure to implement:
+--   CREATE OR REPLACE PROCEDURE generate_bill(
+--       p_booking_id     UUID,
+--       p_discount_amount NUMERIC(10,2) DEFAULT 0.00
+--   )
+--   LANGUAGE plpgsql
+--   AS $$
+--   DECLARE
+--       v_room_charges    NUMERIC(10,2);
+--       v_service_charges NUMERIC(10,2);
+--       v_subtotal        NUMERIC(10,2);
+--       v_tax_amount      NUMERIC(10,2);
+--       v_total           NUMERIC(10,2);
+--       v_amount_paid     NUMERIC(10,2) := 0.00;
+--       v_outstanding     NUMERIC(10,2);
+--   BEGIN
+--       -- Step 1: Calculate components using helper functions
+--       v_room_charges    := fn_get_room_charges(p_booking_id);
+--       v_service_charges := fn_get_service_charges(p_booking_id);
+--       v_subtotal        := v_room_charges + v_service_charges - p_discount_amount;
+--       v_tax_amount      := fn_calculate_tax(v_subtotal);
+--       v_total           := v_subtotal + v_tax_amount;
+--
+--       -- Step 2: Read any existing payments already recorded
+--       SELECT COALESCE(SUM(amount), 0.00)
+--         INTO v_amount_paid
+--         FROM payment WHERE booking_id = p_booking_id;
+--
+--       v_outstanding := v_total - v_amount_paid;
+--
+--       -- Step 3: UPSERT the bill row (INSERT on first call, UPDATE on regenerate)
+--       INSERT INTO bill (
+--           booking_id, room_charges, service_charges, discount_amount,
+--           tax_amount, total_amount, amount_paid, outstanding_balance,
+--           balance_flag, generated_at
+--       )
+--       VALUES (
+--           p_booking_id, v_room_charges, v_service_charges, p_discount_amount,
+--           v_tax_amount, v_total, v_amount_paid, v_outstanding,
+--           (v_outstanding > 0), NOW()
+--       )
+--       ON CONFLICT (booking_id) DO UPDATE SET
+--           room_charges        = EXCLUDED.room_charges,
+--           service_charges     = EXCLUDED.service_charges,
+--           discount_amount     = EXCLUDED.discount_amount,
+--           tax_amount          = EXCLUDED.tax_amount,
+--           total_amount        = EXCLUDED.total_amount,
+--           amount_paid         = EXCLUDED.amount_paid,
+--           outstanding_balance = EXCLUDED.outstanding_balance,
+--           balance_flag        = EXCLUDED.balance_flag,
+--           generated_at        = NOW();
+--   END;
+--   $$;
+--
+-- Called by:
+--   POST /api/billing/{booking_id}/generate in backend/app/routers/billing.py
+--   Also optionally called automatically by perform_checkout() on check-out.
+-- =============================================================================
+
+-- TODO: Implement generate_bill procedure

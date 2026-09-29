@@ -1,1 +1,62 @@
-﻿/* TODO: Implement index.css */
+/* =============================================================================
+   frontend/src/styles/index.css
+   =============================================================================
+   Purpose:
+     Global stylesheet for the SkyNest React SPA. Imported once in main.jsx
+     and applied to the entire application. Contains:
+
+     1. CSS Reset / Normalisation
+        - Box-sizing reset, margin/padding zero for all elements.
+        - Font-family set to the imported Google Font (e.g. "Inter").
+
+     2. Design Tokens (CSS Custom Properties)
+        Define the colour palette, spacing scale, typography, shadows, and
+        border radii as CSS variables on :root so all components stay consistent:
+
+        :root {
+          --color-primary:      hsl(220, 80%, 55%); 
+          --color-primary-dark: hsl(220, 80%, 40%);
+          --color-accent:       hsl(40, 90%, 55%);   
+          --color-bg:           hsl(220, 20%, 10%);
+          --color-surface:      hsl(220, 18%, 16%);  
+          --color-border:       hsl(220, 15%, 25%);
+          --color-text:         hsl(0, 0%, 92%);
+          --color-text-muted:   hsl(0, 0%, 60%);
+          --color-success:      hsl(140, 60%, 45%);
+          --color-error:        hsl(0, 70%, 55%);
+          --color-warning:      hsl(35, 90%, 55%);
+
+          --radius-sm: 4px;
+          --radius-md: 8px;
+          --radius-lg: 16px;
+
+          --shadow-card: 0 4px 20px rgba(0,0,0,0.35);
+
+          --font-sans: 'Inter', system-ui, sans-serif;
+          --font-size-base: 16px;
+        }
+
+     3. Base Element Styles
+        - body: background-color, color, font-family from tokens.
+        - a: colour and hover transitions.
+        - input, select, button: consistent base appearance.
+
+     4. Utility Classes
+        - .btn, .btn--primary, .btn--secondary, .btn--danger
+        - .badge, .badge--available, .badge--occupied, .badge--maintenance
+        - .card (glassmorphism surface: backdrop-filter + semi-transparent bg)
+        - .loading-spinner
+        - .error-message, .empty-state
+
+     5. Layout Utilities
+        - .page-content (max-width container, centred)
+        - .grid-2, .grid-3, .grid-4 (responsive CSS Grid helpers)
+        - .flex-between (flexbox space-between row)
+
+   Notes:
+     - Import Google Fonts in index.html <head>, not here, to avoid FOUC.
+     - Component-specific styles should live in a <ComponentName>.module.css
+       file (CSS Modules) co-located with the component.
+   ============================================================================= */
+
+/* TODO: Implement index.css */
