@@ -30,23 +30,70 @@
 --   finally seed data (needs all tables to exist).
 -- =============================================================================
 
--- TODO: Implement run_all.sql
+-- Step 0: Print start banner
+\echo '============================================='
+\echo '  SkyNest Database — Full Schema Rebuild'
+\echo '============================================='
 
--- \i schema/01_tables.sql
--- \i schema/02_constraints.sql
--- \i schema/03_indexes.sql
--- \i functions/fn_calculate_nights.sql
--- \i functions/fn_calculate_tax.sql
--- \i functions/fn_get_current_rate.sql
--- \i functions/fn_get_room_charges.sql
--- \i functions/fn_get_service_charges.sql
--- \i functions/fn_get_outstanding_balance.sql
--- \i procedures/booking.sql
--- \i procedures/checkin_checkout.sql
--- \i procedures/billing.sql
--- \i procedures/payments.sql
--- \i triggers/double_booking_trigger.sql
--- \i triggers/room_status_trigger.sql
--- \i triggers/service_usage_trigger.sql
--- \i views/reports.sql
--- \i seed/sample_data.sql
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Step 1: Schema (tables, constraints, indexes)
+-- ─────────────────────────────────────────────────────────────────────────────
+\echo ''
+\echo '>>> [1/8] Creating tables...'
+\i schema/01_tables.sql
+
+\echo '>>> [2/8] Adding constraints...'
+\i schema/02_constraints.sql
+
+\echo '>>> [3/8] Creating indexes...'
+\i schema/03_indexes.sql
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Step 2: Functions (pure calculations, no side effects)
+-- ─────────────────────────────────────────────────────────────────────────────
+\echo ''
+\echo '>>> [4/8] Installing functions...'
+\i functions/fn_calculate_nights.sql
+\i functions/fn_calculate_tax.sql
+\i functions/fn_get_current_rate.sql
+\i functions/fn_get_room_charges.sql
+\i functions/fn_get_service_charges.sql
+\i functions/fn_get_outstanding_balance.sql
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Step 3: Procedures (may call functions, modify data)
+-- ─────────────────────────────────────────────────────────────────────────────
+\echo ''
+\echo '>>> [5/8] Installing procedures...'
+\i procedures/booking.sql
+\i procedures/checkin_checkout.sql
+\i procedures/billing.sql
+\i procedures/payments.sql
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Step 4: Triggers (fire on table events, may call functions/procedures)
+-- ─────────────────────────────────────────────────────────────────────────────
+\echo ''
+\echo '>>> [6/8] Installing triggers...'
+\i triggers/double_booking_trigger.sql
+\i triggers/room_status_trigger.sql
+\i triggers/service_usage_trigger.sql
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Step 5: Views (read-only reporting queries)
+-- ─────────────────────────────────────────────────────────────────────────────
+\echo ''
+\echo '>>> [7/8] Creating views...'
+\i views/reports.sql
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Step 6: Seed data (optional — comment out for production)
+-- ─────────────────────────────────────────────────────────────────────────────
+\echo ''
+\echo '>>> [8/8] Loading seed data...'
+\i seed/sample_data.sql
+
+\echo ''
+\echo '============================================='
+\echo '  SkyNest Database — Build Complete!'
+\echo '============================================='
