@@ -12,7 +12,7 @@ Developed for **University of Moratuwa — Semester 3 Database Project (Group 33
 Follow this reading order to get started smoothly:
 
 1. **[README.md](README.md)** (this file) — Overview of the hotel system, team responsibilities, and Git rules.
-2. **[docs/SETUP.md](docs/SETUP.md)** — Local development environment setup (PostgreSQL, Python `.venv`, backend, frontend).
+2. **[docs/SETUP.md](docs/SETUP.md)** — Local development environment setup (PostgreSQL, Python `.venv`, backend, frontend — run `setup.bat` or follow manual steps).
 3. **[docs/work/learn.md](docs/work/learn.md)** — Beginner guide covering DBMS concepts, viva theory, REST architecture, and design patterns.
 4. **[docs/work/architecture.md](docs/work/architecture.md)** — 3-tier architecture, vertical slicing, and subsystem interaction.
 5. **Your Assigned Subsystem Guide** — Read your personal guide linked in the table below.

@@ -27,6 +27,25 @@ git checkout dev
 
 ---
 
+## Quick Automated Setup (Script Option)
+
+If you have the prerequisites installed, run the automated script from the project root to automatically generate `.env` files, set up Python `.venv`, install backend/frontend dependencies, and optionally configure the database:
+
+```cmd
+# Windows (Command Prompt or double-click setup.bat):
+setup.bat
+
+# Windows (PowerShell):
+.\setup.ps1
+
+# macOS / Linux / Git Bash:
+chmod +x setup.sh && ./setup.sh
+```
+
+*(Or follow the manual step-by-step instructions below)*
+
+---
+
 ## 2. Database Setup (PostgreSQL)
 
 ### A. Initialize Database & Dedicated User
