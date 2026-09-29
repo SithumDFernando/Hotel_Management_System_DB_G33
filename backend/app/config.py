@@ -12,7 +12,10 @@ Usage:
     print(settings.DATABASE_URL)
 """
 
+from pathlib import Path
 from pydantic_settings import BaseSettings
+
+_BACKEND_DIR = Path(__file__).resolve().parent.parent
 
 
 class Settings(BaseSettings):
@@ -44,7 +47,7 @@ class Settings(BaseSettings):
     FRONTEND_ORIGIN: str = "http://localhost:5173"
 
     class Config:
-        env_file = ".env"
+        env_file = (str(_BACKEND_DIR / ".env"), ".env")
         env_file_encoding = "utf-8"
 
 

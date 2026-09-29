@@ -17,7 +17,8 @@ env/
 .pytest_cache/
 
 # IDEs and Editors
-.vscode/
+.vscode/*
+!.vscode/settings.json
 .idea/
 *.suo
 *.ntvs*
@@ -28,3 +29,10 @@ env/
 # OS Generated
 .DS_Store
 Thumbs.db
+
+# Local database files & dumps
+*.sqlite
+*.sqlite3
+*.db
+*.dump
+*.sql.bak
