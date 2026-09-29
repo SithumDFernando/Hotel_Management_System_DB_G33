@@ -3,9 +3,10 @@
 **Assignee:** Vinuji  
 **Subsystem:** Room Bookings, Guest Check-In / Check-Out, and Double-Booking Prevention  
 
-> Start by reading the [README](../../README.md) (Git rules) and [architecture.md](./architecture.md) (how subsystems connect).  
-> Reference the [Golden Template Router (rooms.py)](../../backend/app/routers/rooms.py) before writing your router.  
-> Specs: [01_database_design](../specs/01_database_design.md) | [02_api_contract](../specs/02_api_contract.md) | [03_stored_procedures](../specs/03_stored_procedures_functions.md) | [04_triggers](../specs/04_triggers.md)
+> Start by reading the [README](../../../README.md) (Git rules) and [architecture.md](../architecture.md) (how subsystems connect).  
+> Reference the [Golden Template Router (rooms.py)](../../../backend/app/routers/rooms.py) before writing your router.  
+> Checklist: [todo.md](./todo.md)  
+> Specs: [01_database_design](../../specs/01_database_design.md) | [02_api_contract](../../specs/02_api_contract.md) | [03_stored_procedures](../../specs/03_stored_procedures_functions.md) | [04_triggers](../../specs/04_triggers.md)
 
 ---
 
@@ -30,7 +31,7 @@ Phase 1: Database Logic (SQL)  ──►  Phase 2: Backend Schemas (Pydantic)  �
 
 ### Phase 1: Database Layer (PostgreSQL)
 
-#### 1. [double_booking_trigger.sql](../../db/triggers/double_booking_trigger.sql)
+#### 1. [double_booking_trigger.sql](../../../db/triggers/double_booking_trigger.sql)
 - **Trigger**: `BEFORE INSERT ON booking FOR EACH ROW`
 - **Function**: `trg_check_double_booking()` — query for overlapping active bookings (`status NOT IN ('Cancelled', 'Checked-Out')`). If found, `RAISE EXCEPTION`. Otherwise, `RETURN NEW`.
 - **Trigger definition**:
@@ -40,7 +41,7 @@ Phase 1: Database Logic (SQL)  ──►  Phase 2: Backend Schemas (Pydantic)  �
   EXECUTE FUNCTION trg_check_double_booking();
   ```
 
-#### 2. [booking.sql](../../db/procedures/booking.sql)
+#### 2. [booking.sql](../../../db/procedures/booking.sql)
 - **Procedure**: `create_booking(p_guest_id UUID, p_room_id UUID, p_check_in_date DATE, p_check_out_date DATE, p_payment_option VARCHAR(50), OUT p_booking_id UUID)`
 - **Logic**:
   1. Get `branch_id` and `room_type_id` from `room` table.
@@ -48,7 +49,7 @@ Phase 1: Database Logic (SQL)  ──►  Phase 2: Backend Schemas (Pydantic)  �
   3. `INSERT INTO booking (...) VALUES (...) RETURNING booking_id INTO p_booking_id;`
   4. If dates overlap, `double_booking_trigger` aborts automatically.
 
-#### 3. [checkin_checkout.sql](../../db/procedures/checkin_checkout.sql)
+#### 3. [checkin_checkout.sql](../../../db/procedures/checkin_checkout.sql)
 - `perform_checkin(p_booking_id UUID)`:
   - Validate `status == 'Booked'`, else `RAISE EXCEPTION`.
   - Update `booking SET status = 'Checked-In', actual_checkin_time = NOW()`.
@@ -58,7 +59,7 @@ Phase 1: Database Logic (SQL)  ──►  Phase 2: Backend Schemas (Pydantic)  �
   - Update `booking SET status = 'Checked-Out', actual_checkout_time = NOW()`.
   - Update `room SET status = 'Available'`.
 
-#### 4. [room_status_trigger.sql](../../db/triggers/room_status_trigger.sql)
+#### 4. [room_status_trigger.sql](../../../db/triggers/room_status_trigger.sql)
 - **Trigger**: `AFTER UPDATE OF status ON booking FOR EACH ROW`
 - **Function**: `trg_sync_room_status()` — if `NEW.status = 'Checked-In'`, set room to `'Occupied'`. If `NEW.status IN ('Checked-Out', 'Cancelled')`, check no other active booking holds the room, then set `'Available'`.
 
@@ -66,7 +67,7 @@ Phase 1: Database Logic (SQL)  ──►  Phase 2: Backend Schemas (Pydantic)  �
 
 ### Phase 2: Backend Schemas (Pydantic)
 
-#### 5. [schemas/booking.py](../../backend/app/schemas/booking.py)
+#### 5. [schemas/booking.py](../../../backend/app/schemas/booking.py)
 - `BookingCreate`: `guest_id`, `room_id`, `check_in_date`, `check_out_date`, `payment_option`. Validator: `check_out_date > check_in_date`.
 - `BookingStatusUpdate`: `reason: str | None = None`
 - `BookingOut`: All booking fields + `actual_checkin_time`, `actual_checkout_time`. Config: `from_attributes = True`.
@@ -75,7 +76,7 @@ Phase 1: Database Logic (SQL)  ──►  Phase 2: Backend Schemas (Pydantic)  �
 
 ### Phase 3: Backend Routers (FastAPI)
 
-#### 6. [routers/bookings.py](../../backend/app/routers/bookings.py)
+#### 6. [routers/bookings.py](../../../backend/app/routers/bookings.py)
 - `POST /api/bookings` — Calls `CALL create_booking(...)`. Catch overlap → `409 Conflict`. Return `201 Created`.
 - `GET /api/bookings` — Paginated list with filters (`status`, `guest_id`, `room_id`, `branch_id`).
 - `GET /api/bookings/{booking_id}` — Detailed booking info.

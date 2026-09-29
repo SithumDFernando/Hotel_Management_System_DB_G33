@@ -11,13 +11,13 @@ This document explains the overarching system architecture, how the frontend, ba
 - [Golden Reference Router (rooms.py)](../../backend/app/routers/rooms.py) — *Inspect this reference implementation before writing any router!*
 
 ### Team Member Assignment Guides
-| Member | Role & Subsystem | Assignment Document |
-| :--- | :--- | :--- |
-| **Sithum (Team Lead)** | System Architect, Core DDL, Auth & Golden Template | [sithum.md](./sithum.md) |
-| **Vinuji** | Reservation & Front Desk (Bookings, Check-in/out, Double-booking prevention) | [vinuji.md](./vinuji.md) |
-| **Sheereen** | Billing & Payments (Rate/Tax calculation, Invoices, Payment recording) | [sheereen.md](./sheereen.md) |
-| **Chamika** | Rooms, Amenities & Services (Rate lookup, Price snapshot trigger, Guest profiles) | [chamika.md](./chamika.md) |
-| **Sadeepa** | Analytics, Views & Seed Data (Occupancy/Revenue reports, Sample test data) | [sadeepa.md](./sadeepa.md) |
+| Member | Role & Subsystem | Assignment Document | Checklist |
+| :--- | :--- | :--- | :--- |
+| **Sithum (Team Lead)** | System Architect, Core DDL, Auth & Golden Template | [sithum.md](./sithum/sithum.md) | [todo.md](./sithum/todo.md) |
+| **Vinuji** | Reservation & Front Desk (Bookings, Check-in/out, Double-booking prevention) | [vinuji.md](./vinuji/vinuji.md) | [todo.md](./vinuji/todo.md) |
+| **Sheereen** | Billing & Payments (Rate/Tax calculation, Invoices, Payment recording) | [sheereen.md](./sheereen/sheereen.md) | [todo.md](./sheereen/todo.md) |
+| **Chamika** | Rooms, Amenities & Services (Rate lookup, Price snapshot trigger, Guest profiles) | [chamika.md](./chamika/chamika.md) | [todo.md](./chamika/todo.md) |
+| **Sadeepa** | Analytics, Views & Seed Data (Occupancy/Revenue reports, Sample test data) | [sadeepa.md](./sadeepa/sadeepa.md) | [todo.md](./sadeepa/todo.md) |
 
 ---
 

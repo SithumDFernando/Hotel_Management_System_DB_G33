@@ -24,13 +24,13 @@ Follow this reading order to get started smoothly:
 
 Each team member has a specific subsystem. **Click on your name below to view your personal assignment guide:**
 
-| Member       | Subsystem / Responsibility                                                   | Assignment Guide                                 |
-| :----------- | :--------------------------------------------------------------------------- | :----------------------------------------------- |
-| **Sithum**   | Core Infrastructure, DB Schema, Auth, Golden Template                        | [`docs/work/sithum.md`](docs/work/sithum.md)     |
-| **Vinuji**   | Reservation & Front Desk (Bookings, Check-in/out, Double-booking prevention) | [`docs/work/vinuji.md`](docs/work/vinuji.md)     |
-| **Sheereen** | Billing & Payments (Rate calculation, Invoices, Payment recording)           | [`docs/work/sheereen.md`](docs/work/sheereen.md) |
-| **Chamika**  | Rooms, Amenities & Services (Service requests, Price lock trigger)           | [`docs/work/chamika.md`](docs/work/chamika.md)   |
-| **Sadeepa**  | Analytics, Views & Seed Data (Occupancy/Revenue reports, Sample test data)   | [`docs/work/sadeepa.md`](docs/work/sadeepa.md)   |
+| Member       | Subsystem / Responsibility                                                   | Assignment Guide                                 | Checklist |
+| :----------- | :--------------------------------------------------------------------------- | :----------------------------------------------- | :-------- |
+| **Sithum**   | Core Infrastructure, DB Schema, Auth, Golden Template                        | [`docs/work/sithum/sithum.md`](docs/work/sithum/sithum.md)     | [`todo.md`](docs/work/sithum/todo.md)     |
+| **Vinuji**   | Reservation & Front Desk (Bookings, Check-in/out, Double-booking prevention) | [`docs/work/vinuji/vinuji.md`](docs/work/vinuji/vinuji.md)     | [`todo.md`](docs/work/vinuji/todo.md)     |
+| **Sheereen** | Billing & Payments (Rate calculation, Invoices, Payment recording)           | [`docs/work/sheereen/sheereen.md`](docs/work/sheereen/sheereen.md) | [`todo.md`](docs/work/sheereen/todo.md) |
+| **Chamika**  | Rooms, Amenities & Services (Service requests, Price lock trigger)           | [`docs/work/chamika/chamika.md`](docs/work/chamika/chamika.md)   | [`todo.md`](docs/work/chamika/todo.md)   |
+| **Sadeepa**  | Analytics, Views & Seed Data (Occupancy/Revenue reports, Sample test data)   | [`docs/work/sadeepa/sadeepa.md`](docs/work/sadeepa/sadeepa.md)   | [`todo.md`](docs/work/sadeepa/todo.md)   |
 
 ---
 
