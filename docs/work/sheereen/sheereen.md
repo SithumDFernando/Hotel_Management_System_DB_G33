@@ -3,9 +3,10 @@
 **Assignee:** Sheereen  
 **Subsystem:** Rate & Tax Calculation Functions, Bill Generation, and Payment Transactions  
 
-> Start by reading the [README](../../README.md) (Git rules) and [architecture.md](./architecture.md) (how subsystems connect).  
-> Reference the [Golden Template Router (rooms.py)](../../backend/app/routers/rooms.py) before writing your router.  
-> Specs: [01_database_design](../specs/01_database_design.md) | [02_api_contract](../specs/02_api_contract.md) | [03_stored_procedures](../specs/03_stored_procedures_functions.md)
+> Start by reading the [README](../../../README.md) (Git rules) and [architecture.md](../architecture.md) (how subsystems connect).  
+> Reference the [Golden Template Router (rooms.py)](../../../backend/app/routers/rooms.py) before writing your router.  
+> Checklist: [todo.md](./todo.md)  
+> Specs: [01_database_design](../../specs/01_database_design.md) | [02_api_contract](../../specs/02_api_contract.md) | [03_stored_procedures](../../specs/03_stored_procedures_functions.md)
 
 ---
 
@@ -37,27 +38,27 @@ Phase 1: Database Functions & Procedures (SQL)  ──►  Phase 2: Backend Sche
 
 ### Phase 1: Database Layer (PostgreSQL)
 
-#### 1. [fn_calculate_nights.sql](../../db/functions/fn_calculate_nights.sql)
+#### 1. [fn_calculate_nights.sql](../../../db/functions/fn_calculate_nights.sql)
 - **Signature**: `fn_calculate_nights(p_check_in DATE, p_check_out DATE) RETURNS INTEGER`
 - If `p_check_out <= p_check_in` → return `1` (minimum 1 night). Otherwise → `RETURN (p_check_out - p_check_in)`.
 
-#### 2. [fn_calculate_tax.sql](../../db/functions/fn_calculate_tax.sql)
+#### 2. [fn_calculate_tax.sql](../../../db/functions/fn_calculate_tax.sql)
 - **Signature**: `fn_calculate_tax(p_amount NUMERIC(10,2)) RETURNS NUMERIC(10,2)`
 - `RETURN ROUND(p_amount * 0.10, 2);` (10% tax)
 
-#### 3. [fn_get_room_charges.sql](../../db/functions/fn_get_room_charges.sql)
+#### 3. [fn_get_room_charges.sql](../../../db/functions/fn_get_room_charges.sql)
 - **Signature**: `fn_get_room_charges(p_booking_id UUID) RETURNS NUMERIC(10,2)`
 - Get `check_in_date`, `check_out_date`, `rate_at_booking` from `booking`. Calculate nights via `fn_calculate_nights`. Return `ROUND(nights * rate, 2)`.
 
-#### 4. [fn_get_service_charges.sql](../../db/functions/fn_get_service_charges.sql)
+#### 4. [fn_get_service_charges.sql](../../../db/functions/fn_get_service_charges.sql)
 - **Signature**: `fn_get_service_charges(p_booking_id UUID) RETURNS NUMERIC(10,2)`
 - `SELECT COALESCE(SUM(quantity * unit_price), 0.00) FROM service_usage WHERE booking_id = p_booking_id;`
 
-#### 5. [fn_get_outstanding_balance.sql](../../db/functions/fn_get_outstanding_balance.sql)
+#### 5. [fn_get_outstanding_balance.sql](../../../db/functions/fn_get_outstanding_balance.sql)
 - **Signature**: `fn_get_outstanding_balance(p_booking_id UUID) RETURNS NUMERIC(10,2)`
 - Get `total_amount` and `amount_paid` from `bill`. Return `GREATEST(total_amount - amount_paid, 0.00)`.
 
-#### 6. [billing.sql](../../db/procedures/billing.sql)
+#### 6. [billing.sql](../../../db/procedures/billing.sql)
 - **Procedure**: `generate_bill(p_booking_id UUID, p_discount_amount NUMERIC(10,2) DEFAULT 0.00)`
 - **Logic**:
   1. `v_room_charges := fn_get_room_charges(p_booking_id);`
@@ -80,7 +81,7 @@ Phase 1: Database Functions & Procedures (SQL)  ──►  Phase 2: Backend Sche
          generated_at = NOW();
      ```
 
-#### 7. [payments.sql](../../db/procedures/payments.sql)
+#### 7. [payments.sql](../../../db/procedures/payments.sql)
 - **Procedure**: `record_payment(p_booking_id UUID, p_amount NUMERIC(10,2), p_payment_method VARCHAR(50), p_notes VARCHAR(255) DEFAULT NULL)`
 - **Logic**:
   1. Validate bill exists, else `RAISE EXCEPTION 'No bill found for booking'`.
@@ -92,7 +93,7 @@ Phase 1: Database Functions & Procedures (SQL)  ──►  Phase 2: Backend Sche
 
 ### Phase 2: Backend Schemas (Pydantic)
 
-#### 8. [schemas/billing.py](../../backend/app/schemas/billing.py)
+#### 8. [schemas/billing.py](../../../backend/app/schemas/billing.py)
 - `BillOut`: All bill fields (`bill_id`, `booking_id`, charges, tax, totals, `balance_flag`, `generated_at`). Config: `from_attributes = True`.
 - `PaymentCreate`: `booking_id`, `amount` (validate `> 0`), `payment_method`, `notes?`.
 - `PaymentOut`: `payment_id`, `booking_id`, `amount`, `payment_method`, `paid_at`, `notes?`. Config: `from_attributes = True`.
@@ -101,7 +102,7 @@ Phase 1: Database Functions & Procedures (SQL)  ──►  Phase 2: Backend Sche
 
 ### Phase 3: Backend Routers (FastAPI)
 
-#### 9. [routers/billing.py](../../backend/app/routers/billing.py)
+#### 9. [routers/billing.py](../../../backend/app/routers/billing.py)
 - `POST /api/billing/{booking_id}/generate` — Calls `CALL generate_bill(...)`, returns `BillOut`. Role: `RECEPTIONIST/MANAGER/ADMIN`.
 - `GET /api/billing/{booking_id}` — Fetches bill, returns `BillOut`.
 - `POST /api/payments` — Calls `CALL record_payment(...)`, returns `201 Created` with `PaymentOut`.

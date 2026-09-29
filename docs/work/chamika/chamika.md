@@ -3,9 +3,10 @@
 **Assignee:** Chamika  
 **Subsystem:** Dynamic Rate Lookup, Guest Profiles, Services Catalog, and Price Snapshotting Triggers  
 
-> Start by reading the [README](../../README.md) (Git rules) and [architecture.md](./architecture.md) (how subsystems connect).  
-> Reference the [Golden Template Router (rooms.py)](../../backend/app/routers/rooms.py) before writing your router.  
-> Specs: [01_database_design](../specs/01_database_design.md) | [02_api_contract](../specs/02_api_contract.md) | [03_stored_procedures](../specs/03_stored_procedures_functions.md) | [04_triggers](../specs/04_triggers.md)
+> Start by reading the [README](../../../README.md) (Git rules) and [architecture.md](../architecture.md) (how subsystems connect).  
+> Reference the [Golden Template Router (rooms.py)](../../../backend/app/routers/rooms.py) before writing your router.  
+> Checklist: [todo.md](./todo.md)  
+> Specs: [01_database_design](../../specs/01_database_design.md) | [02_api_contract](../../specs/02_api_contract.md) | [03_stored_procedures](../../specs/03_stored_procedures_functions.md) | [04_triggers](../../specs/04_triggers.md)
 
 ---
 
@@ -25,16 +26,16 @@
 ```
 Phase 1: Database Function & Trigger (SQL)  ──►  Phase 2: Backend Schemas (Pydantic)  ──►  Phase 3: Backend Routers (FastAPI)
 - fn_get_current_rate.sql                        - schemas/guest.py                         - routers/guests.py
-- service_usage_trigger.sql                                                                 - routers/services.py
+- service_usage_trigger.sql                      - schemas/service.py                       - routers/services.py
 ```
 
 ### Phase 1: Database Layer (PostgreSQL)
 
-#### 1. [fn_get_current_rate.sql](../../db/functions/fn_get_current_rate.sql)
+#### 1. [fn_get_current_rate.sql](../../../db/functions/fn_get_current_rate.sql)
 - **Signature**: `fn_get_current_rate(p_branch_id UUID, p_room_type_id UUID) RETURNS NUMERIC(10,2)` — `STABLE`
 - `SELECT daily_rate FROM room_rate WHERE branch_id = p_branch_id AND room_type_id = p_room_type_id;`
 
-#### 2. [service_usage_trigger.sql](../../db/triggers/service_usage_trigger.sql)
+#### 2. [service_usage_trigger.sql](../../../db/triggers/service_usage_trigger.sql)
 - **Trigger**: `BEFORE INSERT ON service_usage FOR EACH ROW`
 - **Function**: `trg_validate_service_usage()`
 - **Logic**:
@@ -52,23 +53,31 @@ Phase 1: Database Function & Trigger (SQL)  ──►  Phase 2: Backend Schemas 
 
 ### Phase 2: Backend Schemas (Pydantic)
 
-#### 3. [schemas/guest.py](../../backend/app/schemas/guest.py)
+#### 3. [schemas/guest.py](../../../backend/app/schemas/guest.py)
 - `GuestBase`: `full_name`, `nic_passport`, `email`, `phone`, `date_of_birth?`, `nationality?`, `gender?`, `guest_type` (default `"Individual"`), `company_name?`, `company_reg_number?`, `billing_contact_name?`. Model validator: require `company_name` when `guest_type == "Corporate"`.
 - `GuestCreate`: Inherits `GuestBase`.
 - `GuestUpdate`: Optional fields for partial updates.
 - `GuestOut`: Inherits `GuestBase` + `guest_id: UUID`. Config: `from_attributes = True`.
 
+#### 4. [schemas/service.py](../../../backend/app/schemas/service.py)
+- `ServiceBase`: `name`, `category`, `base_price`, `description?`, `is_active`
+- `ServiceCreate`: Inherits `ServiceBase`
+- `ServiceUpdate`: Partial update fields
+- `ServiceOut`: Inherits `ServiceBase` + `service_id: UUID`
+- `ServiceUsageCreate`: `service_id`, `quantity`, `notes?`
+- `ServiceUsageOut`: All usage fields (`usage_id`, `booking_id`, `service_id`, `quantity`, `unit_price`, `total_price`, `used_at`, `notes`)
+
 ---
 
 ### Phase 3: Backend Routers (FastAPI)
 
-#### 4. [routers/guests.py](../../backend/app/routers/guests.py)
+#### 5. [routers/guests.py](../../../backend/app/routers/guests.py)
 - `GET /api/guests` — Search (`?search=`) by name, NIC, or email. Role: `RECEPTIONIST/MANAGER/ADMIN`.
 - `GET /api/guests/{guest_id}` — Detailed profile + booking history.
 - `POST /api/guests` — Create guest, returns `201 Created`.
 - `PUT /api/guests/{guest_id}` — Update guest details.
 
-#### 5. [routers/services.py](../../backend/app/routers/services.py)
+#### 6. [routers/services.py](../../../backend/app/routers/services.py)
 - `GET /api/services` — All active services (`WHERE is_active = TRUE`).
 - `POST /api/services` — Create service. Role: `ADMIN/MANAGER`.
 - `PATCH /api/services/{service_id}` — Update price or deactivate.

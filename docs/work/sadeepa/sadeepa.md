@@ -3,9 +3,10 @@
 **Assignee:** Sadeepa  
 **Subsystem:** Analytical SQL Views, Seed Data Quality Assurance, Management Reports API, and Admin Management  
 
-> Start by reading the [README](../../README.md) (Git rules) and [architecture.md](./architecture.md) (how subsystems connect).  
-> Reference the [Golden Template Router (rooms.py)](../../backend/app/routers/rooms.py) before writing your router.  
-> Specs: [01_database_design](../specs/01_database_design.md) | [02_api_contract](../specs/02_api_contract.md) | [05_views_and_reports](../specs/05_views_and_reports.md) | [07_seed_data](../specs/07_seed_data.md)
+> Start by reading the [README](../../../README.md) (Git rules) and [architecture.md](../architecture.md) (how subsystems connect).  
+> Reference the [Golden Template Router (rooms.py)](../../../backend/app/routers/rooms.py) before writing your router.  
+> Checklist: [todo.md](./todo.md)  
+> Specs: [01_database_design](../../specs/01_database_design.md) | [02_api_contract](../../specs/02_api_contract.md) | [05_views_and_reports](../../specs/05_views_and_reports.md) | [07_seed_data](../../specs/07_seed_data.md)
 
 ---
 
@@ -33,7 +34,7 @@ Phase 1: Database Views & Seed Verification (SQL)  ──►  Phase 2: Reporting
 
 ### Phase 1: Database Layer (PostgreSQL)
 
-Open [reports.sql](../../db/views/reports.sql) and implement 5 views using `CREATE OR REPLACE VIEW`:
+Open [reports.sql](../../../db/views/reports.sql) and implement 5 views using `CREATE OR REPLACE VIEW`:
 
 #### 1. `v_room_occupancy`
 - **Tables**: `room`, `branch`, `room_type`, `booking` (LEFT JOIN on active reservations).
@@ -57,14 +58,14 @@ Open [reports.sql](../../db/views/reports.sql) and implement 5 views using `CREA
 - **Window**: `RANK() OVER (ORDER BY SUM(quantity * unit_price) DESC) as revenue_rank`.
 - **Columns**: `revenue_rank`, `service_name`, `category`, `total_bookings_ordered`, `total_quantity`, `total_revenue`.
 
-#### 6. [sample_data.sql](../../db/seed/sample_data.sql)
+#### 6. [sample_data.sql](../../../db/seed/sample_data.sql)
 - Inspect existing 460+ lines of seed data. Ensure bookings, service usages, bills, and payments correctly populate the views with meaningful data.
 
 ---
 
 ### Phase 2: Reports Router (FastAPI)
 
-#### 7. [routers/reports.py](../../backend/app/routers/reports.py)
+#### 7. [routers/reports.py](../../../backend/app/routers/reports.py)
 - `GET /api/reports/occupancy` — Params: `branch_id?`, `date?`. Role: `MANAGER/ADMIN`.
 - `GET /api/reports/billing-summary` — Params: `branch_id?`, `unpaid_only?`.
 - `GET /api/reports/service-usage` — Params: `branch_id?`.
@@ -75,7 +76,7 @@ Open [reports.sql](../../db/views/reports.sql) and implement 5 views using `CREA
 
 ### Phase 3: Admin Router (FastAPI)
 
-#### 8. [routers/admin.py](../../backend/app/routers/admin.py)
+#### 8. [routers/admin.py](../../../backend/app/routers/admin.py)
 - `GET /api/admin/branches` — List all branches.
 - `POST /api/admin/branches` — Add new branch. Role: `ADMIN`.
 - `PUT /api/admin/branches/{branch_id}` — Update branch info.
