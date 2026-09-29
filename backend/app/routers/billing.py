@@ -50,4 +50,8 @@ Dependencies:
     - app.schemas.billing (BillOut, PaymentCreate, PaymentOut)
 """
 
-# TODO: Implement billing router
+from fastapi import APIRouter
+
+router = APIRouter()
+
+# TODO: Implement billing router endpoints (see docstring above for spec)

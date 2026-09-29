@@ -57,4 +57,8 @@ Dependencies:
     - app.dependencies  (get_current_user, require_role)
 """
 
-# TODO: Implement admin router
+from fastapi import APIRouter
+
+router = APIRouter()
+
+# TODO: Implement admin router endpoints (see docstring above for spec)

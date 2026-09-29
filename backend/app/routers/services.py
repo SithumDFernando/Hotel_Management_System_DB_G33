@@ -44,4 +44,8 @@ Dependencies:
     - app.dependencies  (get_current_user, require_role)
 """
 
-# TODO: Implement services router
+from fastapi import APIRouter
+
+router = APIRouter()
+
+# TODO: Implement services router endpoints (see docstring above for spec)

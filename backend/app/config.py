@@ -7,38 +7,46 @@ Purpose:
     real env vars in production) and exposes them as a typed, validated
     settings object that the rest of the application imports.
 
-What to implement here:
-    1. Define a `Settings` class that extends `pydantic_settings.BaseSettings`:
-
-        class Settings(BaseSettings):
-            # PostgreSQL connection details
-            DATABASE_URL: str          # e.g. "postgresql://user:pass@localhost:5432/skynest"
-
-            # JWT / Auth
-            SECRET_KEY: str            # Random 32-byte hex string for signing JWTs
-            ALGORITHM: str = "HS256"
-            ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
-
-            # CORS
-            FRONTEND_ORIGIN: str = "http://localhost:5173"
-
-            class Config:
-                env_file = ".env"
-                env_file_encoding = "utf-8"
-
-    2. Create a module-level singleton:
-        settings = Settings()
-
-    3. All other modules should import `settings` from here rather than
-       accessing `os.environ` directly:
-        from app.config import settings
-
-Environment variables expected (see backend/.env.example):
-    DATABASE_URL
-    SECRET_KEY
-    ALGORITHM
-    ACCESS_TOKEN_EXPIRE_MINUTES
-    FRONTEND_ORIGIN
+Usage:
+    from app.config import settings
+    print(settings.DATABASE_URL)
 """
 
-# TODO: Implement config.py
+from pydantic_settings import BaseSettings
+
+
+class Settings(BaseSettings):
+    """
+    Application settings loaded from environment variables.
+
+    In development, create a `.env` file in the backend/ directory
+    (copy from .env.example) and these values will be read automatically.
+    """
+
+    # ── PostgreSQL Connection ─────────────────────────────────────────────
+    # Full asyncpg-compatible connection string.
+    # Example: postgresql://skynest_user:password@localhost:5432/skynest
+    DATABASE_URL: str
+
+    # ── JWT / Auth ────────────────────────────────────────────────────────
+    # Secret key used to sign JWT tokens. Generate with:
+    #   python -c "import secrets; print(secrets.token_hex(32))"
+    SECRET_KEY: str
+
+    # Signing algorithm — HS256 is the standard for symmetric JWTs
+    ALGORITHM: str = "HS256"
+
+    # Token lifetime in minutes. 1440 = 24 hours (good for development)
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+
+    # ── CORS ──────────────────────────────────────────────────────────────
+    # The origin URL of the React frontend (Vite dev server runs on :5173)
+    FRONTEND_ORIGIN: str = "http://localhost:5173"
+
+    class Config:
+        env_file = ".env"
+        env_file_encoding = "utf-8"
+
+
+# Module-level singleton — import this everywhere
+settings = Settings()

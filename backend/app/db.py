@@ -2,46 +2,63 @@
 backend/app/db.py
 =================
 Purpose:
-    Manages the asyncpg (or psycopg3) connection pool to the PostgreSQL
-    database and exposes an async context manager / dependency that routers
-    use to obtain a database connection for the duration of a single request.
+    Manages the asyncpg connection pool to the PostgreSQL database.
 
-    Using a connection pool (rather than opening a new connection per request)
-    is critical for performance under concurrent load.
+    - `init_db()` is called once at FastAPI startup to create the pool.
+    - `close_db()` is called once at FastAPI shutdown to release connections.
+    - `get_db()` is a FastAPI dependency that yields a single connection
+      from the pool for the duration of one HTTP request.
 
-What to implement here:
-    1. Create an async connection pool on startup using `asyncpg.create_pool()`:
+Usage in routers:
+    from app.db import get_db
 
-        pool: asyncpg.Pool | None = None
-
-        async def init_db():
-            global pool
-            pool = await asyncpg.create_pool(
-                dsn=settings.DATABASE_URL,
-                min_size=2,
-                max_size=10,
-            )
-
-        async def close_db():
-            if pool:
-                await pool.close()
-
-    2. Call `init_db()` / `close_db()` from FastAPI lifespan events in main.py.
-
-    3. Define a FastAPI dependency that yields a connection from the pool:
-
-        async def get_db() -> asyncpg.Connection:
-            async with pool.acquire() as conn:
-                yield conn
-
-       This is used in router function signatures:
-         @router.get("/rooms")
-         async def list_rooms(db: Connection = Depends(get_db)):
-             ...
-
-Dependencies:
-    - app.config.settings (DATABASE_URL)
-    - asyncpg             (install: pip install asyncpg)
+    @router.get("/rooms")
+    async def list_rooms(db = Depends(get_db)):
+        rows = await db.fetch("SELECT * FROM room")
+        return rows
 """
 
-# TODO: Implement db.py
+import asyncpg
+
+from app.config import settings
+
+# Module-level pool reference — initialised at startup
+pool: asyncpg.Pool | None = None
+
+
+async def init_db() -> None:
+    """
+    Create the asyncpg connection pool.
+    Called from the FastAPI lifespan handler in main.py.
+    """
+    global pool
+    pool = await asyncpg.create_pool(
+        dsn=settings.DATABASE_URL,
+        min_size=2,   # keep at least 2 connections warm
+        max_size=10,  # max concurrent DB connections
+    )
+
+
+async def close_db() -> None:
+    """
+    Gracefully close all connections in the pool.
+    Called from the FastAPI lifespan handler in main.py.
+    """
+    global pool
+    if pool:
+        await pool.close()
+        pool = None
+
+
+async def get_db():
+    """
+    FastAPI dependency: acquires a connection from the pool, yields it to
+    the route handler, and releases it back to the pool when the request
+    is done (even if the handler raised an exception).
+
+    Usage:
+        async def my_endpoint(db = Depends(get_db)):
+            rows = await db.fetch("SELECT ...")
+    """
+    async with pool.acquire() as conn:
+        yield conn

@@ -58,4 +58,8 @@ Dependencies:
     - app.schemas.booking (BookingCreate, BookingOut)
 """
 
-# TODO: Implement bookings router
+from fastapi import APIRouter
+
+router = APIRouter()
+
+# TODO: Implement bookings router endpoints (see docstring above for spec)

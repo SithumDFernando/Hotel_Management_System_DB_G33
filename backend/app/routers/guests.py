@@ -39,4 +39,8 @@ Dependencies:
     - app.schemas.guest (GuestCreate, GuestUpdate, GuestOut)
 """
 
-# TODO: Implement guests router
+from fastapi import APIRouter
+
+router = APIRouter()
+
+# TODO: Implement guests router endpoints (see docstring above for spec)

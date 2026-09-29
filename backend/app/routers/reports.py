@@ -49,4 +49,8 @@ Dependencies:
     - app.dependencies  (get_current_user, require_role)
 """
 
-# TODO: Implement reports router
+from fastapi import APIRouter
+
+router = APIRouter()
+
+# TODO: Implement reports router endpoints (see docstring above for spec)
