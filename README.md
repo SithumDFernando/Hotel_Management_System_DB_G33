@@ -7,29 +7,42 @@ Developed for **University of Moratuwa — Semester 3 Database Project (Group 33
 
 ---
 
-## 👥 Team Members & Work Assignments
+## Recommended Reading Order
 
-Each team member has a specific subsystem. **Click on your name below to view your personal step-by-step assignment guide, list of files to edit, and architecture diagrams:**
+Follow this reading order to get started smoothly:
 
-| Member | Subsystem / Responsibility | Assignment Guide |
-| :--- | :--- | :--- |
-| **Sithum (Team Lead)** | Core Infrastructure, DB Schema, Auth, Golden Template | [`docs/work/sithum.md`](docs/work/sithum.md) |
-| **Vinuji** | Reservation & Front Desk (Bookings, Check-in/out, Double-booking prevention) | [`docs/work/vinuji.md`](docs/work/vinuji.md) |
-| **Sheereen** | Billing & Payments (Rate calculation, Invoices, Payment recording) | [`docs/work/sheereen.md`](docs/work/sheereen.md) |
-| **Chamika** | Rooms, Amenities & Services (Service requests, Price lock trigger) | [`docs/work/chamika.md`](docs/work/chamika.md) |
-| **Sadeepa** | Analytics, Views & Seed Data (Occupancy/Revenue reports, Sample test data) | [`docs/work/sadeepa.md`](docs/work/sadeepa.md) |
-
-> 📖 **General Architecture & Work Strategy:** See [`docs/work/architecture.md`](docs/work/architecture.md)
+1. **[README.md](README.md)** (this file) — Overview of the hotel system, team responsibilities, and Git rules.
+2. **[docs/SETUP.md](docs/SETUP.md)** — Local development environment setup (PostgreSQL, Python `.venv`, backend, frontend).
+3. **[docs/work/learn.md](docs/work/learn.md)** — Beginner guide covering DBMS concepts, viva theory, REST architecture, and design patterns.
+4. **[docs/work/architecture.md](docs/work/architecture.md)** — 3-tier architecture, vertical slicing, and subsystem interaction.
+5. **Your Assigned Subsystem Guide** — Read your personal guide linked in the table below.
+6. **Golden Reference Router & Specs** — Reference [`backend/app/routers/rooms.py`](backend/app/routers/rooms.py) and [`docs/specs/`](docs/specs/) while writing code.
 
 ---
 
-## 🚨 GIT RULES & COLLABORATION WORKFLOW (MUST READ!)
+## Team Members & Work Assignments
+
+Each team member has a specific subsystem. **Click on your name below to view your personal assignment guide:**
+
+| Member       | Subsystem / Responsibility                                                   | Assignment Guide                                 |
+| :----------- | :--------------------------------------------------------------------------- | :----------------------------------------------- |
+| **Sithum**   | Core Infrastructure, DB Schema, Auth, Golden Template                        | [`docs/work/sithum.md`](docs/work/sithum.md)     |
+| **Vinuji**   | Reservation & Front Desk (Bookings, Check-in/out, Double-booking prevention) | [`docs/work/vinuji.md`](docs/work/vinuji.md)     |
+| **Sheereen** | Billing & Payments (Rate calculation, Invoices, Payment recording)           | [`docs/work/sheereen.md`](docs/work/sheereen.md) |
+| **Chamika**  | Rooms, Amenities & Services (Service requests, Price lock trigger)           | [`docs/work/chamika.md`](docs/work/chamika.md)   |
+| **Sadeepa**  | Analytics, Views & Seed Data (Occupancy/Revenue reports, Sample test data)   | [`docs/work/sadeepa.md`](docs/work/sadeepa.md)   |
+
+---
+
+## Git Rules & Collaboration Workflow
 
 > [!IMPORTANT]
+>
 > ### The 3 Golden Git Rules:
-> 1. ❌ **NEVER push or merge directly to `main`!** `main` is protected for final, tested releases only.
-> 2. ❌ **NEVER push directly to `dev`!**
-> 3. ✅ **ALWAYS create your own branch, push your branch, and create a Pull Request (PR) to merge into `dev`!**
+>
+> 1. **NEVER push or merge directly to `main`!** `main` is protected for final, tested releases only.
+> 2. **NEVER push directly to `dev`!**
+> 3. **ALWAYS create your own branch, push your branch, and create a Pull Request (PR) to merge into `dev`!**
 
 ```
  [main] (Production / Final release only — protected)
@@ -44,63 +57,44 @@ Each team member has a specific subsystem. **Click on your name below to view yo
 
 ---
 
-### 📋 Daily Git Commands (Step-by-Step Guide)
+### Daily Git Commands (Step-by-Step)
 
-Whenever you work on the project, follow these simple steps:
+#### Step 1: Pull the latest `dev`
 
-#### Step 1: Switch to `dev` and pull the latest code
-Before creating a new branch or starting work, make sure you have the newest code:
 ```bash
 git checkout dev
 git pull origin dev
 ```
 
-#### Step 2: Create your own feature branch
-Create a branch named after yourself and the feature you are working on:
+#### Step 2: Create your feature branch
+
 ```bash
-# Branch name format: feature/<yourname>-<feature>
+# Format: feature/<yourname>-<feature>
 git checkout -b feature/vinuji-bookings
-# or:
-git checkout -b feature/sheereen-billing
-# or:
-git checkout -b feature/chamika-services
-# or:
-git checkout -b feature/sadeepa-reports
 ```
 
-#### Step 3: Check what you modified
-At any time, you can check what files you added or changed:
+#### Step 3: Check, commit, and push
+
 ```bash
-git status
+git status                                                  # See what changed
+git add .                                                   # Stage changes
+git commit -m "feat(bookings): implement make_booking"      # Commit
+git push -u origin feature/your-branch-name                 # Push (first time)
+# On later pushes: just git push
 ```
 
-#### Step 4: Save (Commit) your changes
-When your code is working, stage and commit your changes with a clear message:
-```bash
-git add .
-git commit -m "feat(bookings): implement make_booking procedure"
-```
-*(Tip: Make frequent, small commits instead of one giant commit at the end!)*
+_(Tip: Make frequent, small commits instead of one giant commit!)_
 
-#### Step 5: Push your branch to GitHub
-The first time you push your new branch to GitHub:
-```bash
-git push -u origin feature/your-branch-name
-```
-*(On later pushes to the same branch, you can just type `git push`)*
+#### Step 4: Create a Pull Request (PR) to `dev`
 
-#### Step 6: Create a Pull Request (PR) to `dev`
-1. Go to our repository on GitHub: [`Hotel_Management_System_DB_G33`](https://github.com/SithumDFernando/Hotel_Management_System_DB_G33)
-2. You will see a yellow banner: **"Compare & pull request"**. Click it!
-3. **⚠️ VERY IMPORTANT:** Change the **base branch to `dev`** (NOT `main`).
-   - Base: `dev`
-   - Compare: `feature/your-branch-name`
-4. Add a short title and description explaining what you built or fixed.
-5. Click **"Create pull request"**.
-6. Send a message to the group / Sithum to review your code! Once reviewed, it will be merged into `dev`.
+1. Go to our repo on GitHub: [`Hotel_Management_System_DB_G33`](https://github.com/SithumDFernando/Hotel_Management_System_DB_G33)
+2. Click the **"Compare & pull request"** banner.
+3. **IMPORTANT:** Set the **base branch to `dev`** (NOT `main`).
+4. Add a short title and description, then click **"Create pull request"**.
+5. Notify Sithum to review!
 
-#### Step 7: How to update your branch with new changes from `dev`
-If someone else merged their code into `dev` and you need their updates in your branch:
+#### Step 5: Update your branch with new changes from `dev`
+
 ```bash
 git checkout dev
 git pull origin dev
@@ -110,191 +104,25 @@ git merge dev
 
 ---
 
-## 🛠️ Prerequisites (What to Install)
+## Test Accounts & Credentials
 
-Make sure you have these tools installed on your computer before starting:
+Once seed data is loaded, you can log in with:
 
-| Tool | Recommended Version | Download Link | Notes |
-| :--- | :--- | :--- | :--- |
-| **Git** | 2.30+ | [git-scm.com](https://git-scm.com/) | Version control |
-| **Python** | 3.10+ | [python.org](https://www.python.org/) | **⚠️ Check "Add Python to PATH" during installation!** |
-| **Node.js** | 18+ (LTS) | [nodejs.org](https://nodejs.org/) | Comes with `npm` |
-| **PostgreSQL** | 15+ | [postgresql.org](https://www.postgresql.org/download/) | Remember the `postgres` user password! |
-| **VS Code** | Latest | [code.visualstudio.com](https://code.visualstudio.com/) | Recommended editor |
-
----
-
-## 🚀 Local Project Setup
-
-### 1. Clone the Repository
-
-```bash
-git clone https://github.com/SithumDFernando/Hotel_Management_System_DB_G33.git
-cd Hotel_Management_System_DB_G33
-git checkout dev
-```
+| Email                    | Password       | Role           | Description                    |
+| :----------------------- | :------------- | :------------- | :----------------------------- |
+| `admin@skynest.lk`       | `SkyNest@2026` | `ADMIN`        | System administrator           |
+| `mgr.colombo@skynest.lk` | `SkyNest@2026` | `MANAGER`      | Hotel manager (Colombo branch) |
+| `rec.colombo@skynest.lk` | `SkyNest@2026` | `RECEPTIONIST` | Front desk receptionist        |
+| `kamal@mail.com`         | `SkyNest@2026` | `GUEST`        | Registered hotel guest         |
 
 ---
 
-### 2. Database Setup (PostgreSQL)
-
-#### A. Create the Database
-Open your terminal (or pgAdmin) and create the database:
-```bash
-# Connect to PostgreSQL using the default postgres admin user
-psql -U postgres
-```
-Inside the PostgreSQL prompt (`postgres=#`), run:
-```sql
-CREATE DATABASE skynest;
-\q
-```
-
-> [!TIP]
-> **Windows Tip for `psql`:**  
-> If Windows terminal says `'psql' is not recognized as an internal or external command`:
-> - Run it using the full path:  
->   `& "C:\Program Files\PostgreSQL\18\bin\psql.exe" -U postgres` (replace `18` with your installed version)
-> - Or open the **"SQL Shell (psql)"** program from your Windows Start Menu!
-> - Or open **pgAdmin 4**, right-click **Databases -> Create -> Database**, and type `skynest`.
-
-#### B. Build the Schema & Seed the Database
-Run the master database script from the root directory:
-```bash
-psql -U postgres -d skynest -f db/run_all.sql
-```
-*(On Windows if psql is not in your PATH, use:)*
-```powershell
-& "C:\Program Files\PostgreSQL\18\bin\psql.exe" -U postgres -d skynest -f db/run_all.sql
-```
-
-`db/run_all.sql` automatically builds:
-1. All ENUM types and 13 Tables (`db/schema/01_tables.sql`)
-2. Foreign keys, check constraints, and unique constraints (`db/schema/02_constraints.sql`)
-3. Performance indexes (`db/schema/03_indexes.sql`)
-4. Functions, procedures, triggers, views, and test seed data
-
-#### C. Verify the Database
-Check that all 13 tables are created:
-```bash
-psql -U postgres -d skynest -c "\dt"
-```
-
----
-
-### 3. Backend Setup (FastAPI Python)
-
-#### A. Go to the backend folder
-```bash
-cd backend
-```
-
-#### B. Create & Activate a Virtual Environment
-```bash
-# Create virtual environment
-python -m venv .venv
-
-# Activate it:
-# Windows (PowerShell):
-.venv\Scripts\Activate.ps1
-# Windows (Command Prompt):
-.venv\Scripts\activate.bat
-# macOS / Linux:
-source .venv/bin/activate
-```
-*(When activated, you will see `(.venv)` at the beginning of your terminal prompt).*
-
-#### C. Install Backend Dependencies
-```bash
-pip install -r requirements.txt
-```
-
-#### D. Create Environment File (`.env`)
-Copy the example environment file:
-```bash
-# Windows:
-copy .env.example .env
-
-# macOS / Linux:
-cp .env.example .env
-```
-Open `backend/.env` in VS Code and update your PostgreSQL password if needed:
-```env
-DATABASE_URL=postgresql://postgres:YOUR_POSTGRES_PASSWORD@localhost:5432/skynest
-SECRET_KEY=supersecretjwtkeythatisatleast32characterslong
-ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=1440
-FRONTEND_ORIGIN=http://localhost:5173
-```
-
-#### E. Start the FastAPI Backend Server
-```bash
-uvicorn app.main:app --reload
-```
-- API is running at: [`http://localhost:8000`](http://localhost:8000)
-- **Interactive Swagger API Docs:** [`http://localhost:8000/docs`](http://localhost:8000/docs)  
-  *(You can test all endpoints directly in your browser here!)*
-- Health check: [`http://localhost:8000/api/health`](http://localhost:8000/api/health)
-
----
-
-### 4. Frontend Setup (React + Vite)
-
-Open a **new terminal tab**:
-
-#### A. Go to the frontend folder
-```bash
-cd frontend
-```
-
-#### B. Install Frontend Dependencies
-```bash
-npm install
-```
-
-#### C. Create Environment File (`.env`)
-```bash
-# Windows:
-copy .env.example .env
-
-# macOS / Linux:
-cp .env.example .env
-```
-Verify `frontend/.env` contains:
-```env
-VITE_API_BASE_URL=http://localhost:8000/api
-```
-
-#### D. Start the Frontend Development Server
-```bash
-npm run dev
-```
-Open your browser at: [`http://localhost:5173`](http://localhost:5173)
-
----
-
-## 🔑 Test Accounts & Credentials
-
-Once sample seed data is loaded, you can log in with:
-
-| Email | Password | Role | Description |
-| :--- | :--- | :--- | :--- |
-| `admin@skynest.lk` | `SkyNest@2026` | `ADMIN` | System administrator |
-| `mgr.colombo@skynest.lk` | `SkyNest@2026` | `MANAGER` | Hotel manager (Colombo branch) |
-| `rec.colombo@skynest.lk` | `SkyNest@2026` | `RECEPTIONIST` | Front desk receptionist |
-| `kamal@mail.com` | `SkyNest@2026` | `GUEST` | Registered hotel guest |
-
----
-
-## 📁 Repository Structure
+## Repository Structure
 
 ```
 SkyNest_P5_G33/
 ├── db/                         # PostgreSQL Database Layer
 │   ├── schema/                 # DDL: Tables, constraints, and indexes
-│   │   ├── 01_tables.sql
-│   │   ├── 02_constraints.sql
-│   │   └── 03_indexes.sql
 │   ├── functions/              # SQL helper functions (calculations)
 │   ├── procedures/             # Stored procedures (transactions, booking, billing)
 │   ├── triggers/               # Triggers (prevent double bookings, price snapshot)
@@ -320,13 +148,8 @@ SkyNest_P5_G33/
 │   └── .env.example            # Frontend environment template
 │
 ├── docs/                       # Project Documentation
+│   ├── SETUP.md                # Local development setup instructions
 │   ├── work/                   # Work assignments & architecture for each member
-│   │   ├── architecture.md     # Architecture & work distribution overview
-│   │   ├── sithum.md           # Team Lead guide
-│   │   ├── vinuji.md           # Member 1 guide
-│   │   ├── sheereen.md         # Member 2 guide
-│   │   ├── chamika.md          # Member 3 guide
-│   │   └── sadeepa.md          # Member 4 guide
 │   └── specs/                  # Detailed technical specifications (01 to 10)
 │
 ├── .gitignore                  # Git ignore rules
@@ -335,22 +158,23 @@ SkyNest_P5_G33/
 
 ---
 
-## 💡 Beginner Troubleshooting & FAQs
+## Troubleshooting & FAQs
 
-### Q: I made a mistake in my code and want to discard my changes.
+### Q: I made a mistake and want to discard my changes.
+
 ```bash
-# To discard changes in a specific file:
-git restore path/to/file
-
-# To see what is currently modified:
-git status
+git restore path/to/file     # Discard changes in a specific file
+git status                   # See what is currently modified
 ```
 
 ### Q: Git says "fatal: refusing to merge unrelated histories" or has conflict.
-Don't panic! Do not force push. Take a screenshot and ask Sithum on WhatsApp/Slack. We can resolve conflicts together.
+
+Don't panic! Do not force push. Take a screenshot and ask Sithum on WhatsApp/Slack.
 
 ### Q: `uvicorn` fails with `ValidationError: DATABASE_URL field required`.
-You forgot to create the `.env` file! Run `copy .env.example .env` inside the `backend` folder, then check your credentials.
+
+You forgot to create the `.env` file! Run `copy .env.example .env` inside the `backend` folder.
 
 ### Q: Where can I see how to write a router?
-Check [`backend/app/routers/rooms.py`](backend/app/routers/rooms.py). It is our **Golden Template Router** with detailed comments explaining every step: schemas, database queries, role guards, and error handling.
+
+Check [`backend/app/routers/rooms.py`](backend/app/routers/rooms.py) — the **Golden Template Router** with detailed comments explaining schemas, database queries, role guards, and error handling.
