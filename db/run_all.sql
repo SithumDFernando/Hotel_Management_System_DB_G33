@@ -50,9 +50,13 @@
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Step 2: Functions (pure calculations, no side effects)
+--   ⚠ These files are TODO stubs until team members implement them.
+--     The \i will run without error (comments only), but no functions
+--     will be created yet. You will see TODO warnings below.
 -- ─────────────────────────────────────────────────────────────────────────────
 \echo ''
 \echo '>>> [4/8] Installing functions...'
+\echo '    ⚠ NOTE: Function files may still be TODO stubs.'
 \i functions/fn_calculate_nights.sql
 \i functions/fn_calculate_tax.sql
 \i functions/fn_get_current_rate.sql
@@ -62,9 +66,11 @@
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Step 3: Procedures (may call functions, modify data)
+--   ⚠ These files are TODO stubs until team members implement them.
 -- ─────────────────────────────────────────────────────────────────────────────
 \echo ''
 \echo '>>> [5/8] Installing procedures...'
+\echo '    ⚠ NOTE: Procedure files may still be TODO stubs.'
 \i procedures/booking.sql
 \i procedures/checkin_checkout.sql
 \i procedures/billing.sql
@@ -72,18 +78,22 @@
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Step 4: Triggers (fire on table events, may call functions/procedures)
+--   ⚠ These files are TODO stubs until team members implement them.
 -- ─────────────────────────────────────────────────────────────────────────────
 \echo ''
 \echo '>>> [6/8] Installing triggers...'
+\echo '    ⚠ NOTE: Trigger files may still be TODO stubs.'
 \i triggers/double_booking_trigger.sql
 \i triggers/room_status_trigger.sql
 \i triggers/service_usage_trigger.sql
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Step 5: Views (read-only reporting queries)
+--   ⚠ These files are TODO stubs until team members implement them.
 -- ─────────────────────────────────────────────────────────────────────────────
 \echo ''
 \echo '>>> [7/8] Creating views...'
+\echo '    ⚠ NOTE: View files may still be TODO stubs.'
 \i views/reports.sql
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -96,4 +106,8 @@
 \echo ''
 \echo '============================================='
 \echo '  SkyNest Database — Build Complete!'
+\echo ''
+\echo '  ⚠ If you see TODO stubs above, those DB'
+\echo '    objects are not yet implemented. The'
+\echo '    schema + seed data are ready to use.'
 \echo '============================================='
