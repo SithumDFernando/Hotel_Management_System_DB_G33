@@ -42,4 +42,27 @@
 --   create_booking() stored procedure to snapshot the rate at booking time.
 -- =============================================================================
 
--- TODO: Implement fn_get_current_rate
+CREATE OR REPLACE FUNCTION fn_get_current_rate(
+    p_branch_id    UUID,
+    p_room_type_id UUID
+)
+RETURNS NUMERIC(10,2)
+LANGUAGE plpgsql
+STABLE
+AS $$
+DECLARE
+    v_daily_rate NUMERIC(10,2);
+BEGIN
+    SELECT daily_rate
+    INTO   v_daily_rate
+    FROM   room_rate
+    WHERE  branch_id    = p_branch_id
+      AND  room_type_id = p_room_type_id;
+
+    IF v_daily_rate IS NULL THEN
+        RAISE EXCEPTION 'No rate configured for this room type at this branch';
+    END IF;
+
+    RETURN v_daily_rate;
+END;
+$$;

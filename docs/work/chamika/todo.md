@@ -9,10 +9,10 @@
 
 ## Phase 1: Database Functions & Triggers (PostgreSQL)
 
-- [ ] **Current Rate Lookup Function** (`db/functions/fn_get_current_rate.sql`)
-  - [ ] Implement `fn_get_current_rate(p_branch_id UUID, p_room_type_id UUID) RETURNS NUMERIC(10,2)` as `STABLE`
-  - [ ] Query `room_rate` table for matching branch and room type
-  - [ ] Return daily rate or raise exception if rate configuration is missing
+- [x] **Current Rate Lookup Function** (`db/functions/fn_get_current_rate.sql`)
+  - [x] Implement `fn_get_current_rate(p_branch_id UUID, p_room_type_id UUID) RETURNS NUMERIC(10,2)` as `STABLE`
+  - [x] Query `room_rate` table for matching branch and room type
+  - [x] Return daily rate or raise exception if rate configuration is missing
 - [ ] **Service Usage Validation & Price Snapshot Trigger** (`db/triggers/service_usage_trigger.sql`)
   - [ ] Implement `trg_validate_service_usage()` trigger function
   - [ ] Check `booking.status` for the target booking: raise exception if not `'Checked-In'`
