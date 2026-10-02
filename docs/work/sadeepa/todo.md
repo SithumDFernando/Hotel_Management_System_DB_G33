@@ -9,27 +9,27 @@
 
 ## Phase 1: Database Views & Seed Verification (PostgreSQL)
 
-- [ ] **Analytical Management Views** (`db/views/reports.sql`)
-  - [ ] Implement view `v_room_occupancy`
+- [x] **Analytical Management Views** (`db/views/reports.sql`)
+  - [x] Implement view `v_room_occupancy`
     - Tables: `room`, `branch`, `room_type`, `booking` (LEFT JOIN on active reservations)
     - Columns: `room_id`, `branch_id`, `branch_name`, `room_number`, `type_name`, `capacity`, `room_status`, `booking_id`, `check_in_date`, `check_out_date`, `guest_id`
-  - [ ] Implement view `v_guest_billing_summary`
+  - [x] Implement view `v_guest_billing_summary`
     - Tables: `guest`, `booking`, `bill`, `branch`
     - Columns: `guest_id`, `full_name`, `email`, `phone`, `guest_type`, `booking_id`, `branch_name`, `total_amount`, `amount_paid`, `outstanding_balance`, `balance_flag`
-  - [ ] Implement view `v_service_usage_breakdown`
+  - [x] Implement view `v_service_usage_breakdown`
     - Tables: `service_usage`, `service`, `booking`, `room`, `branch`
     - Columns: `branch_name`, `service_name`, `category`, `total_quantity_used`, `total_revenue_generated`
-  - [ ] Implement view `v_monthly_revenue`
+  - [x] Implement view `v_monthly_revenue`
     - Tables: `bill`, `booking`, `room`, `branch`
     - Aggregate by: `branch_name`, `year`, `month`
     - Columns: `year`, `month`, `branch_name`, `total_room_revenue`, `total_service_revenue`, `total_tax_collected`, `total_gross_revenue`
-  - [ ] Implement view `v_top_services`
+  - [x] Implement view `v_top_services`
     - Tables: `service_usage`, `service`
     - Window function: `RANK() OVER (ORDER BY SUM(quantity * unit_price) DESC) as revenue_rank`
     - Columns: `revenue_rank`, `service_name`, `category`, `total_bookings_ordered`, `total_quantity`, `total_revenue`
-- [ ] **Seed Data Quality Assurance** (`db/seed/sample_data.sql`)
-  - [ ] Verify test dataset generates meaningful aggregations in all 5 views
-  - [ ] Ensure edge cases (partial payments, multiple service usages, distinct branches) are covered
+- [x] **Seed Data Quality Assurance** (`db/seed/sample_data.sql`)
+  - [x] Verify test dataset generates meaningful aggregations in all 5 views
+  - [x] Ensure edge cases (partial payments, multiple service usages, distinct branches) are covered
 
 ---
 
@@ -59,9 +59,9 @@
 ## Phase 4: Testing & Verification
 
 - [ ] **Database Level Verification**
-  - [ ] Verify that all 5 views compile and query successfully in psql
-  - [ ] Verify `RANK()` calculations in `v_top_services`
-  - [ ] Verify grouping logic in `v_monthly_revenue`
+  - [x] Verify that all 5 views compile and query successfully in psql
+  - [x] Verify `RANK()` calculations in `v_top_services`
+  - [x] Verify grouping logic in `v_monthly_revenue`
 - [ ] **API Level Verification**
   - [ ] Log in as admin and verify access to reports and admin management routes
   - [ ] Verify non-admin / non-manager users receive `403 Forbidden` on protected report endpoints
