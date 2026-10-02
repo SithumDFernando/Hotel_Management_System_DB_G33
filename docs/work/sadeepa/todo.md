@@ -13,7 +13,7 @@
   - [x] Implement view `v_room_occupancy`
     - Tables: `room`, `branch`, `room_type`, `booking` (LEFT JOIN on active reservations)
     - Columns: `room_id`, `branch_id`, `branch_name`, `room_number`, `type_name`, `capacity`, `room_status`, `booking_id`, `check_in_date`, `check_out_date`, `guest_id`
-  - [ ] Implement view `v_guest_billing_summary`
+  - [x] Implement view `v_guest_billing_summary`
     - Tables: `guest`, `booking`, `bill`, `branch`
     - Columns: `guest_id`, `full_name`, `email`, `phone`, `guest_type`, `booking_id`, `branch_name`, `total_amount`, `amount_paid`, `outstanding_balance`, `balance_flag`
   - [ ] Implement view `v_service_usage_breakdown`
