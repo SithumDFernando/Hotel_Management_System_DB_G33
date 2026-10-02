@@ -16,7 +16,7 @@
   - [x] Implement view `v_guest_billing_summary`
     - Tables: `guest`, `booking`, `bill`, `branch`
     - Columns: `guest_id`, `full_name`, `email`, `phone`, `guest_type`, `booking_id`, `branch_name`, `total_amount`, `amount_paid`, `outstanding_balance`, `balance_flag`
-  - [ ] Implement view `v_service_usage_breakdown`
+  - [x] Implement view `v_service_usage_breakdown`
     - Tables: `service_usage`, `service`, `booking`, `room`, `branch`
     - Columns: `branch_name`, `service_name`, `category`, `total_quantity_used`, `total_revenue_generated`
   - [ ] Implement view `v_monthly_revenue`

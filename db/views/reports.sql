@@ -3,7 +3,7 @@
 -- =============================================================================
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- 1. v_room_occupancy
+-- 1. room_occupancy_v
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Shows current or date-range room occupancy across all branches and room types.
 -- LEFT JOINs active bookings ('Booked', 'Checked-In') so unoccupied rooms
@@ -40,13 +40,13 @@ LEFT JOIN guest g ON bk.guest_id = g.guest_id;
 
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- 2. v_guest_billing_summary
+-- 2. guest_billing_summary_v
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Full billing breakdown per guest and booking, including payment status and
 -- outstanding balance flag for the "unpaid guests" report.
 
---      Used by: GET /api/reports/billing-summary
---               ManagerDashboard "Billing Summary" section.
+-- Used by: GET /api/reports/billing-summary
+--          ManagerDashboard "Billing Summary" section.
 -- ─────────────────────────────────────────────────────────────────────────────
 
 DROP VIEW IF EXISTS v_guest_billing_summary CASCADE;
@@ -81,4 +81,34 @@ JOIN branch b ON r.branch_id = b.branch_id
 LEFT JOIN bill bi ON bk.booking_id = bi.booking_id;
 
 
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 3. service_usage_breakdown_v
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Service usage aggregated across hotel branches, rooms, and services with
+-- itemized totals for usage counts and revenue generated.
+-- Used by: GET /api/reports/service-usage
+--          ManagerDashboard "Service Analytics" section.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+DROP VIEW IF EXISTS v_service_usage_breakdown CASCADE;
+
+CREATE OR REPLACE VIEW v_service_usage_breakdown AS
+SELECT
+    b.branch_id,
+    b.name AS branch_name,
+    r.room_number,
+    g.guest_id,
+    g.full_name AS guest_name,
+    s.service_id,
+    s.service_name,
+    s.category,
+    SUM(su.quantity)::INTEGER AS total_quantity_used,
+    SUM(su.quantity * su.unit_price)::NUMERIC(10,2) AS total_revenue_generated,
+FROM service_usage su
+JOIN service s ON su.service_id = s.service_id
+JOIN booking bk ON su.booking_id = bk.booking_id
+JOIN room r ON bk.room_id = r.room_id
+JOIN branch b ON r.branch_id = b.branch_id
+JOIN guest g ON bk.guest_id = g.guest_id
+GROUP BY b.branch_id, b.name, r.room_number, g.guest_id, g.full_name, s.service_id, s.service_name, s.category;
 
