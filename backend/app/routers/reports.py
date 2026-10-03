@@ -347,3 +347,45 @@ async def get_monthly_revenue(
 
 
 
+# =============================================================================
+# GET /api/reports/top-services
+#   Query params: limit? (default 10)
+#   Queries: SELECT * FROM v_top_services LIMIT :limit
+#   Access: manager, admin.
+
+# Database view used: v_top_services
+# =============================================================================
+
+@router.get("/top-services", response_model=TopServicesResponse)
+async def get_top_services(
+    db=Depends(get_db),
+    user=Depends(require_role("manager", "admin")),
+    limit: int = Query(10, description="Maximum number of services to return", ge=1, le=100),
+):
+    """
+    Top services ranked by usage from v_top_services.
+    Returns services in rank order (most used first).
+    The view uses RANK() OVER (ORDER BY total_quantity DESC).
+    Access: manager, admin.
+    """
+    rows = await db.fetch(
+        "SELECT * FROM v_top_services LIMIT $1",
+        limit,
+    )
+
+    report = [
+        TopServiceRow(
+            usage_rank=r["usage_rank"],
+            service_id=str(r["service_id"]),
+            service_name=r["service_name"],
+            category=r["category"],
+            total_bookings_ordered=r["total_bookings_ordered"],
+            total_quantity=r["total_quantity"],
+            total_revenue=float(r["total_revenue"]),
+            avg_quantity_per_booking=float(r["avg_quantity_per_booking"]),
+        )
+        for r in rows
+    ]
+
+    return TopServicesResponse(report=report, total=len(report))
+
