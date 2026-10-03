@@ -19,7 +19,7 @@
   - [x] Implement view `v_service_usage_breakdown`
     - Tables: `service_usage`, `service`, `booking`, `room`, `branch`
     - Columns: `branch_name`, `service_name`, `category`, `total_quantity_used`, `total_revenue_generated`
-  - [ ] Implement view `v_monthly_revenue`
+  - [x] Implement view `v_monthly_revenue`
     - Tables: `bill`, `booking`, `room`, `branch`
     - Aggregate by: `branch_name`, `year`, `month`
     - Columns: `year`, `month`, `branch_name`, `total_room_revenue`, `total_service_revenue`, `total_tax_collected`, `total_gross_revenue`

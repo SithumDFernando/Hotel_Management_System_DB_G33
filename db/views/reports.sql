@@ -3,7 +3,7 @@
 -- =============================================================================
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- 1. room_occupancy_v
+-- 1. v_room_occupancy
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Shows current or date-range room occupancy across all branches and room types.
 -- LEFT JOINs active bookings ('Booked', 'Checked-In') so unoccupied rooms
@@ -40,7 +40,7 @@ LEFT JOIN guest g ON bk.guest_id = g.guest_id;
 
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- 2. guest_billing_summary_v
+-- 2. v_guest_billing_summary
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Full billing breakdown per guest and booking, including payment status and
 -- outstanding balance flag for the "unpaid guests" report.
@@ -82,7 +82,7 @@ LEFT JOIN bill bi ON bk.booking_id = bi.booking_id;
 
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- 3. service_usage_breakdown_v
+-- 3. v_service_usage_breakdown
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Service usage aggregated across hotel branches, rooms, and services with
 -- itemized totals for usage counts and revenue generated.
@@ -111,4 +111,37 @@ JOIN room r ON bk.room_id = r.room_id
 JOIN branch b ON r.branch_id = b.branch_id
 JOIN guest g ON bk.guest_id = g.guest_id
 GROUP BY b.branch_id, b.name, r.room_number, g.guest_id, g.full_name, s.service_id, s.service_name, s.category;
+
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 4. v_monthly_revenue
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Revenue breakdown per branch per calendar month for checked-out bookings,
+-- distinguishing room charges, service charges, tax, total collected, and
+-- outstanding balances.
+
+-- Used by: GET /api/reports/monthly-revenue
+--          ManagerDashboard "Revenue Report" section.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+DROP VIEW IF EXISTS v_monthly_revenue CASCADE;
+
+CREATE OR REPLACE VIEW v_monthly_revenue AS
+SELECT
+    b.branch_id,
+    b.name AS branch_name,
+    EXTRACT(YEAR FROM bk.check_out_date)::INTEGER AS year,
+    EXTRACT(MONTH FROM bk.check_out_date)::INTEGER AS month,
+    SUM(bi.room_charges)::NUMERIC(10,2) AS total_room_revenue,
+    SUM(bi.service_charges)::NUMERIC(10,2) AS total_service_revenue,
+    SUM(bi.tax_amount)::NUMERIC(10,2) AS total_tax_collected,
+    SUM(bi.total_amount)::NUMERIC(10,2) AS total_gross_revenue,
+    SUM(bi.amount_paid)::NUMERIC(10,2) AS total_collected,
+    SUM(bi.outstanding_balance)::NUMERIC(10,2) AS total_outstanding
+FROM bill bi
+JOIN booking bk ON bi.booking_id = bk.booking_id
+JOIN room r ON bk.room_id = r.room_id
+JOIN branch b ON r.branch_id = b.branch_id
+WHERE bk.status = 'Checked-Out'
+GROUP BY b.branch_id, b.name, EXTRACT(YEAR FROM bk.check_out_date), EXTRACT(MONTH FROM bk.check_out_date);
 
