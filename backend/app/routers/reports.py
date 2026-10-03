@@ -225,7 +225,7 @@ async def get_billing_summary(
     # Query params: branch_id?, from_date?, to_date?
     # Queries: SELECT * FROM v_service_usage_breakdown WHERE ...
     # Access: manager, admin.
-    
+
 # Database view used: v_service_usage_breakdown
 # =============================================================================
 
@@ -274,5 +274,76 @@ async def get_service_usage(
         for r in rows
     ]
 
-    return ServiceUsageResponse(report=report, total=len(report)) 
+    return ServiceUsageResponse(report=report, total=len(report))
+
+
+# =============================================================================
+# GET /api/reports/monthly-revenue
+#   Query params: year (int), month? (int), branch_id?
+#   Queries: SELECT * FROM v_monthly_revenue WHERE year=:year ...
+#   Access: manager, admin.
+
+# Database view used: v_monthly_revenue
+# =============================================================================
+
+@router.get("/monthly-revenue", response_model=MonthlyRevenueResponse)
+async def get_monthly_revenue(
+    db=Depends(get_db),
+    user=Depends(require_role("manager", "admin")),
+    year: int = Query(..., description="Year (e.g. 2026)", ge=2000, le=2100),
+    month: Optional[int] = Query(None, description="Month number 1-12", ge=1, le=12),
+    branch_id: Optional[str] = Query(None, description="Filter by branch UUID"),
+):
+    """
+    Monthly revenue breakdown from v_monthly_revenue.
+    - `year` is required; `month` is optional (omit for full-year view).
+    - Managers are automatically scoped to their own branch.
+    """
+    effective_branch = _resolve_branch(user, branch_id)
+
+    conditions = []
+    params = []
+    idx = 0
+
+    # year is always required
+    idx += 1
+    conditions.append(f"year = ${idx}")
+    params.append(year)
+
+    if month is not None:
+        idx += 1
+        conditions.append(f"month = ${idx}")
+        params.append(month)
+
+    if effective_branch:
+        idx += 1
+        conditions.append(f"branch_id = ${idx}::UUID")
+        params.append(effective_branch)
+
+    where = "WHERE " + " AND ".join(conditions) if conditions else ""
+
+    rows = await db.fetch(
+        f"SELECT * FROM v_monthly_revenue {where} ORDER BY year, month, branch_name",
+        *params,
+    )
+
+    report = [
+        MonthlyRevenueRow(
+            branch_id=str(r["branch_id"]),
+            branch_name=r["branch_name"],
+            year=r["year"],
+            month=r["month"],
+            total_room_revenue=float(r["total_room_revenue"]),
+            total_service_revenue=float(r["total_service_revenue"]),
+            total_tax_collected=float(r["total_tax_collected"]),
+            total_gross_revenue=float(r["total_gross_revenue"]),
+            total_collected=float(r["total_collected"]),
+            total_outstanding=float(r["total_outstanding"]),
+        )
+        for r in rows
+    ]
+
+    return MonthlyRevenueResponse(report=report, total=len(report))
+
+
 
