@@ -144,7 +144,79 @@ def _resolve_branch(user: dict, branch_id_param: Optional[str]) -> Optional[str]
     # Managers: auto-filter to their branch_id.
     # Access: manager, admin.
 # =============================================================================
+@router.get("/occupancy", response_model=OccupancyResponse)
+async def get_occupancy_report(
+    db=Depends(get_db),
+    user=Depends(require_role("manager", "admin")),
+    branch_id: Optional[str] = Query(None, description="Filter by branch UUID"),
+    date: Optional[str] = Query(None, description="Point-in-time date YYYY-MM-DD"),
+    from_date: Optional[str] = Query(None, description="Range start date YYYY-MM-DD"),
+    to_date: Optional[str] = Query(None, description="Range end date YYYY-MM-DD"),
+):
+    """
+    Room occupancy report from v_room_occupancy.
+    - Managers are automatically scoped to their own branch.
+    - Supports a single date filter or a date range (from_date / to_date).
+    """
+    effective_branch = _resolve_branch(user, branch_id)
 
+    conditions = []
+    params = []
+    idx = 0
+
+    if effective_branch:
+        idx += 1
+        conditions.append(f"branch_id = ${idx}::UUID")
+        params.append(effective_branch)
+
+    # Point-in-time: rooms where this date falls within the booking window
+    if date:
+        idx += 1
+        conditions.append(
+            f"(check_in_date IS NULL OR "
+            f"(check_in_date <= ${idx}::DATE AND check_out_date > ${idx}::DATE))"
+        )
+        params.append(date)
+        
+    elif from_date and to_date:
+        idx += 1
+        fi = idx
+        idx += 1
+        ti = idx
+        conditions.append(
+            f"(check_in_date IS NULL OR "
+            f"(check_in_date < ${ti}::DATE AND check_out_date > ${fi}::DATE))"
+        )
+        params.append(from_date)
+        params.append(to_date)
+
+    where = "WHERE " + " AND ".join(conditions) if conditions else ""
+
+    rows = await db.fetch(
+        f"SELECT * FROM v_room_occupancy {where} ORDER BY branch_name, room_number",
+        *params,
+    )
+
+    report = [
+        OccupancyRow(
+            room_id=str(r["room_id"]),
+            branch_id=str(r["branch_id"]),
+            branch_name=r["branch_name"],
+            room_number=r["room_number"],
+            room_type=r["room_type"],
+            capacity=r["capacity"],
+            room_status=r["room_status"],
+            booking_id=str(r["booking_id"]) if r["booking_id"] else None,
+            guest_id=str(r["guest_id"]) if r["guest_id"] else None,
+            guest_name=r["guest_name"],
+            check_in_date=str(r["check_in_date"]) if r["check_in_date"] else None,
+            check_out_date=str(r["check_out_date"]) if r["check_out_date"] else None,
+            booking_status=r["booking_status"],
+        )
+        for r in rows
+    ]
+
+    return OccupancyResponse(report=report, total=len(report))
 
 
 

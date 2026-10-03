@@ -35,8 +35,8 @@
 
 ## Phase 2: Reports Router (FastAPI)
 
-- [ ] **Reporting Endpoints** (`backend/app/routers/reports.py`)
-  - [ ] `GET /api/reports/occupancy`: Filter by `branch_id?` and `date?` (Role: `manager`, `admin`)
+- [x] **Reporting Endpoints** (`backend/app/routers/reports.py`)
+  - [x] `GET /api/reports/occupancy`: Filter by `branch_id?` and `date?` (Role: `manager`, `admin`)
   - [x] `GET /api/reports/billing-summary`: Filter by `branch_id?` and `unpaid_only?` flag
   - [x] `GET /api/reports/service-usage`: Filter by `branch_id?`
   - [x] `GET /api/reports/monthly-revenue`: Aggregate revenue by `year`, `month?`, and `branch_id?`
