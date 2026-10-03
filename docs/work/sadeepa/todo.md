@@ -9,7 +9,7 @@
 
 ## Phase 1: Database Views & Seed Verification (PostgreSQL)
 
-- [ ] **Analytical Management Views** (`db/views/reports.sql`)
+- [x] **Analytical Management Views** (`db/views/reports.sql`)
   - [x] Implement view `v_room_occupancy`
     - Tables: `room`, `branch`, `room_type`, `booking` (LEFT JOIN on active reservations)
     - Columns: `room_id`, `branch_id`, `branch_name`, `room_number`, `type_name`, `capacity`, `room_status`, `booking_id`, `check_in_date`, `check_out_date`, `guest_id`
@@ -23,7 +23,7 @@
     - Tables: `bill`, `booking`, `room`, `branch`
     - Aggregate by: `branch_name`, `year`, `month`
     - Columns: `year`, `month`, `branch_name`, `total_room_revenue`, `total_service_revenue`, `total_tax_collected`, `total_gross_revenue`
-  - [ ] Implement view `v_top_services`
+  - [x] Implement view `v_top_services`
     - Tables: `service_usage`, `service`
     - Window function: `RANK() OVER (ORDER BY SUM(quantity * unit_price) DESC) as revenue_rank`
     - Columns: `revenue_rank`, `service_name`, `category`, `total_bookings_ordered`, `total_quantity`, `total_revenue`

@@ -145,3 +145,32 @@ JOIN branch b ON r.branch_id = b.branch_id
 WHERE bk.status = 'Checked-Out'
 GROUP BY b.branch_id, b.name, EXTRACT(YEAR FROM bk.check_out_date), EXTRACT(MONTH FROM bk.check_out_date);
 
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 5. v_top_services
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Most-used services ranked by total quantity using the RANK() window function,
+-- including distinct booking order count, total quantity, total revenue, and averages.
+
+-- Used by: GET /api/reports/top-services
+--          ManagerDashboard "Service Analytics" section.
+--
+-- ─────────────────────────────────────────────────────────────────────────────
+
+DROP VIEW IF EXISTS v_top_services CASCADE;
+
+CREATE OR REPLACE VIEW v_top_services AS
+SELECT
+    RANK() OVER (ORDER BY SUM(su.quantity) DESC)::INTEGER AS usage_rank,
+    s.service_id,
+    s.service_name,
+    s.category,
+    COUNT(DISTINCT su.booking_id)::INTEGER AS total_bookings_ordered,
+    SUM(su.quantity)::INTEGER AS total_quantity,
+    SUM(su.quantity * su.unit_price)::NUMERIC(10,2) AS total_revenue,
+    ROUND(AVG(su.quantity), 2)::NUMERIC(10,2) AS avg_quantity_per_booking
+FROM service_usage su
+JOIN service s ON su.service_id = s.service_id
+GROUP BY s.service_id, s.service_name, s.category
+ORDER BY usage_rank ASC;
+
