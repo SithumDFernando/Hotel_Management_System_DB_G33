@@ -27,9 +27,9 @@
     - Tables: `service_usage`, `service`
     - Window function: `RANK() OVER (ORDER BY SUM(quantity * unit_price) DESC) as revenue_rank`
     - Columns: `revenue_rank`, `service_name`, `category`, `total_bookings_ordered`, `total_quantity`, `total_revenue`
-- [ ] **Seed Data Quality Assurance** (`db/seed/sample_data.sql`)
-  - [ ] Verify test dataset generates meaningful aggregations in all 5 views
-  - [ ] Ensure edge cases (partial payments, multiple service usages, distinct branches) are covered
+- [x] **Seed Data Quality Assurance** (`db/seed/sample_data.sql`)
+  - [x] Verify test dataset generates meaningful aggregations in all 5 views
+  - [x] Ensure edge cases (partial payments, multiple service usages, distinct branches) are covered
 
 ---
 

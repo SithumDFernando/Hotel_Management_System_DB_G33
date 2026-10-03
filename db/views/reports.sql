@@ -103,7 +103,7 @@ SELECT
     s.service_name,
     s.category,
     SUM(su.quantity)::INTEGER AS total_quantity_used,
-    SUM(su.quantity * su.unit_price)::NUMERIC(10,2) AS total_revenue_generated,
+    SUM(su.quantity * su.unit_price)::NUMERIC(10,2) AS total_revenue_generated
 FROM service_usage su
 JOIN service s ON su.service_id = s.service_id
 JOIN booking bk ON su.booking_id = bk.booking_id
