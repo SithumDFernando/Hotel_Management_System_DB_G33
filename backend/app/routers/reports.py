@@ -219,3 +219,60 @@ async def get_billing_summary(
 
     return BillingSummaryResponse(report=report, total=len(report))
 
+
+# =============================================================================
+# GET /api/reports/service-usage
+    # Query params: branch_id?, from_date?, to_date?
+    # Queries: SELECT * FROM v_service_usage_breakdown WHERE ...
+    # Access: manager, admin.
+    
+# Database view used: v_service_usage_breakdown
+# =============================================================================
+
+@router.get("/service-usage", response_model=ServiceUsageResponse)
+async def get_service_usage(
+    db=Depends(get_db),
+    user=Depends(require_role("manager", "admin")),
+    branch_id: Optional[str] = Query(None, description="Filter by branch UUID"),
+):
+    """
+    Service usage breakdown from v_service_usage_breakdown.
+    - Managers are automatically scoped to their own branch.
+    """
+    effective_branch = _resolve_branch(user, branch_id)
+
+    conditions = []
+    params = []
+    idx = 0
+
+    if effective_branch:
+        idx += 1
+        conditions.append(f"branch_id = ${idx}::UUID")
+        params.append(effective_branch)
+
+    where = "WHERE " + " AND ".join(conditions) if conditions else ""
+
+    rows = await db.fetch(
+        f"SELECT * FROM v_service_usage_breakdown {where} "
+        f"ORDER BY branch_name, total_revenue_generated DESC",
+        *params,
+    )
+
+    report = [
+        ServiceUsageRow(
+            branch_id=str(r["branch_id"]),
+            branch_name=r["branch_name"],
+            room_number=r["room_number"],
+            guest_id=str(r["guest_id"]),
+            guest_name=r["guest_name"],
+            service_id=str(r["service_id"]),
+            service_name=r["service_name"],
+            category=r["category"],
+            total_quantity_used=r["total_quantity_used"],
+            total_revenue_generated=float(r["total_revenue_generated"]),
+        )
+        for r in rows
+    ]
+
+    return ServiceUsageResponse(report=report, total=len(report)) 
+
