@@ -37,7 +37,7 @@
 
 - [ ] **Reporting Endpoints** (`backend/app/routers/reports.py`)
   - [ ] `GET /api/reports/occupancy`: Filter by `branch_id?` and `date?` (Role: `manager`, `admin`)
-  - [ ] `GET /api/reports/billing-summary`: Filter by `branch_id?` and `unpaid_only?` flag
+  - [x] `GET /api/reports/billing-summary`: Filter by `branch_id?` and `unpaid_only?` flag
   - [ ] `GET /api/reports/service-usage`: Filter by `branch_id?`
   - [ ] `GET /api/reports/monthly-revenue`: Aggregate revenue by `year`, `month?`, and `branch_id?`
   - [ ] `GET /api/reports/top-services`: Ranked service list with `limit?` (default 10)
