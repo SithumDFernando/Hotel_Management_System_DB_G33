@@ -296,6 +296,87 @@ async def list_users(
 
     return UserListResponse(users=users, total=len(users))
 
+
+# -- POST /api/admin/users ----------------------------------------------------
+
+@router.post("/users", status_code=status.HTTP_201_CREATED)
+async def create_user(
+    body: UserCreate,
+    db=Depends(get_db),
+    _user=Depends(require_role("admin")),
+):
+    """
+    Create a new staff or admin user account.
+    The plaintext password is hashed with bcrypt before storage.
+    Access: admin only.
+    Returns: { account_id }
+    """
+    
+    # Validate role value against DB enum
+    if body.role not in VALID_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid role '{body.role}'. Must be one of: {', '.join(sorted(VALID_ROLES))}",
+        )
+
+    # Email must be unique across all accounts
+    existing = await db.fetchrow(
+        "SELECT account_id FROM user_account WHERE email = $1",
+        body.email,
+    )
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"An account with email '{body.email}' already exists.",
+        )
+
+    # Validate branch_id FK if provided
+    if body.branch_id:
+        branch = await db.fetchrow(
+            "SELECT branch_id FROM branch WHERE branch_id = $1::UUID",
+            body.branch_id,
+        )
+        if branch is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Branch {body.branch_id} not found.",
+            )
+
+    # Validate guest_id FK if provided
+    if body.guest_id:
+        guest = await db.fetchrow(
+            "SELECT guest_id FROM guest WHERE guest_id = $1::UUID",
+            body.guest_id,
+        )
+        if guest is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Guest {body.guest_id} not found.",
+            )
+
+    # Hash the plaintext password before persisting
+    hashed = hash_password(body.password)
+
+    row = await db.fetchrow(
+        """
+        INSERT INTO user_account (guest_id, branch_id, email, password_hash, role)
+        VALUES ($1, $2, $3, $4, $5::user_role)
+        RETURNING account_id
+        """,
+        body.guest_id or None,
+        body.branch_id or None,
+        body.email,
+        hashed,
+        body.role,
+    )
+
+    return {"account_id": str(row["account_id"])}
+
+
+    
+
+
+
     
 
 
