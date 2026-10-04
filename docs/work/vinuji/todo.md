@@ -37,11 +37,11 @@
 
 ## Phase 2: Backend Schemas (Pydantic)
 
-- [ ] **Booking Pydantic Schemas** (`backend/app/schemas/booking.py`)
-  - [ ] Define `BookingCreate` schema (`guest_id`, `room_id`, `check_in_date`, `check_out_date`, `payment_option`)
-  - [ ] Add validator to enforce `check_out_date > check_in_date`
-  - [ ] Define `BookingStatusUpdate` schema (`reason: str | None = None`)
-  - [ ] Define `BookingOut` schema with all fields, dates, rates, and timestamps (`from_attributes = True`)
+- [x] **Booking Pydantic Schemas** (`backend/app/schemas/booking.py`)
+  - [x] Define `BookingCreate` schema (`guest_id`, `room_id`, `check_in_date`, `check_out_date`, `payment_option`)
+  - [x] Add validator to enforce `check_out_date > check_in_date`
+  - [x] Define `BookingStatusUpdate` schema (`reason: str | None = None`)
+  - [x] Define `BookingOut` schema with all fields, dates, rates, and timestamps (`from_attributes = True`)
 
 ---
 
