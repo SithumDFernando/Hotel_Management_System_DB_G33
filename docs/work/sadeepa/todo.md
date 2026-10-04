@@ -52,7 +52,7 @@
   - [x] `PUT /api/admin/branches/{branch_id}`: Update branch metadata
   - [x] `GET /api/admin/users`: List staff accounts with their roles and branch assignments
   - [x] `POST /api/admin/users`: Create staff account, hashing password with `auth.hash_password`
-  - [ ] `PATCH /api/admin/users/{account_id}`: Update user role or branch assignment
+  - [x] `PATCH /api/admin/users/{account_id}`: Update user role or branch assignment
 
 ---
 

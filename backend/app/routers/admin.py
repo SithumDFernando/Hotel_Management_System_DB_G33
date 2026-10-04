@@ -373,7 +373,81 @@ async def create_user(
     return {"account_id": str(row["account_id"])}
 
 
-    
+# -- PATCH /api/admin/users/{account_id} --------------------------------------
+
+@router.patch("/users/{account_id}")
+async def patch_user(
+    account_id: str,
+    body: UserPatch,
+    db=Depends(get_db),
+    _user=Depends(require_role("admin")),
+):
+    """
+    Update a user's role and/or branch assignment.
+    Only supplied (non-None) fields are changed.
+    Pass branch_id as an empty string to clear the branch assignment.
+    Access: admin only.
+    """
+    existing = await db.fetchrow(
+        "SELECT account_id, role, branch_id FROM user_account WHERE account_id = $1::UUID",
+        account_id,
+    )
+    if existing is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"User account {account_id} not found.",
+        )
+
+    new_role = existing["role"]
+    new_branch_id = existing["branch_id"]
+    changed = []
+
+    if body.role is not None:
+        if body.role not in VALID_ROLES:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid role '{body.role}'. Must be one of: {', '.join(sorted(VALID_ROLES))}",
+            )
+        new_role = body.role
+        changed.append("role")
+
+    if body.branch_id is not None:
+        # Empty string means "clear the branch assignment"
+        if body.branch_id.strip() == "":
+            new_branch_id = None
+            changed.append("branch_id")
+        else:
+            branch = await db.fetchrow(
+                "SELECT branch_id FROM branch WHERE branch_id = $1::UUID",
+                body.branch_id,
+            )
+            if branch is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Branch {body.branch_id} not found.",
+                )
+            new_branch_id = body.branch_id
+            changed.append("branch_id")
+
+    if not changed:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No fields provided for update.",
+        )
+
+    await db.execute(
+        """
+        UPDATE user_account
+        SET role = $1::user_role, branch_id = $2
+        WHERE account_id = $3::UUID
+        """,
+        new_role,
+        new_branch_id,
+        account_id,
+    )
+
+    return {"account_id": account_id, "updated_fields": changed}
+
 
 
 
