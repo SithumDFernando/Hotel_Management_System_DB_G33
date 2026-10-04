@@ -15,11 +15,11 @@
   - [x] Overlap check: `existing.check_in_date < new.check_out_date AND existing.check_out_date > new.check_in_date`
   - [x] Raise exception on overlap: `RAISE EXCEPTION 'Room % is already booked for the selected dates.'`
   - [x] Define `BEFORE INSERT ON booking FOR EACH ROW` trigger
-- [ ] **Booking Creation Stored Procedure** (`db/procedures/booking.sql`)
-  - [ ] Implement `create_booking(p_guest_id, p_room_id, p_check_in_date, p_check_out_date, p_payment_option, OUT p_booking_id)`
-  - [ ] Look up `branch_id` and `room_type_id` from `room` table
-  - [ ] Snapshot rate via `v_rate := fn_get_current_rate(v_branch_id, v_room_type_id)`
-  - [ ] Insert booking record with status `'Booked'` and return `booking_id`
+- [x] **Booking Creation Stored Procedure** (`db/procedures/booking.sql`)
+  - [x] Implement `create_booking(p_guest_id, p_room_id, p_check_in_date, p_check_out_date, p_payment_option, OUT p_booking_id)`
+  - [x] Look up `branch_id` and `room_type_id` from `room` table
+  - [x] Snapshot rate via `v_rate := fn_get_current_rate(v_branch_id, v_room_type_id)`
+  - [x] Insert booking record with status `'Booked'` and return `booking_id`
 - [ ] **Check-In & Check-Out Stored Procedures** (`db/procedures/checkin_checkout.sql`)
   - [ ] Implement `perform_checkin(p_booking_id UUID)`
   - [ ] Validate booking status is `'Booked'`, raise exception if invalid
