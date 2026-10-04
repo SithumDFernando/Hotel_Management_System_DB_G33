@@ -27,11 +27,11 @@
   - [x] Implement `perform_checkout(p_booking_id UUID)`
   - [x] Validate booking status is `'Checked-In'`, raise exception if invalid
   - [x] Update `booking.status = 'Checked-Out'`, `actual_checkout_time = NOW()`, `room.status = 'Available'`
-- [ ] **Room Status Sync Trigger** (`db/triggers/room_status_trigger.sql`)
-  - [ ] Implement `trg_sync_room_status()` trigger function
-  - [ ] Handle transition to `'Checked-In'` (set room status `'Occupied'`)
-  - [ ] Handle transition to `'Checked-Out'` or `'Cancelled'` (set room status `'Available'`)
-  - [ ] Define `AFTER UPDATE OF status ON booking FOR EACH ROW` trigger
+- [x] **Room Status Sync Trigger** (`db/triggers/room_status_trigger.sql`)
+  - [x] Implement `trg_sync_room_status()` trigger function
+  - [x] Handle transition to `'Checked-In'` (set room status `'Occupied'`)
+  - [x] Handle transition to `'Checked-Out'` or `'Cancelled'` (set room status `'Available'`)
+  - [x] Define `AFTER UPDATE OF status ON booking FOR EACH ROW` trigger
 
 ---
 
