@@ -246,3 +246,57 @@ async def update_branch(
     return {"branch_id": branch_id, "updated_fields": changed}
 
 
+# =============================================================================
+# User Account Endpoints
+# =============================================================================
+
+VALID_ROLES = {"admin", "manager", "receptionist", "guest"}
+
+
+# -- GET /api/admin/users -----------------------------------------------------
+
+@router.get("/users", response_model=UserListResponse)
+async def list_users(
+    db=Depends(get_db),
+    _user=Depends(require_role("admin")),
+):
+    """
+    List all user_account rows with joined branch name and guest full name.
+    Access: admin only.
+    """
+    rows = await db.fetch(
+        """
+        SELECT
+            ua.account_id,
+            ua.email,
+            ua.role,
+            ua.branch_id,
+            b.name AS branch_name,
+            ua.guest_id,
+            g.full_name AS guest_name
+        FROM user_account ua
+        LEFT JOIN branch b ON b.branch_id = ua.branch_id
+        LEFT JOIN guest g ON g.guest_id = ua.guest_id
+        ORDER BY ua.role, ua.email
+        """
+    )
+
+    users = [
+        UserOut(
+            account_id=str(row["account_id"]),
+            email=row["email"],
+            role=row["role"],
+            branch_id=str(row["branch_id"]) if row["branch_id"] else None,
+            branch_name=row["branch_name"],
+            guest_id=str(row["guest_id"]) if row["guest_id"] else None,
+            guest_name=row["guest_name"],
+        )
+        for row in rows
+    ]
+
+    return UserListResponse(users=users, total=len(users))
+
+    
+
+
+
