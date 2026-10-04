@@ -136,3 +136,47 @@ async def list_branches( db=Depends(get_db), _user=Depends(require_role("admin")
     ]
 
     return BranchListResponse(branches=branches, total=len(branches))
+
+
+
+# -- POST /api/admin/branches -------------------------------------------------
+
+@router.post("/branches", status_code=status.HTTP_201_CREATED)
+async def create_branch(
+    body: BranchCreate,
+    db=Depends(get_db),
+    _user=Depends(require_role("admin")),
+):
+    """
+    Create a new hotel branch.
+    Returns 409 if a branch with the same name already exists.
+    Access: admin only.
+    """
+    existing = await db.fetchrow(
+        "SELECT branch_id FROM branch WHERE name = $1",
+        body.name,
+    )
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"A branch named '{body.name}' already exists.",
+        )
+
+    row = await db.fetchrow(
+        """
+        INSERT INTO branch (name, city, address, phone, manager_name)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING branch_id
+        """,
+        body.name,
+        body.city,
+        body.address,
+        body.phone,
+        body.manager_name,
+    )
+
+    return {"branch_id": str(row["branch_id"])}
+
+    
+
+
