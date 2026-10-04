@@ -20,13 +20,13 @@
   - [x] Look up `branch_id` and `room_type_id` from `room` table
   - [x] Snapshot rate via `v_rate := fn_get_current_rate(v_branch_id, v_room_type_id)`
   - [x] Insert booking record with status `'Booked'` and return `booking_id`
-- [ ] **Check-In & Check-Out Stored Procedures** (`db/procedures/checkin_checkout.sql`)
-  - [ ] Implement `perform_checkin(p_booking_id UUID)`
-  - [ ] Validate booking status is `'Booked'`, raise exception if invalid
-  - [ ] Update `booking.status = 'Checked-In'`, `actual_checkin_time = NOW()`, `room.status = 'Occupied'`
-  - [ ] Implement `perform_checkout(p_booking_id UUID)`
-  - [ ] Validate booking status is `'Checked-In'`, raise exception if invalid
-  - [ ] Update `booking.status = 'Checked-Out'`, `actual_checkout_time = NOW()`, `room.status = 'Available'`
+- [x] **Check-In & Check-Out Stored Procedures** (`db/procedures/checkin_checkout.sql`)
+  - [x] Implement `perform_checkin(p_booking_id UUID)`
+  - [x] Validate booking status is `'Booked'`, raise exception if invalid
+  - [x] Update `booking.status = 'Checked-In'`, `actual_checkin_time = NOW()`, `room.status = 'Occupied'`
+  - [x] Implement `perform_checkout(p_booking_id UUID)`
+  - [x] Validate booking status is `'Checked-In'`, raise exception if invalid
+  - [x] Update `booking.status = 'Checked-Out'`, `actual_checkout_time = NOW()`, `room.status = 'Available'`
 - [ ] **Room Status Sync Trigger** (`db/triggers/room_status_trigger.sql`)
   - [ ] Implement `trg_sync_room_status()` trigger function
   - [ ] Handle transition to `'Checked-In'` (set room status `'Occupied'`)
