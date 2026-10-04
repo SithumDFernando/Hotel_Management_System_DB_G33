@@ -49,7 +49,7 @@
 - [ ] **Branch & User Administration** (`backend/app/routers/admin.py`)
   - [x] `GET /api/admin/branches`: List all branches with basic stats
   - [x] `POST /api/admin/branches`: Create new branch (Role: `admin`)
-  - [ ] `PUT /api/admin/branches/{branch_id}`: Update branch metadata
+  - [x] `PUT /api/admin/branches/{branch_id}`: Update branch metadata
   - [ ] `GET /api/admin/users`: List staff accounts with their roles and branch assignments
   - [ ] `POST /api/admin/users`: Create staff account, hashing password with `auth.hash_password`
   - [ ] `PATCH /api/admin/users/{account_id}`: Update user role or branch assignment

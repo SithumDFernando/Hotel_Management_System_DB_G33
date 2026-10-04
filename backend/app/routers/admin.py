@@ -177,6 +177,72 @@ async def create_branch(
 
     return {"branch_id": str(row["branch_id"])}
 
-    
+
+# -- PUT /api/admin/branches/{branch_id} --------------------------------------
+
+@router.put("/branches/{branch_id}")
+async def update_branch(
+    branch_id: str,
+    body: BranchUpdate,
+    db=Depends(get_db),
+    _user=Depends(require_role("admin")),
+):
+    """
+    Partially update an existing branch (only supplied fields are changed).
+    Returns 404 if the branch does not exist.
+    Returns 400 if no fields are supplied.
+    Access: admin only.
+    """
+    existing = await db.fetchrow(
+        "SELECT * FROM branch WHERE branch_id = $1::UUID",
+        branch_id,
+    )
+    if existing is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Branch {branch_id} not found.",
+        )
+
+    # Only override fields that were explicitly provided
+    updated = dict(existing)
+    changed = []
+
+    if body.name is not None:
+        updated["name"] = body.name
+        changed.append("name")
+    if body.city is not None:
+        updated["city"] = body.city
+        changed.append("city")
+    if body.address is not None:
+        updated["address"] = body.address
+        changed.append("address")
+    if body.phone is not None:
+        updated["phone"] = body.phone
+        changed.append("phone")
+    if body.manager_name is not None:
+        updated["manager_name"] = body.manager_name
+        changed.append("manager_name")
+
+    if not changed:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No fields provided for update.",
+        )
+
+    await db.execute(
+        """
+        UPDATE branch
+        SET name = $1, city = $2, address = $3, phone = $4, manager_name = $5
+        WHERE branch_id = $6::UUID
+        """,
+        updated["name"],
+        updated["city"],
+        updated["address"],
+        updated["phone"],
+        updated["manager_name"],
+        branch_id,
+    )
+
+    return {"branch_id": branch_id, "updated_fields": changed}
 
 
