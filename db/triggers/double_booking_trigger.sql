@@ -55,15 +55,18 @@ RETURNS TRIGGER
 LANGUAGE plpgsql
 AS $$
 BEGIN
-    IF EXISTS (
-        SELECT 1
-        FROM booking
-        WHERE room_id = NEW.room_id
-          AND status NOT IN ('Cancelled', 'Checked-Out')
-          AND check_in_date < NEW.check_out_date
-          AND check_out_date > NEW.check_in_date
-    ) THEN
-        RAISE EXCEPTION 'Room % is already booked for the selected dates.', NEW.room_id;
+    IF NEW.status NOT IN ('Cancelled', 'Checked-Out') THEN
+        IF EXISTS (
+            SELECT 1
+            FROM booking
+            WHERE room_id = NEW.room_id
+              AND (TG_OP = 'INSERT' OR booking_id <> NEW.booking_id)
+              AND status NOT IN ('Cancelled', 'Checked-Out')
+              AND check_in_date < NEW.check_out_date
+              AND check_out_date > NEW.check_in_date
+        ) THEN
+            RAISE EXCEPTION 'Room % is already booked for the selected dates.', NEW.room_id;
+        END IF;
     END IF;
 
     RETURN NEW;
@@ -71,6 +74,6 @@ END;
 $$;
 
 CREATE TRIGGER trg_double_booking
-BEFORE INSERT ON booking
+BEFORE INSERT OR UPDATE ON booking
 FOR EACH ROW
 EXECUTE FUNCTION trg_check_double_booking();
