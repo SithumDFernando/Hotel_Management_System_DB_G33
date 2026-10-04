@@ -9,12 +9,12 @@
 
 ## Phase 1: Database Logic (PostgreSQL)
 
-- [ ] **Double-Booking Prevention Trigger** (`db/triggers/double_booking_trigger.sql`)
-  - [ ] Implement `trg_check_double_booking()` trigger function
-  - [ ] Query for overlapping active bookings (`status NOT IN ('Cancelled', 'Checked-Out')`)
-  - [ ] Overlap check: `existing.check_in_date < new.check_out_date AND existing.check_out_date > new.check_in_date`
-  - [ ] Raise exception on overlap: `RAISE EXCEPTION 'Room % is already booked for the selected dates.'`
-  - [ ] Define `BEFORE INSERT ON booking FOR EACH ROW` trigger
+- [x] **Double-Booking Prevention Trigger** (`db/triggers/double_booking_trigger.sql`)
+  - [x] Implement `trg_check_double_booking()` trigger function
+  - [x] Query for overlapping active bookings (`status NOT IN ('Cancelled', 'Checked-Out')`)
+  - [x] Overlap check: `existing.check_in_date < new.check_out_date AND existing.check_out_date > new.check_in_date`
+  - [x] Raise exception on overlap: `RAISE EXCEPTION 'Room % is already booked for the selected dates.'`
+  - [x] Define `BEFORE INSERT ON booking FOR EACH ROW` trigger
 - [ ] **Booking Creation Stored Procedure** (`db/procedures/booking.sql`)
   - [ ] Implement `create_booking(p_guest_id, p_room_id, p_check_in_date, p_check_out_date, p_payment_option, OUT p_booking_id)`
   - [ ] Look up `branch_id` and `room_type_id` from `room` table
