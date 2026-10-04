@@ -47,7 +47,7 @@
 ## Phase 3: Admin Router (FastAPI)
 
 - [ ] **Branch & User Administration** (`backend/app/routers/admin.py`)
-  - [ ] `GET /api/admin/branches`: List all branches with basic stats
+  - [x] `GET /api/admin/branches`: List all branches with basic stats
   - [ ] `POST /api/admin/branches`: Create new branch (Role: `admin`)
   - [ ] `PUT /api/admin/branches/{branch_id}`: Update branch metadata
   - [ ] `GET /api/admin/users`: List staff accounts with their roles and branch assignments
