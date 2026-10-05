@@ -23,14 +23,14 @@ from passlib.context import CryptContext
 from app.config import settings
 
 # ── Password Hashing ─────────────────────────────────────────────────────────
-# bcrypt with automatic salt — passlib handles salt generation internally.
-# "deprecated='auto'" ensures old hashes are automatically rehashed on verify.
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+import bcrypt
 
 
 def hash_password(plain: str) -> str:
     """Hash a plain-text password using bcrypt."""
-    return pwd_context.hash(plain)
+    pw_bytes = plain.encode("utf-8")[:72]
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(pw_bytes, salt).decode("utf-8")
 
 
 def verify_password(plain: str, hashed: str) -> bool:
@@ -38,7 +38,8 @@ def verify_password(plain: str, hashed: str) -> bool:
     Compare a plain-text password against a stored bcrypt hash.
     Returns True if they match, False otherwise.
     """
-    return pwd_context.verify(plain, hashed)
+    pw_bytes = plain.encode("utf-8")[:72]
+    return bcrypt.checkpw(pw_bytes, hashed.encode("utf-8"))
 
 
 # ── JWT Token Management ─────────────────────────────────────────────────────
