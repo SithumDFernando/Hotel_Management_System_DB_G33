@@ -49,7 +49,7 @@
 
 - [ ] **Booking Endpoints** (`backend/app/routers/bookings.py`)
   - [x] `POST /api/bookings`: Invoke `create_booking`, catch overlap error → return `409 Conflict`, return `201 Created`
-  - [ ] `GET /api/bookings`: Paginated search with query filters (`status`, `guest_id`, `room_id`, `branch_id`)
+  - [x] `GET /api/bookings`: Paginated search with query filters (`status`, `guest_id`, `room_id`, `branch_id`)
   - [ ] `GET /api/bookings/{booking_id}`: Retrieve detailed booking record with guest & room details
   - [ ] `PATCH /api/bookings/{booking_id}/checkin`: RBAC check (`receptionist`, `manager`, `admin`), invoke `perform_checkin`
   - [ ] `PATCH /api/bookings/{booking_id}/checkout`: RBAC check (`receptionist`, `manager`, `admin`), invoke `perform_checkout`

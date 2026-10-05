@@ -58,3 +58,5 @@ class BookingListOut(BaseModel):
 class BookingListResponse(BaseModel):
     bookings: list[BookingListOut]
     total: int
+    page: int
+    per_page: int
