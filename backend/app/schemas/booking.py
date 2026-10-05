@@ -35,3 +35,26 @@ class BookingOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+class GuestInfo(BaseModel):
+    guest_id: UUID
+    full_name: str
+
+class RoomInfo(BaseModel):
+    room_id: UUID
+    room_number: str
+    branch_name: str
+
+class BookingListOut(BaseModel):
+    booking_id: UUID
+    guest: GuestInfo
+    room: RoomInfo
+    check_in_date: date
+    check_out_date: date
+    rate_at_booking: float
+    status: str
+    payment_option: str
+
+class BookingListResponse(BaseModel):
+    bookings: list[BookingListOut]
+    total: int
