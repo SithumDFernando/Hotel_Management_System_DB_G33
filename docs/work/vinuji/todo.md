@@ -47,7 +47,7 @@
 
 ## Phase 3: Backend Routers (FastAPI)
 
-- [ ] **Booking Endpoints** (`backend/app/routers/bookings.py`)
+- [x] **Booking Endpoints** (`backend/app/routers/bookings.py`)
   - [x] `POST /api/bookings`: Invoke `create_booking`, catch overlap error → return `409 Conflict`, return `201 Created`
   - [x] `GET /api/bookings`: Paginated search with query filters (`status`, `guest_id`, `room_id`, `branch_id`)
   - [x] `GET /api/bookings/{booking_id}`: Retrieve detailed booking record with guest & room details

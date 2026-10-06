@@ -63,11 +63,11 @@
 
 ## Phase 4: Team Coordination & Integration
 
-- [ ] **Teammate Pull Request Reviews**
-  - [ ] Review Vinuji's PR: Booking lifecycle & double-booking trigger
-  - [ ] Review Sheereen's PR: Rate/tax functions, bill UPSERT & payments
-  - [ ] Review Chamika's PR: Service catalog, guest CRUD & price snapshot trigger
-  - [ ] Review Sadeepa's PR: 5 management views & reporting endpoints
+- [x] **Teammate Pull Request Reviews**
+  - [x] Review Vinuji's PR: Booking lifecycle & double-booking trigger
+  - [x] Review Sheereen's PR: Rate/tax functions, bill UPSERT & payments
+  - [x] Review Chamika's PR: Service catalog, guest CRUD & price snapshot trigger
+  - [x] Review Sadeepa's PR: 5 management views & reporting endpoints
 - [ ] **System Verification & Smoke Tests**
   - [ ] Execute `db/run_all.sql` cleanly against local PostgreSQL instance
   - [ ] Validate complete OpenAPI contract at `/docs`
