@@ -65,3 +65,8 @@ class BookingDetailOut(BookingListOut):
     """Full booking details with nested guest/room and timestamps."""
     actual_checkin_time: datetime | None = None
     actual_checkout_time: datetime | None = None
+
+class BookingCheckInResponse(BaseModel):
+    booking_id: UUID
+    status: str
+    actual_checkin_time: datetime | None = None

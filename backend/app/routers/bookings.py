@@ -10,7 +10,8 @@ from app.db import get_db
 from app.dependencies import require_role
 from app.schemas.booking import (
     BookingCreate, BookingOut, BookingListOut, 
-    BookingListResponse, GuestInfo, RoomInfo, BookingDetailOut
+    BookingListResponse, GuestInfo, RoomInfo, BookingDetailOut,
+    BookingCheckInResponse
 )
 
 router = APIRouter()
@@ -199,3 +200,31 @@ async def get_booking(
         actual_checkin_time=row["actual_checkin_time"],
         actual_checkout_time=row["actual_checkout_time"]
     )
+
+# PATCH /api/bookings/{booking_id}/checkin
+@router.patch("/{booking_id}/checkin", response_model=BookingCheckInResponse)
+async def checkin_booking(
+    booking_id: str,
+    db=Depends(get_db),
+    user: dict = Depends(require_role("receptionist", "manager", "admin"))
+):
+    try:
+        await db.execute("CALL perform_checkin($1::UUID)", booking_id)
+        
+        row = await db.fetchrow(
+            "SELECT booking_id, status, actual_checkin_time FROM booking WHERE booking_id = $1::UUID",
+            booking_id
+        )
+        if not row:
+            raise HTTPException(status_code=404, detail="Booking not found")
+            
+        return BookingCheckInResponse(
+            booking_id=row["booking_id"],
+            status=row["status"],
+            actual_checkin_time=row["actual_checkin_time"]
+        )
+    except asyncpg.exceptions.RaiseError as e:
+        msg = str(e)
+        if "not found" in msg.lower():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=msg)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg)
