@@ -31,3 +31,5 @@ asyncpg
 pydantic-settings
 passlib[bcrypt]
 PyJWT
+email-validator
+httpx
