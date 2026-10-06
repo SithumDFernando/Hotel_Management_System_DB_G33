@@ -10,7 +10,7 @@ from app.db import get_db
 from app.dependencies import require_role
 from app.schemas.booking import (
     BookingCreate, BookingOut, BookingListOut, 
-    BookingListResponse, GuestInfo, RoomInfo
+    BookingListResponse, GuestInfo, RoomInfo, BookingDetailOut
 )
 
 router = APIRouter()
@@ -154,3 +154,48 @@ async def list_bookings(
         ))
         
     return BookingListResponse(bookings=bookings, total=total, page=page, per_page=per_page)
+
+# GET /api/bookings/{booking_id}
+@router.get("/{booking_id}", response_model=BookingDetailOut)
+async def get_booking(
+    booking_id: str,
+    db=Depends(get_db),
+    user: dict = Depends(require_role("receptionist", "manager", "admin", "guest"))
+):
+    query = """
+        SELECT b.booking_id, b.check_in_date, b.check_out_date, b.rate_at_booking, 
+               b.status, b.payment_option, b.actual_checkin_time, b.actual_checkout_time,
+               g.guest_id, g.full_name,
+               r.room_id, r.room_number, r.branch_id,
+               br.name AS branch_name
+        FROM booking b
+        JOIN guest g ON g.guest_id = b.guest_id
+        JOIN room r ON r.room_id = b.room_id
+        JOIN branch br ON br.branch_id = r.branch_id
+        WHERE b.booking_id = $1::UUID
+    """
+    row = await db.fetchrow(query, booking_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Booking not found")
+
+    user_role = user["role"]
+    # Authorization checks
+    if user_role == "guest":
+        if str(row["guest_id"]) != str(user.get("guest_id")):
+            raise HTTPException(status_code=403, detail="Not authorized to view this booking")
+    elif user_role in ["manager", "receptionist"]:
+        if str(row["branch_id"]) != str(user.get("branch_id")):
+            raise HTTPException(status_code=403, detail="Not authorized to view bookings for other branches")
+
+    return BookingDetailOut(
+        booking_id=row["booking_id"],
+        guest=GuestInfo(guest_id=row["guest_id"], full_name=row["full_name"]),
+        room=RoomInfo(room_id=row["room_id"], room_number=row["room_number"], branch_name=row["branch_name"]),
+        check_in_date=row["check_in_date"],
+        check_out_date=row["check_out_date"],
+        rate_at_booking=float(row["rate_at_booking"]),
+        status=row["status"],
+        payment_option=row["payment_option"],
+        actual_checkin_time=row["actual_checkin_time"],
+        actual_checkout_time=row["actual_checkout_time"]
+    )

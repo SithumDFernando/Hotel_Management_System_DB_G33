@@ -60,3 +60,8 @@ class BookingListResponse(BaseModel):
     total: int
     page: int
     per_page: int
+
+class BookingDetailOut(BookingListOut):
+    """Full booking details with nested guest/room and timestamps."""
+    actual_checkin_time: datetime | None = None
+    actual_checkout_time: datetime | None = None
