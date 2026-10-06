@@ -1,38 +1,12 @@
--- =============================================================================
--- db/functions/fn_calculate_tax.sql
--- =============================================================================
--- Purpose:
---   Calculates the tax amount for a given subtotal (room + service charges)
---   based on a fixed tax rate defined in the function. Centralising the tax
---   rate here ensures consistent application across all bill generation.
---
--- Function signature to implement:
---   CREATE OR REPLACE FUNCTION fn_calculate_tax(
---       p_subtotal NUMERIC(10,2)
---   )
---   RETURNS NUMERIC(10,2)
---   LANGUAGE sql
---   IMMUTABLE
---   AS $$
---       SELECT ROUND(p_subtotal * 0.15, 2);  -- 15% tax rate (adjust as required)
---   $$;
---
--- Parameters:
---   p_subtotal : The pre-tax amount = room_charges + service_charges - discount.
---
--- Returns:
---   NUMERIC(10,2) — the tax amount to be added to the bill.
---
--- Usage example:
---   SELECT fn_calculate_tax(100000.00);  -- Returns 15000.00
---
--- Notes:
---   - Tax rate is currently hardcoded. If the rate must be configurable per
---     branch or over time, consider adding a `tax_config` table and changing
---     this to a STABLE function that queries it.
---
--- Called by:
---   generate_bill() stored procedure in db/procedures/billing.sql.
--- =============================================================================
+-- Tax on an amount, rounded to 2 decimal places. Default rate is 10%.
 
--- TODO: Implement fn_calculate_tax
+CREATE OR REPLACE FUNCTION fn_calculate_tax(
+    p_amount   NUMERIC,
+    p_tax_rate NUMERIC DEFAULT 0.10
+)
+RETURNS NUMERIC
+LANGUAGE sql
+IMMUTABLE
+AS $$
+    SELECT ROUND(p_amount * p_tax_rate, 2);
+$$;

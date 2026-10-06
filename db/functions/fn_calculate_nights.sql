@@ -1,35 +1,9 @@
--- =============================================================================
--- db/functions/fn_calculate_nights.sql
--- =============================================================================
--- Purpose:
---   A pure helper function that calculates the number of nights between a
---   check-in date and a check-out date. Used by fn_get_room_charges() to
---   compute the room cost for a booking.
---
--- Function signature to implement:
---   CREATE OR REPLACE FUNCTION fn_calculate_nights(
---       p_check_in_date  DATE,
---       p_check_out_date DATE
---   )
---   RETURNS INTEGER
---   LANGUAGE sql
---   IMMUTABLE  -- Same inputs always produce same output; allows query optimisation
---   AS $$
---       SELECT (p_check_out_date - p_check_in_date)::INTEGER;
---   $$;
---
--- Parameters:
---   p_check_in_date  : The guest's scheduled check-in date.
---   p_check_out_date : The guest's scheduled check-out date.
---
--- Returns:
---   INTEGER — number of nights (e.g. check_in=Jan 1, check_out=Jan 4 → 3 nights).
---
--- Usage example:
---   SELECT fn_calculate_nights('2026-02-01', '2026-02-05');  -- Returns 4
---
--- Called by:
---   fn_get_room_charges(booking_id) to calculate total room cost.
--- =============================================================================
+-- Nights stayed between two dates. Minimum 1 (a same-day stay is not 0 nights).
 
--- TODO: Implement fn_calculate_nights
+CREATE OR REPLACE FUNCTION fn_calculate_nights(p_check_in DATE, p_check_out DATE)
+RETURNS INT
+LANGUAGE sql
+IMMUTABLE
+AS $$
+    SELECT GREATEST(p_check_out - p_check_in, 1);
+$$;

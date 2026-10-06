@@ -57,32 +57,46 @@
 --   - Room set to 'Maintenance' must be done manually via PATCH /rooms/{id}/status
 --     and is NOT managed by this trigger.
 -- =============================================================================
+-- Implementation below:
 
+-- 1. Trigger function
 CREATE OR REPLACE FUNCTION trg_sync_room_status()
 RETURNS TRIGGER
 LANGUAGE plpgsql
 AS $$
 BEGIN
-    IF NEW.status = 'Checked-In' THEN
-        UPDATE room SET status = 'Occupied' WHERE room_id = NEW.room_id;
-    ELSIF NEW.status = 'Checked-Out' THEN
-        UPDATE room SET status = 'Available' WHERE room_id = NEW.room_id;
-    ELSIF NEW.status = 'Cancelled' THEN
+    -- Only act when the booking status column actually changes
+    IF OLD.status IS NOT DISTINCT FROM NEW.status THEN
+        RETURN NEW;
+    END IF;
+
+    -- Checked-In → mark room as Occupied
+    IF NEW.status = 'Checked-In' AND OLD.status <> 'Checked-In' THEN
+        UPDATE room
+        SET    status = 'Occupied'
+        WHERE  room_id = NEW.room_id;
+
+    -- Checked-Out or Cancelled → free the room (if no other active booking holds it)
+    ELSIF NEW.status IN ('Checked-Out', 'Cancelled')
+      AND OLD.status NOT IN ('Checked-Out', 'Cancelled') THEN
         IF NOT EXISTS (
             SELECT 1 FROM booking
-            WHERE room_id = NEW.room_id
-              AND booking_id <> NEW.booking_id
-              AND status NOT IN ('Cancelled', 'Checked-Out')
-              AND check_in_date <= CURRENT_DATE
-              AND check_out_date > CURRENT_DATE
+            WHERE  room_id    = NEW.room_id
+              AND  booking_id <> NEW.booking_id
+              AND  status     = 'Checked-In'
         ) THEN
-            UPDATE room SET status = 'Available' WHERE room_id = NEW.room_id;
+            UPDATE room
+            SET    status = 'Available'
+            WHERE  room_id = NEW.room_id;
         END IF;
     END IF;
 
     RETURN NEW;
 END;
 $$;
+
+-- 2. Trigger definition (drop first to avoid duplicate-trigger errors on re-run)
+DROP TRIGGER IF EXISTS trg_room_status ON booking;
 
 CREATE TRIGGER trg_room_status
 AFTER UPDATE OF status ON booking
