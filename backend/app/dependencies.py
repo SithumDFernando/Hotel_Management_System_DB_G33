@@ -111,6 +111,14 @@ def require_role(*allowed_roles: str):
     2. Checks that the user's role is in `allowed_roles`.
     3. Raises HTTP 403 Forbidden if not.
 
+    Design Note (Factory Pattern & Closure):
+        FastAPI's Depends(...) expects a callable (function). Because we need to pass
+        custom allowed roles per route, require_role(...) acts as a factory: it runs
+        at route definition time and returns the customized inner `_guard` function.
+        `_guard` "closes over" (remembers) `allowed_roles` and is what FastAPI actually
+        calls on each incoming HTTP request. The leading underscore in `_guard` is a
+        PEP 8 convention indicating it is an internal helper, not called directly.
+
     Usage:
         @router.get("/admin/users")
         async def list_users(user = Depends(require_role("admin"))):
@@ -122,6 +130,7 @@ def require_role(*allowed_roles: str):
         ):
             ...
     """
+    # Inner dependency function (closure) returned to FastAPI's Depends()
     async def _guard(current_user: dict = Depends(get_current_user)):
         if current_user["role"] not in allowed_roles:
             raise HTTPException(

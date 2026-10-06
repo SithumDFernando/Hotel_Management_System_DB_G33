@@ -102,22 +102,26 @@
 ### GET `/api/guests`
 > Receptionist, Manager, Admin
 
-**Query params:** `?search=John&guest_type=Individual`
+**Query params:** `?search=John` (searches name, NIC/passport, or email)
 
-**Response (200):**
+**Response (200):** Flat array of `GuestOut` objects:
 ```json
-{
-  "guests": [
-    {
-      "guest_id": "uuid-...",
-      "full_name": "John Silva",
-      "nic_passport": "200012345678",
-      "email": "john@mail.com",
-      "phone": "+94771234567",
-      "guest_type": "Individual"
-    }
-  ]
-}
+[
+  {
+    "guest_id": "uuid-...",
+    "full_name": "John Silva",
+    "nic_passport": "200012345678",
+    "email": "john@mail.com",
+    "phone": "+94771234567",
+    "date_of_birth": "2000-05-15",
+    "nationality": "Sri Lankan",
+    "gender": "Male",
+    "guest_type": "Individual",
+    "company_name": null,
+    "company_reg_number": null,
+    "billing_contact_name": null
+  }
+]
 ```
 
 ### POST `/api/guests`
@@ -140,9 +144,25 @@
 }
 ```
 
-**Response (201):** `{ "guest_id": "uuid-..." }`
+**Response (201):** Full `GuestOut` object:
+```json
+{
+  "guest_id": "uuid-...",
+  "full_name": "John Silva",
+  "nic_passport": "200012345678",
+  "email": "john@mail.com",
+  "phone": "+94771234567",
+  "date_of_birth": "2000-05-15",
+  "nationality": "Sri Lankan",
+  "gender": "Male",
+  "guest_type": "Individual",
+  "company_name": null,
+  "company_reg_number": null,
+  "billing_contact_name": null
+}
+```
 
-**Errors:** `409 NIC/Passport already exists`
+**Errors:** `409 NIC/Passport or email already exists`
 
 ### GET `/api/guests/:guest_id`
 > Receptionist, Manager, Admin, or the guest themselves
@@ -170,12 +190,20 @@ Calls `create_booking()` stored procedure (SERIALIZABLE).
 }
 ```
 
-**Response (201):**
+**Response (201):** Full `BookingOut` object:
 ```json
 {
   "booking_id": "uuid-...",
+  "guest_id": "uuid-...",
+  "room_id": "uuid-...",
+  "check_in_date": "2026-02-01",
+  "check_out_date": "2026-02-05",
   "rate_at_booking": 15000.00,
-  "status": "Booked"
+  "payment_option": "Credit Card",
+  "status": "Booked",
+  "actual_checkin_time": null,
+  "actual_checkout_time": null,
+  "created_at": "2026-01-15T08:00:00Z"
 }
 ```
 
@@ -217,9 +245,9 @@ Calls `create_booking()` stored procedure (SERIALIZABLE).
 ## 5. Check-In / Check-Out — `/api/bookings/:booking_id`
 
 ### PATCH `/api/bookings/:booking_id/checkin`
-> Receptionist, Manager
+> Receptionist, Manager, Admin
 
-Calls `check_in()` stored procedure.
+Calls `perform_checkin()` stored procedure.
 
 **Response (200):**
 ```json
@@ -233,9 +261,9 @@ Calls `check_in()` stored procedure.
 **Errors:** `400 Booking is not in 'Booked' status`
 
 ### PATCH `/api/bookings/:booking_id/checkout`
-> Receptionist, Manager
+> Receptionist, Manager, Admin
 
-Calls `check_out()` stored procedure. Fails if bill has outstanding balance.
+Calls `perform_checkout()` stored procedure. Fails if bill has outstanding balance.
 
 **Response (200):**
 ```json
@@ -243,7 +271,12 @@ Calls `check_out()` stored procedure. Fails if bill has outstanding balance.
   "booking_id": "uuid-...",
   "status": "Checked-Out",
   "actual_checkout_time": "2026-02-05T11:00:00Z",
-  "bill": { "total_amount": 68500.00, "amount_paid": 68500.00 }
+  "bill": {
+    "total_amount": 68500.00,
+    "amount_paid": 68500.00,
+    "outstanding_balance": 0.00,
+    "balance_flag": false
+  }
 }
 ```
 
@@ -254,30 +287,63 @@ Calls `check_out()` stored procedure. Fails if bill has outstanding balance.
 ## 6. Services — `/api/services`
 
 ### GET `/api/services`
-> Public
+> Receptionist, Manager, Admin, Guest (Public catalogue)
 
-**Response (200):**
+**Response (200):** Array of service categories with their active services:
+```json
+[
+  {
+    "category": "Food & Beverage",
+    "services": [
+      {
+        "service_id": "uuid-...",
+        "service_name": "Room Service",
+        "category": "Food & Beverage",
+        "base_price": 1500.00,
+        "is_active": true
+      }
+    ]
+  }
+]
+```
+
+### POST `/api/services`
+> Admin, Manager
+
+**Request:**
 ```json
 {
-  "services": [
-    {
-      "service_id": "uuid-...",
-      "service_name": "Room Service",
-      "category": "Food & Beverage",
-      "base_price": 1500.00,
-      "is_active": true
-    }
-  ]
+  "service_name": "Airport Transfer",
+  "category": "Transportation",
+  "base_price": 5000.00
 }
 ```
 
+**Response (201):** `ServiceOut` object
+
+### PATCH `/api/services/:service_id`
+> Admin, Manager
+
+**Request:**
+```json
+{
+  "base_price": 5500.00,
+  "is_active": true
+}
+```
+
+**Response (200):** `ServiceOut` object
+
 ### POST `/api/services/:booking_id/usage`
-> Receptionist, Manager
+> Receptionist, Manager, Admin
+
+Records chargeable service order. Trigger checks that booking is 'Checked-In' and snapshots unit price.
 
 **Request:**
 ```json
 {
   "service_id": "uuid-...",
+  "usage_date": "2026-02-03",
   "quantity": 2
 }
 ```
@@ -286,31 +352,55 @@ Calls `check_out()` stored procedure. Fails if bill has outstanding balance.
 ```json
 {
   "usage_id": "uuid-...",
+  "service_id": "uuid-...",
+  "service_name": "Room Service",
+  "category": "Food & Beverage",
+  "usage_date": "2026-02-03",
+  "quantity": 2,
   "unit_price": 1500.00,
-  "usage_date": "2026-02-03"
+  "line_total": 3000.00
 }
 ```
 
-**Errors:** `400 Booking is not Checked-In`, `400 Service is inactive`
+**Errors:** `422 Unprocessable Entity (Booking is not Checked-In or service inactive)`
 
 ### GET `/api/services/:booking_id/usage`
-> Receptionist, Manager, owning Guest
+> Receptionist, Manager, Admin, owning Guest
 
-**Response (200):** List of service usage records for the booking.
+**Response (200):** Itemized usage summary:
+```json
+{
+  "booking_id": "uuid-...",
+  "usages": [
+    {
+      "usage_id": "uuid-...",
+      "service_id": "uuid-...",
+      "service_name": "Room Service",
+      "category": "Food & Beverage",
+      "usage_date": "2026-02-03",
+      "quantity": 2,
+      "unit_price": 1500.00,
+      "line_total": 3000.00
+    }
+  ],
+  "grand_total": 3000.00
+}
+```
 
 ---
 
 ## 7. Billing — `/api/billing`
 
 ### POST `/api/billing/:booking_id/generate`
-> Receptionist, Manager
+> Receptionist, Manager, Admin
 
-Calls `calculate_bill()` stored procedure.
+Calls `generate_bill()` stored procedure (with optional `?discount=0.00` query parameter).
 
-**Response (200):**
+**Response (200):** `BillOut` object:
 ```json
 {
   "bill_id": "uuid-...",
+  "booking_id": "uuid-...",
   "room_charges": 60000.00,
   "service_charges": 5500.00,
   "discount_amount": 0.00,
@@ -318,21 +408,22 @@ Calls `calculate_bill()` stored procedure.
   "total_amount": 75325.00,
   "amount_paid": 20000.00,
   "outstanding_balance": 55325.00,
-  "balance_flag": true
+  "balance_flag": true,
+  "generated_at": "2026-02-05T10:30:00Z"
 }
 ```
 
 ### GET `/api/billing/:booking_id`
-> Receptionist, Manager, owning Guest
+> Receptionist, Manager, Admin, owning Guest
 
-**Response (200):** Bill object (same as above) or `404 Bill not generated yet`.
+**Response (200):** `BillOut` object or `404 Bill not generated yet`.
 
 ---
 
 ## 8. Payments — `/api/payments`
 
 ### POST `/api/payments`
-> Receptionist, Manager
+> Receptionist, Manager, Admin
 
 Calls `record_payment()` stored procedure.
 
@@ -346,20 +437,24 @@ Calls `record_payment()` stored procedure.
 }
 ```
 
-**Response (201):**
+**Response (201):** Full `PaymentOut` object:
 ```json
 {
   "payment_id": "uuid-...",
-  "remaining_balance": 30325.00
+  "booking_id": "uuid-...",
+  "amount": 25000.00,
+  "payment_method": "Credit Card",
+  "paid_at": "2026-02-01T15:00:00Z",
+  "notes": "Partial payment at check-in"
 }
 ```
 
-**Errors:** `400 Amount exceeds outstanding balance`
+**Errors:** `400 Amount exceeds outstanding balance or <= 0`
 
 ### GET `/api/payments/:booking_id`
-> Receptionist, Manager, owning Guest
+> Receptionist, Manager, Admin, owning Guest
 
-**Response (200):** List of payment records for the booking.
+**Response (200):** Array of `PaymentOut` records ordered by `paid_at DESC`.
 
 ---
 
@@ -371,37 +466,48 @@ Calls `record_payment()` stored procedure.
 **Params:** `?branch_id=uuid&date=2026-02-01` or `?from=2026-02-01&to=2026-02-28`
 
 ### GET `/api/reports/billing-summary`
-**Params:** `?branch_id=uuid&from=2026-02-01&to=2026-02-28`
+**Params:** `?branch_id=uuid&unpaid_only=true`
 
 ### GET `/api/reports/service-usage`
-**Params:** `?branch_id=uuid&from=2026-02-01&to=2026-02-28`
+**Params:** `?branch_id=uuid`
 
 ### GET `/api/reports/monthly-revenue`
-**Params:** `?branch_id=uuid&year=2026&month=2`
+**Params:** `?year=2026&month=2&branch_id=uuid`
 
 ### GET `/api/reports/top-services`
-**Params:** `?branch_id=uuid&limit=10&from=2026-01-01&to=2026-12-31`
+**Params:** `?limit=10`
 
-> Response shapes are defined in `05_views_and_reports.md`.
+> Detailed report views and schema columns are specified in `05_views_and_reports.md`.
 
 ---
 
 ## 10. Admin — `/api/admin`
 
+> Admin only for all administration operations
+
 ### GET `/api/admin/branches`
-> Admin only
+Lists all branches with room counts and active booking statistics.
 
 ### POST `/api/admin/branches`
-> Admin only
+Creates a new branch.
 
 ### PUT `/api/admin/branches/:branch_id`
-> Admin only
+Updates branch name, address, phone, or email.
 
 ### GET `/api/admin/users`
-> Admin only
+Lists all staff and manager accounts with their roles and assigned branches.
 
-### PATCH `/api/admin/users/:account_id/role`
-> Admin only — change user role
+### POST `/api/admin/users`
+Creates a new user account with hashed password, assigned role, and branch.
 
-### DELETE `/api/admin/users/:account_id`
-> Admin only
+### PATCH `/api/admin/users/:account_id`
+Updates a user account's role and/or branch assignment:
+```json
+{
+  "role": "manager",
+  "branch_id": "uuid-..."
+}
+```
+
+> **Note on Deletion:** User deletion (`DELETE /api/admin/users/:account_id`) is omitted intentionally to preserve referential integrity, booking audits, and financial transaction histories.
+

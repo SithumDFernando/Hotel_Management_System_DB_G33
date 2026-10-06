@@ -1,43 +1,24 @@
--- =============================================================================
--- db/functions/fn_get_room_charges.sql
--- =============================================================================
--- Purpose:
---   Calculates the total room charges for a booking by multiplying the
---   snapshotted rate (booking.rate_at_booking) by the number of nights.
---   Uses fn_calculate_nights() internally.
---
---   This function operates on the SNAPSHOT rate stored in the booking row,
---   NOT the current live rate from room_rate. This ensures that regenerating
---   a bill after a rate change does NOT alter the original room charge.
---
--- Function signature to implement:
---   CREATE OR REPLACE FUNCTION fn_get_room_charges(
---       p_booking_id UUID
---   )
---   RETURNS NUMERIC(10,2)
---   LANGUAGE sql
---   STABLE
---   AS $$
---       SELECT ROUND(
---           b.rate_at_booking * fn_calculate_nights(b.check_in_date, b.check_out_date),
---           2
---       )
---       FROM booking b
---       WHERE b.booking_id = p_booking_id;
---   $$;
---
--- Parameters:
---   p_booking_id : UUID of the booking to calculate room charges for.
---
--- Returns:
---   NUMERIC(10,2) — total room charge = rate_at_booking × nights.
---
--- Usage example:
---   SELECT fn_get_room_charges('booking-uuid-here');
---   -- If rate=5000 and nights=4, returns 20000.00
---
--- Called by:
---   generate_bill() stored procedure in db/procedures/billing.sql.
--- =============================================================================
+-- Total room charge for a booking = rate_at_booking * nights.
+-- Uses the frozen rate snapshot, never the current room_rate.
+-- Depends on: fn_calculate_nights
 
--- TODO: Implement fn_get_room_charges
+CREATE OR REPLACE FUNCTION fn_get_room_charges(p_booking_id UUID)
+RETURNS NUMERIC
+LANGUAGE plpgsql
+STABLE
+AS $$
+DECLARE
+    v_charge NUMERIC;
+BEGIN
+    SELECT b.rate_at_booking * fn_calculate_nights(b.check_in_date, b.check_out_date)
+      INTO v_charge
+      FROM booking b
+     WHERE b.booking_id = p_booking_id;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Booking not found';
+    END IF;
+
+    RETURN v_charge;
+END;
+$$;

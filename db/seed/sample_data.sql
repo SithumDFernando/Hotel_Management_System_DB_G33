@@ -313,7 +313,15 @@ INSERT INTO booking (booking_id, guest_id, room_id, check_in_date, check_out_dat
      'e0000000-0000-0000-0000-000000000010',   -- Room 302 (Double, Galle)
      '2026-10-05', '2026-10-07',               -- 2 nights
      5500.00, 'Booked', 'Credit Card',
-     NULL, NULL);
+     NULL, NULL),
+
+    -- BK-07: Checked-Out — Priya in Suite 303 Galle (Galle branch coverage for all views)
+    ('30000000-0000-0000-0000-000000000007',
+     'f0000000-0000-0000-0000-000000000006',   -- Priya Rajapakse
+     'e0000000-0000-0000-0000-000000000011',   -- Room 303 (Suite, Galle)
+     '2026-09-10', '2026-09-13',               -- 3 nights x 10000 = 30000
+     10000.00, 'Checked-Out', 'Credit Card',
+     '2026-09-10 14:00:00', '2026-09-13 11:00:00');
 
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -322,46 +330,68 @@ INSERT INTO booking (booking_id, guest_id, room_id, check_in_date, check_out_dat
 --     (normally set by trigger, but hardcoded here since trigger may not exist)
 --
 --     Edge cases:
---       - Multiple services on one booking
+--       - Multiple services on one booking (BK-01: 3 usages, BK-05: 2 usages)
 --       - quantity > 1 (bulk usage)
 --       - Services on both Checked-In and Checked-Out bookings
+--       - Service usages across all 3 branches (Colombo, Kandy, Galle)
 -- ─────────────────────────────────────────────────────────────────────────────
 
 INSERT INTO service_usage (usage_id, booking_id, service_id, usage_date, quantity, unit_price) VALUES
-    -- Services for BK-01 (Kamal, Checked-In, Suite 101 Colombo)
+    -- Services for BK-01 (Kamal, Checked-In, Suite 101 Colombo) — 3 services
     ('40000000-0000-0000-0000-000000000001',
      '30000000-0000-0000-0000-000000000001',   -- BK-01
      '20000000-0000-0000-0000-000000000001',   -- Room Service
-     '2026-09-27', 2, 1500.00),                -- 2× Room Service = 3000.00
+     '2026-09-27', 2, 1500.00),                -- 2x Room Service = 3000.00
 
     ('40000000-0000-0000-0000-000000000002',
      '30000000-0000-0000-0000-000000000001',   -- BK-01
      '20000000-0000-0000-0000-000000000002',   -- Spa Treatment
-     '2026-09-28', 1, 5000.00),                -- 1× Spa = 5000.00
+     '2026-09-28', 1, 5000.00),                -- 1x Spa = 5000.00
+
+    ('40000000-0000-0000-0000-000000000007',
+     '30000000-0000-0000-0000-000000000001',   -- BK-01
+     '20000000-0000-0000-0000-000000000003',   -- Laundry
+     '2026-09-29', 2, 500.00),                 -- 2x Laundry = 1000.00
 
     -- Services for BK-02 (Nimali, Checked-Out, Double 102 Colombo)
     ('40000000-0000-0000-0000-000000000003',
      '30000000-0000-0000-0000-000000000002',   -- BK-02
      '20000000-0000-0000-0000-000000000003',   -- Laundry
-     '2026-09-21', 3, 500.00),                 -- 3× Laundry = 1500.00
+     '2026-09-21', 3, 500.00),                 -- 3x Laundry = 1500.00
 
     ('40000000-0000-0000-0000-000000000004',
      '30000000-0000-0000-0000-000000000002',   -- BK-02
      '20000000-0000-0000-0000-000000000001',   -- Room Service
-     '2026-09-22', 1, 1500.00),                -- 1× Room Service = 1500.00
+     '2026-09-22', 1, 1500.00),                -- 1x Room Service = 1500.00
 
-    -- Services for BK-05 (Lanka Exports, Checked-Out, Deluxe 204 Kandy)
+    -- Services for BK-05 (Lanka Exports, Checked-Out, Deluxe 204 Kandy) — 2 services
     ('40000000-0000-0000-0000-000000000005',
      '30000000-0000-0000-0000-000000000005',   -- BK-05
      '20000000-0000-0000-0000-000000000004',   -- Airport Transfer
-     '2026-09-15', 1, 3000.00);                -- 1× Airport Transfer = 3000.00
+     '2026-09-15', 1, 3000.00),                -- 1x Airport Transfer = 3000.00
+
+    ('40000000-0000-0000-0000-000000000006',
+     '30000000-0000-0000-0000-000000000005',   -- BK-05
+     '20000000-0000-0000-0000-000000000005',   -- Minibar Restock
+     '2026-09-16', 2, 2500.00),                -- 2x Minibar = 5000.00
+
+    -- Services for BK-07 (Priya, Checked-Out, Suite 303 Galle) — Galle branch coverage
+    ('40000000-0000-0000-0000-000000000008',
+     '30000000-0000-0000-0000-000000000007',   -- BK-07
+     '20000000-0000-0000-0000-000000000001',   -- Room Service
+     '2026-09-11', 1, 1500.00),                -- 1x Room Service = 1500.00
+
+    ('40000000-0000-0000-0000-000000000009',
+     '30000000-0000-0000-0000-000000000007',   -- BK-07
+     '20000000-0000-0000-0000-000000000004',   -- Airport Transfer
+     '2026-09-10', 1, 3000.00);                -- 1x Airport Transfer = 3000.00
 
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- 12. BILL — Generated bills for completed bookings
+-- 12. BILL — Generated bills for completed and active bookings
 --     Manually computed to match the seed data above:
 --
---     BK-02 (Nimali, 3 nights × 8000 = 24000 room + 3000 services):
+--     BK-02 (Nimali, 3 nights x 8000 = 24000 room + 3000 services):
 --       room_charges     = 24000.00
 --       service_charges  = 1500 + 1500 = 3000.00
 --       discount         = 0.00
@@ -371,19 +401,39 @@ INSERT INTO service_usage (usage_id, booking_id, service_id, usage_date, quantit
 --       paid             = 31050.00 (fully paid)
 --       outstanding      = 0.00
 --
---     BK-05 (Lanka Exports, 3 nights × 10000 = 30000 room + 3000 services):
+--     BK-05 (Lanka Exports, 3 nights x 10000 = 30000 room + 8000 services):
 --       room_charges     = 30000.00
---       service_charges  = 3000.00
+--       service_charges  = 3000 + 5000 = 8000.00  (Airport Transfer + Minibar)
 --       discount         = 2000.00 (corporate discount)
---       subtotal         = 31000.00
---       tax (15%)        = 4650.00
---       total            = 35650.00
+--       subtotal         = 36000.00
+--       tax (15%)        = 5400.00
+--       total            = 41400.00
 --       paid             = 20000.00 (partial — edge case)
---       outstanding      = 15650.00
+--       outstanding      = 21400.00
+--
+--     BK-07 (Priya, 3 nights x 10000 = 30000 room + 4500 services — Galle):
+--       room_charges     = 30000.00
+--       service_charges  = 1500 + 3000 = 4500.00
+--       discount         = 0.00
+--       subtotal         = 34500.00
+--       tax (15%)        = 5175.00
+--       total            = 39675.00
+--       paid             = 39675.00 (fully paid)
+--       outstanding      = 0.00
+--
+--     BK-01 (Kamal, Checked-In — provisional bill, no payment yet):
+--       room_charges     = 4 nights x 15000 = 60000.00
+--       service_charges  = 3000 + 5000 + 1000 = 9000.00
+--       discount         = 0.00
+--       subtotal         = 69000.00
+--       tax (15%)        = 10350.00
+--       total            = 79350.00
+--       paid             = 0.00  (edge case: unpaid active booking)
+--       outstanding      = 79350.00
 -- ─────────────────────────────────────────────────────────────────────────────
 
 INSERT INTO bill (bill_id, booking_id, room_charges, service_charges, discount_amount, tax_amount, total_amount, amount_paid, outstanding_balance, balance_flag, generated_at) VALUES
-    -- Bill for BK-02 (Nimali — fully paid)
+    -- Bill for BK-02 (Nimali — fully paid, Colombo, Sept 2026)
     ('50000000-0000-0000-0000-000000000001',
      '30000000-0000-0000-0000-000000000002',   -- BK-02
      24000.00, 3000.00, 0.00, 4050.00,         -- room, services, discount, tax
@@ -393,15 +443,37 @@ INSERT INTO bill (bill_id, booking_id, room_charges, service_charges, discount_a
      FALSE,                                     -- balance_flag = FALSE (settled)
      '2026-09-23 11:10:00'),
 
-    -- Bill for BK-05 (Lanka Exports — partially paid, edge case)
+    -- Bill for BK-05 (Lanka Exports — partially paid, Kandy, Sept 2026)
     ('50000000-0000-0000-0000-000000000002',
      '30000000-0000-0000-0000-000000000005',   -- BK-05
-     30000.00, 3000.00, 2000.00, 4650.00,      -- room, services, discount, tax
-     35650.00,                                  -- total
+     30000.00, 8000.00, 2000.00, 5400.00,      -- room, services, discount, tax
+     41400.00,                                  -- total
      20000.00,                                  -- partially paid
-     15650.00,                                  -- outstanding balance
+     21400.00,                                  -- outstanding balance
      TRUE,                                      -- balance_flag = TRUE (still owes)
-     '2026-09-18 10:35:00');
+     '2026-09-18 10:35:00'),
+
+    -- Bill for BK-07 (Priya — fully paid, Galle, Sept 2026)
+    -- Edge case: Galle branch data for v_monthly_revenue and v_service_usage_breakdown
+    ('50000000-0000-0000-0000-000000000003',
+     '30000000-0000-0000-0000-000000000007',   -- BK-07
+     30000.00, 4500.00, 0.00, 5175.00,         -- room, services, discount, tax
+     39675.00,                                  -- total
+     39675.00,                                  -- fully paid
+     0.00,                                      -- no outstanding balance
+     FALSE,                                     -- balance_flag = FALSE (settled)
+     '2026-09-13 11:00:00'),
+
+    -- Provisional bill for BK-01 (Kamal — Checked-In, no payment yet)
+    -- Edge case: active booking with full balance outstanding
+    ('50000000-0000-0000-0000-000000000004',
+     '30000000-0000-0000-0000-000000000001',   -- BK-01
+     60000.00, 9000.00, 0.00, 10350.00,        -- room, services, discount, tax
+     79350.00,                                  -- total
+     0.00,                                      -- no payment yet
+     79350.00,                                  -- full outstanding balance
+     TRUE,                                      -- balance_flag = TRUE (unpaid)
+     '2026-09-27 14:45:00');
 
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -432,7 +504,14 @@ INSERT INTO payment (payment_id, booking_id, amount, payment_method, paid_at, no
      '30000000-0000-0000-0000-000000000005',   -- BK-05
      5000.00, 'Credit Card',
      '2026-09-19 09:00:00',
-     'Second partial payment — balance pending');
+     'Second partial payment — balance pending'),
+
+    -- Full payment for BK-07 (Priya, Galle — credit card at checkout)
+    ('60000000-0000-0000-0000-000000000004',
+     '30000000-0000-0000-0000-000000000007',   -- BK-07
+     39675.00, 'Credit Card',
+     '2026-09-13 11:30:00',
+     'Full payment at checkout — Galle branch');
 
 
 COMMIT;
@@ -447,16 +526,27 @@ COMMIT;
 --   ✓ Room in Maintenance status
 --   ✓ 1-night minimum stay and 7-night long stay
 --   ✓ Same guest with multiple bookings (Kamal: BK-01 + BK-06)
---   ✓ Bookings across different branches
---   ✓ Corporate guest with company details
---   ✓ Fully paid bill (balance_flag = FALSE)
---   ✓ Partially paid bill (balance_flag = TRUE, outstanding > 0)
---   ✓ Multiple payments against one booking (split payment)
+--   ✓ Bookings across all 3 branches (Colombo, Kandy, Galle)
+--   ✓ Corporate guest with company details and corporate discount
+--   ✓ Fully paid bill (balance_flag = FALSE) — BK-02 (Colombo), BK-07 (Galle)
+--   ✓ Partially paid bill (balance_flag = TRUE, outstanding > 0) — BK-05 (Kandy)
+--   ✓ Unpaid active bill (Checked-In booking) — BK-01 (Colombo)
+--   ✓ Multiple payments against one booking (split payment) — BK-05
 --   ✓ Different payment methods: Cash, Credit Card, Bank Transfer
 --   ✓ Inactive/discontinued service (City Tour, is_active = FALSE)
 --   ✓ Service usage with quantity > 1 (bulk usage)
+--   ✓ Multiple service usages per booking — BK-01 (3), BK-05 (2), BK-07 (2)
+--   ✓ Service usages across all 3 branches (Colombo: BK-01/02, Kandy: BK-05, Galle: BK-07)
 --   ✓ All user roles: admin, manager, receptionist, guest
 --   ✓ Admin with NULL branch/guest (global superuser)
---   ✓ Multiple amenity counts (Suite has 2× AC, 2× TV)
---   ✓ Rates varying per branch (premium → budget pricing)
+--   ✓ Multiple amenity counts (Suite has 2x AC, 2x TV)
+--   ✓ Rates varying per branch (premium to budget pricing)
+--
+-- View Coverage Verification:
+--   v_room_occupancy        -> 12 rooms across 3 branches; 1 Checked-In (BK-01), 1 Maintenance
+--   v_guest_billing_summary -> 4 bills: 2 fully paid, 1 partial, 1 unpaid Checked-In
+--   v_service_usage_breakdown -> 9 usages across Colombo (BK-01/02), Kandy (BK-05), Galle (BK-07)
+--   v_monthly_revenue       -> Sept 2026: Colombo (BK-02 Checked-Out), Kandy (BK-05), Galle (BK-07)
+--   v_top_services          -> Ranked by qty: Laundry(7), Room Service(5), Airport Transfer(2),
+--                              Minibar Restock(2), Spa Treatment(1) — all 5 active services appear
 -- ─────────────────────────────────────────────────────────────────────────────

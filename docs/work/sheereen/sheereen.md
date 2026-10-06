@@ -16,7 +16,7 @@
    - `fn_calculate_nights`: Number of nights ($check\_out - check\_in$).
    - `fn_get_room_charges`: Nights × `rate_at_booking`.
    - `fn_get_service_charges`: Sum of $(quantity \times unit\_price)$ from `service_usage`.
-   - `fn_calculate_tax`: 10% tax on subtotal.
+   - `fn_calculate_tax`: 15% tax on subtotal (Sri Lanka standard / SRS REQ-6.1).
    - `fn_get_outstanding_balance`: $(total\_amount - amount\_paid)$.
 2. **Atomic Bill Generation (`generate_bill`)**: Orchestrates all functions, checks partial payments, then **UPSERT** into `bill` (re-generatable if guest uses another service before checkout).
 3. **Recording Payments (`record_payment`)**: Validates bill exists, inserts into `payment`, atomically updates `bill.amount_paid`, `outstanding_balance`, and `balance_flag`.
@@ -43,8 +43,8 @@ Phase 1: Database Functions & Procedures (SQL)  ──►  Phase 2: Backend Sche
 - If `p_check_out <= p_check_in` → return `1` (minimum 1 night). Otherwise → `RETURN (p_check_out - p_check_in)`.
 
 #### 2. [fn_calculate_tax.sql](../../../db/functions/fn_calculate_tax.sql)
-- **Signature**: `fn_calculate_tax(p_amount NUMERIC(10,2)) RETURNS NUMERIC(10,2)`
-- `RETURN ROUND(p_amount * 0.10, 2);` (10% tax)
+- **Signature**: `fn_calculate_tax(p_amount NUMERIC(10,2), p_tax_rate NUMERIC DEFAULT 0.15) RETURNS NUMERIC(10,2)`
+- `RETURN ROUND(p_amount * p_tax_rate, 2);` (15% tax)
 
 #### 3. [fn_get_room_charges.sql](../../../db/functions/fn_get_room_charges.sql)
 - **Signature**: `fn_get_room_charges(p_booking_id UUID) RETURNS NUMERIC(10,2)`
@@ -141,7 +141,7 @@ flowchart TD
 2. **Test functions in psql**:
    ```sql
    SELECT fn_calculate_nights('2026-10-01'::DATE, '2026-10-05'::DATE); -- Should return 4
-   SELECT fn_calculate_tax(100.00);                                     -- Should return 10.00
+   SELECT fn_calculate_tax(100.00);                                     -- Should return 15.00
    ```
 3. **Test procedures in psql**:
    ```sql

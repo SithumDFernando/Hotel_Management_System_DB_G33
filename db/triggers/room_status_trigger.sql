@@ -14,19 +14,25 @@
 --   AS $$
 --   BEGIN
 --       -- When a booking transitions to Checked-In → mark room as Occupied
---       IF NEW.status = 'Checked-In' AND OLD.status <> 'Checked-In' THEN
+--       IF NEW.status = 'Checked-In' THEN
 --           UPDATE room SET status = 'Occupied'
 --           WHERE room_id = NEW.room_id;
 --
---       -- When a booking transitions to Checked-Out or Cancelled → free the room
---       ELSIF NEW.status IN ('Checked-Out', 'Cancelled')
---         AND OLD.status NOT IN ('Checked-Out', 'Cancelled') THEN
---           -- Only mark Available if no OTHER active booking holds this room
+--       -- When a booking transitions to Checked-Out → immediately free the room
+--       ELSIF NEW.status = 'Checked-Out' THEN
+--           UPDATE room SET status = 'Available'
+--           WHERE room_id = NEW.room_id;
+--
+--       -- When a booking transitions to Cancelled → free the room only if no other
+--       -- active booking exists FOR TODAY.
+--       ELSIF NEW.status = 'Cancelled' THEN
 --           IF NOT EXISTS (
 --               SELECT 1 FROM booking
 --               WHERE room_id = NEW.room_id
 --                 AND booking_id <> NEW.booking_id
---                 AND status = 'Checked-In'
+--                 AND status NOT IN ('Cancelled', 'Checked-Out')
+--                 AND check_in_date <= CURRENT_DATE
+--                 AND check_out_date > CURRENT_DATE
 --           ) THEN
 --               UPDATE room SET status = 'Available'
 --               WHERE room_id = NEW.room_id;
@@ -51,5 +57,48 @@
 --   - Room set to 'Maintenance' must be done manually via PATCH /rooms/{id}/status
 --     and is NOT managed by this trigger.
 -- =============================================================================
+-- Implementation below:
 
--- TODO: Implement room_status_trigger
+-- 1. Trigger function
+CREATE OR REPLACE FUNCTION trg_sync_room_status()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    -- Only act when the booking status column actually changes
+    IF OLD.status IS NOT DISTINCT FROM NEW.status THEN
+        RETURN NEW;
+    END IF;
+
+    -- Checked-In → mark room as Occupied
+    IF NEW.status = 'Checked-In' AND OLD.status <> 'Checked-In' THEN
+        UPDATE room
+        SET    status = 'Occupied'
+        WHERE  room_id = NEW.room_id;
+
+    -- Checked-Out or Cancelled → free the room (if no other active booking holds it)
+    ELSIF NEW.status IN ('Checked-Out', 'Cancelled')
+      AND OLD.status NOT IN ('Checked-Out', 'Cancelled') THEN
+        IF NOT EXISTS (
+            SELECT 1 FROM booking
+            WHERE  room_id    = NEW.room_id
+              AND  booking_id <> NEW.booking_id
+              AND  status     = 'Checked-In'
+        ) THEN
+            UPDATE room
+            SET    status = 'Available'
+            WHERE  room_id = NEW.room_id;
+        END IF;
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+-- 2. Trigger definition (drop first to avoid duplicate-trigger errors on re-run)
+DROP TRIGGER IF EXISTS trg_room_status ON booking;
+
+CREATE TRIGGER trg_room_status
+AFTER UPDATE OF status ON booking
+FOR EACH ROW
+EXECUTE FUNCTION trg_sync_room_status();
