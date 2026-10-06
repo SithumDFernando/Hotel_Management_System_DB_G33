@@ -69,6 +69,7 @@ app.include_router(guests.router,   prefix="/api/guests",   tags=["Guests"])
 app.include_router(bookings.router, prefix="/api/bookings", tags=["Bookings"])
 app.include_router(services.router, prefix="/api/services", tags=["Services"])
 app.include_router(billing.router,  prefix="/api/billing",  tags=["Billing"])
+app.include_router(billing.payments_router, prefix="/api/payments", tags=["Payments"])
 app.include_router(reports.router,  prefix="/api/reports",  tags=["Reports"])
 app.include_router(admin.router,    prefix="/api/admin",    tags=["Admin"])
 

@@ -1,44 +1,11 @@
--- =============================================================================
--- db/functions/fn_get_service_charges.sql
--- =============================================================================
--- Purpose:
---   Calculates the total service charges for a booking by summing all
---   service_usage rows for that booking (unit_price × quantity).
---
---   Like room charges, this uses the SNAPSHOTTED unit_price stored in
---   service_usage at the time the service was added — not the current
---   service.base_price. This guarantees billing immutability.
---
--- Function signature to implement:
---   CREATE OR REPLACE FUNCTION fn_get_service_charges(
---       p_booking_id UUID
---   )
---   RETURNS NUMERIC(10,2)
---   LANGUAGE sql
---   STABLE
---   AS $$
---       SELECT COALESCE(
---           SUM(su.unit_price * su.quantity),
---           0.00
---       )
---       FROM service_usage su
---       WHERE su.booking_id = p_booking_id;
---   $$;
---
--- Parameters:
---   p_booking_id : UUID of the booking to total service charges for.
---
--- Returns:
---   NUMERIC(10,2) — total service charge. Returns 0.00 (not NULL) if no
---   services were added, so bill generation is always safe to compute.
---
--- Usage example:
---   SELECT fn_get_service_charges('booking-uuid-here');
---   -- If guest had 3× Room Service @ 1500 + 1× Spa @ 5000 → 9500.00
---
--- Called by:
---   generate_bill() stored procedure in db/procedures/billing.sql.
---   Also used directly by fn_get_outstanding_balance().
--- =============================================================================
+-- Sum of (quantity * unit_price) over a booking's service usage. 0 if none.
 
--- TODO: Implement fn_get_service_charges
+CREATE OR REPLACE FUNCTION fn_get_service_charges(p_booking_id UUID)
+RETURNS NUMERIC
+LANGUAGE sql
+STABLE
+AS $$
+    SELECT COALESCE(SUM(su.quantity * su.unit_price), 0.00)
+      FROM service_usage su
+     WHERE su.booking_id = p_booking_id;
+$$;

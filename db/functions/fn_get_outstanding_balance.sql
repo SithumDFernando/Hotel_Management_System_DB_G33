@@ -1,43 +1,24 @@
--- =============================================================================
--- db/functions/fn_get_outstanding_balance.sql
--- =============================================================================
--- Purpose:
---   Returns the current outstanding balance on a booking's bill.
---   This is a convenience function that reads bill.outstanding_balance.
---   The actual recalculation of that column happens inside the
---   record_payment() stored procedure; this function just exposes it
---   for use in queries and reporting views.
---
---   NOTE: bill.outstanding_balance is a controlled denormalisation —
---   it is derived from (total_amount - amount_paid) but stored for
---   query performance. It is kept consistent by record_payment().
---
--- Function signature to implement:
---   CREATE OR REPLACE FUNCTION fn_get_outstanding_balance(
---       p_booking_id UUID
---   )
---   RETURNS NUMERIC(10,2)
---   LANGUAGE sql
---   STABLE
---   AS $$
---       SELECT outstanding_balance
---       FROM   bill
---       WHERE  booking_id = p_booking_id;
---   $$;
---
--- Parameters:
---   p_booking_id : UUID of the booking whose outstanding balance to look up.
---
--- Returns:
---   NUMERIC(10,2) — the unpaid balance, or NULL if no bill has been generated yet.
---
--- Usage example:
---   SELECT fn_get_outstanding_balance('booking-uuid-here');
---   -- Returns 0.00 if fully paid, or remaining balance if partial.
---
--- Called by:
---   v_guest_billing_summary view (db/views/reports.sql) — for reporting.
---   The API's GET /api/billing/{booking_id} endpoint also reads this.
--- =============================================================================
+-- Amount still owed on a booking's bill: GREATEST(total - paid, 0.00).
+-- Raises if the bill has not been generated yet.
+-- Also used by check_out() (checkin_checkout.sql).
 
--- TODO: Implement fn_get_outstanding_balance
+CREATE OR REPLACE FUNCTION fn_get_outstanding_balance(p_booking_id UUID)
+RETURNS NUMERIC
+LANGUAGE plpgsql
+STABLE
+AS $$
+DECLARE
+    v_balance NUMERIC;
+BEGIN
+    SELECT GREATEST(bl.total_amount - bl.amount_paid, 0.00)
+      INTO v_balance
+      FROM bill bl
+     WHERE bl.booking_id = p_booking_id;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Bill not yet generated for this booking';
+    END IF;
+
+    RETURN v_balance;
+END;
+$$;
