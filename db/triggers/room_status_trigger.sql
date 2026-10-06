@@ -14,19 +14,25 @@
 --   AS $$
 --   BEGIN
 --       -- When a booking transitions to Checked-In → mark room as Occupied
---       IF NEW.status = 'Checked-In' AND OLD.status <> 'Checked-In' THEN
+--       IF NEW.status = 'Checked-In' THEN
 --           UPDATE room SET status = 'Occupied'
 --           WHERE room_id = NEW.room_id;
 --
---       -- When a booking transitions to Checked-Out or Cancelled → free the room
---       ELSIF NEW.status IN ('Checked-Out', 'Cancelled')
---         AND OLD.status NOT IN ('Checked-Out', 'Cancelled') THEN
---           -- Only mark Available if no OTHER active booking holds this room
+--       -- When a booking transitions to Checked-Out → immediately free the room
+--       ELSIF NEW.status = 'Checked-Out' THEN
+--           UPDATE room SET status = 'Available'
+--           WHERE room_id = NEW.room_id;
+--
+--       -- When a booking transitions to Cancelled → free the room only if no other
+--       -- active booking exists FOR TODAY.
+--       ELSIF NEW.status = 'Cancelled' THEN
 --           IF NOT EXISTS (
 --               SELECT 1 FROM booking
 --               WHERE room_id = NEW.room_id
 --                 AND booking_id <> NEW.booking_id
---                 AND status = 'Checked-In'
+--                 AND status NOT IN ('Cancelled', 'Checked-Out')
+--                 AND check_in_date <= CURRENT_DATE
+--                 AND check_out_date > CURRENT_DATE
 --           ) THEN
 --               UPDATE room SET status = 'Available'
 --               WHERE room_id = NEW.room_id;
@@ -51,7 +57,6 @@
 --   - Room set to 'Maintenance' must be done manually via PATCH /rooms/{id}/status
 --     and is NOT managed by this trigger.
 -- =============================================================================
-
 -- Implementation below:
 
 -- 1. Trigger function

@@ -45,4 +45,66 @@
 --   PATCH /api/bookings/{id}/checkout in backend/app/routers/bookings.py
 -- =============================================================================
 
--- TODO: Implement checkin and checkout procedures
+CREATE OR REPLACE PROCEDURE perform_checkin(p_booking_id UUID)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_status VARCHAR;
+    v_room_id UUID;
+BEGIN
+    SELECT status, room_id INTO v_status, v_room_id
+    FROM booking WHERE booking_id = p_booking_id;
+    
+    IF v_status IS NULL THEN
+        RAISE EXCEPTION 'Booking not found';
+    END IF;
+
+    IF v_status != 'Booked' THEN
+        RAISE EXCEPTION 'Only Booked bookings can be checked in';
+    END IF;
+
+    UPDATE booking 
+    SET status = 'Checked-In', 
+        actual_checkin_time = NOW()
+    WHERE booking_id = p_booking_id;
+
+    UPDATE room 
+    SET status = 'Occupied' 
+    WHERE room_id = v_room_id;
+END;
+$$;
+
+CREATE OR REPLACE PROCEDURE perform_checkout(p_booking_id UUID)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_status VARCHAR;
+    v_room_id UUID;
+    v_balance NUMERIC;
+BEGIN
+    SELECT status, room_id INTO v_status, v_room_id
+    FROM booking WHERE booking_id = p_booking_id;
+    
+    IF v_status IS NULL THEN
+        RAISE EXCEPTION 'Booking not found';
+    END IF;
+
+    IF v_status != 'Checked-In' THEN
+        RAISE EXCEPTION 'Only Checked-In bookings can be checked out';
+    END IF;
+
+    v_balance := fn_get_outstanding_balance(p_booking_id);
+    IF v_balance > 0 THEN
+        RAISE EXCEPTION 'Outstanding balance of LKR % — pay before checkout', v_balance;
+    END IF;
+
+    UPDATE booking 
+    SET status = 'Checked-Out', 
+        actual_checkout_time = NOW()
+    WHERE booking_id = p_booking_id;
+
+    UPDATE room 
+    SET status = 'Available' 
+    WHERE room_id = v_room_id;
+END;
+$$;
