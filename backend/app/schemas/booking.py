@@ -80,3 +80,6 @@ class BookingCheckOutResponse(BaseModel):
     status: str
     actual_checkout_time: datetime | None = None
     bill: BillSummary | None = None
+
+class BookingCancelResponse(BaseModel):
+    status: str

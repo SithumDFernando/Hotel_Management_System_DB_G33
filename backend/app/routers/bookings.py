@@ -11,7 +11,8 @@ from app.dependencies import require_role
 from app.schemas.booking import (
     BookingCreate, BookingOut, BookingListOut, 
     BookingListResponse, GuestInfo, RoomInfo, BookingDetailOut,
-    BookingCheckInResponse, BookingCheckOutResponse, BillSummary
+    BookingCheckInResponse, BookingCheckOutResponse, BillSummary,
+    BookingStatusUpdate, BookingCancelResponse
 )
 
 router = APIRouter()
@@ -271,3 +272,44 @@ async def checkout_booking(
         elif "outstanding balance" in msg.lower():
             raise HTTPException(status_code=status.HTTP_402_PAYMENT_REQUIRED, detail=msg)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg)
+
+# PATCH /api/bookings/{booking_id}/cancel
+@router.patch("/{booking_id}/cancel", response_model=BookingCancelResponse)
+async def cancel_booking(
+    booking_id: str,
+    body: BookingStatusUpdate,
+    db=Depends(get_db),
+    user: dict = Depends(require_role("receptionist", "manager", "admin", "guest"))
+):
+    # Fetch booking to check existence, status, and authorization
+    query = """
+        SELECT b.guest_id, r.branch_id, b.status
+        FROM booking b
+        JOIN room r ON r.room_id = b.room_id
+        WHERE b.booking_id = $1::UUID
+    """
+    row = await db.fetchrow(query, booking_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Booking not found")
+
+    user_role = user["role"]
+    # Authorization checks
+    if user_role == "guest":
+        if str(row["guest_id"]) != str(user.get("guest_id")):
+            raise HTTPException(status_code=403, detail="Not authorized to cancel this booking")
+    elif user_role in ["manager", "receptionist"]:
+        if str(row["branch_id"]) != str(user.get("branch_id")):
+            raise HTTPException(status_code=403, detail="Not authorized to cancel bookings for other branches")
+
+    # Business rule: Only 'Booked' bookings can be cancelled
+    if row["status"] != "Booked":
+        raise HTTPException(status_code=400, detail="Only 'Booked' bookings can be cancelled")
+
+    # Update status to Cancelled
+    # Note: reason is in body.reason, but we have no DB column for it, so it's ignored.
+    await db.execute(
+        "UPDATE booking SET status = 'Cancelled' WHERE booking_id = $1::UUID",
+        booking_id
+    )
+
+    return BookingCancelResponse(status="Cancelled")
