@@ -30,9 +30,14 @@ async def lifespan(app: FastAPI):
     - On startup: initialise the asyncpg connection pool.
     - On shutdown: close all database connections gracefully.
     """
+    # --- STARTUP PHASE ---
     await init_db()
     print("✅ Database connection pool initialised")
+
+    # --- APPLICATION RUNNING PHASE ---
     yield
+
+    # --- SHUTDOWN PHASE ---
     await close_db()
     print("🛑 Database connection pool closed")
 
