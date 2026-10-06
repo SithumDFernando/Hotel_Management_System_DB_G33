@@ -70,3 +70,13 @@ class BookingCheckInResponse(BaseModel):
     booking_id: UUID
     status: str
     actual_checkin_time: datetime | None = None
+
+class BillSummary(BaseModel):
+    total_amount: float
+    amount_paid: float
+
+class BookingCheckOutResponse(BaseModel):
+    booking_id: UUID
+    status: str
+    actual_checkout_time: datetime | None = None
+    bill: BillSummary | None = None

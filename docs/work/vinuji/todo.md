@@ -52,7 +52,7 @@
   - [x] `GET /api/bookings`: Paginated search with query filters (`status`, `guest_id`, `room_id`, `branch_id`)
   - [x] `GET /api/bookings/{booking_id}`: Retrieve detailed booking record with guest & room details
   - [x] `PATCH /api/bookings/{booking_id}/checkin`: RBAC check (`receptionist`, `manager`, `admin`), invoke `perform_checkin`
-  - [ ] `PATCH /api/bookings/{booking_id}/checkout`: RBAC check (`receptionist`, `manager`, `admin`), invoke `perform_checkout`
+  - [x] `PATCH /api/bookings/{booking_id}/checkout`: RBAC check (`receptionist`, `manager`, `admin`), invoke `perform_checkout`
   - [ ] `PATCH /api/bookings/{booking_id}/cancel`: Allow guest (own booking) or staff to cancel reservation
 
 ---

@@ -11,7 +11,7 @@ from app.dependencies import require_role
 from app.schemas.booking import (
     BookingCreate, BookingOut, BookingListOut, 
     BookingListResponse, GuestInfo, RoomInfo, BookingDetailOut,
-    BookingCheckInResponse
+    BookingCheckInResponse, BookingCheckOutResponse, BillSummary
 )
 
 router = APIRouter()
@@ -227,4 +227,47 @@ async def checkin_booking(
         msg = str(e)
         if "not found" in msg.lower():
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=msg)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg)
+
+# PATCH /api/bookings/{booking_id}/checkout
+@router.patch("/{booking_id}/checkout", response_model=BookingCheckOutResponse)
+async def checkout_booking(
+    booking_id: str,
+    db=Depends(get_db),
+    user: dict = Depends(require_role("receptionist", "manager", "admin"))
+):
+    try:
+        await db.execute("CALL perform_checkout($1::UUID)", booking_id)
+        
+        row = await db.fetchrow(
+            "SELECT booking_id, status, actual_checkout_time FROM booking WHERE booking_id = $1::UUID",
+            booking_id
+        )
+        if not row:
+            raise HTTPException(status_code=404, detail="Booking not found")
+            
+        bill_row = await db.fetchrow(
+            "SELECT total_amount, amount_paid FROM bill WHERE booking_id = $1::UUID",
+            booking_id
+        )
+        
+        bill_summary = None
+        if bill_row:
+            bill_summary = BillSummary(
+                total_amount=float(bill_row["total_amount"]),
+                amount_paid=float(bill_row["amount_paid"])
+            )
+            
+        return BookingCheckOutResponse(
+            booking_id=row["booking_id"],
+            status=row["status"],
+            actual_checkout_time=row["actual_checkout_time"],
+            bill=bill_summary
+        )
+    except asyncpg.exceptions.RaiseError as e:
+        msg = str(e)
+        if "not found" in msg.lower():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=msg)
+        elif "outstanding balance" in msg.lower():
+            raise HTTPException(status_code=status.HTTP_402_PAYMENT_REQUIRED, detail=msg)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg)
