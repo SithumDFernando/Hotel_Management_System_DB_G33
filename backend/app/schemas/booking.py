@@ -44,6 +44,7 @@ class RoomInfo(BaseModel):
     room_id: UUID
     room_number: str
     branch_name: str
+    type_name: str | None = None  # room type (e.g. "Suite"); saves clients an N+1 room lookup
 
 class BookingListOut(BaseModel):
     booking_id: UUID

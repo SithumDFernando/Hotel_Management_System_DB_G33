@@ -130,10 +130,11 @@ async def list_bookings(
         SELECT b.booking_id, b.check_in_date, b.check_out_date, b.rate_at_booking, b.status, b.payment_option,
                g.guest_id, g.full_name,
                r.room_id, r.room_number,
-               br.name AS branch_name
+               br.name AS branch_name, rt.type_name
         FROM booking b
         JOIN guest g ON g.guest_id = b.guest_id
         JOIN room r ON r.room_id = b.room_id
+        JOIN room_type rt ON rt.room_type_id = r.room_type_id
         JOIN branch br ON br.branch_id = r.branch_id
         {where_clause}
         ORDER BY b.check_in_date DESC
@@ -147,7 +148,7 @@ async def list_bookings(
         bookings.append(BookingListOut(
             booking_id=row["booking_id"],
             guest=GuestInfo(guest_id=row["guest_id"], full_name=row["full_name"]),
-            room=RoomInfo(room_id=row["room_id"], room_number=row["room_number"], branch_name=row["branch_name"]),
+            room=RoomInfo(room_id=row["room_id"], room_number=row["room_number"], branch_name=row["branch_name"], type_name=row["type_name"]),
             check_in_date=row["check_in_date"],
             check_out_date=row["check_out_date"],
             rate_at_booking=float(row["rate_at_booking"]),
@@ -169,10 +170,11 @@ async def get_booking(
                b.status, b.payment_option, b.actual_checkin_time, b.actual_checkout_time,
                g.guest_id, g.full_name,
                r.room_id, r.room_number, r.branch_id,
-               br.name AS branch_name
+               br.name AS branch_name, rt.type_name
         FROM booking b
         JOIN guest g ON g.guest_id = b.guest_id
         JOIN room r ON r.room_id = b.room_id
+        JOIN room_type rt ON rt.room_type_id = r.room_type_id
         JOIN branch br ON br.branch_id = r.branch_id
         WHERE b.booking_id = $1::UUID
     """
@@ -192,7 +194,7 @@ async def get_booking(
     return BookingDetailOut(
         booking_id=row["booking_id"],
         guest=GuestInfo(guest_id=row["guest_id"], full_name=row["full_name"]),
-        room=RoomInfo(room_id=row["room_id"], room_number=row["room_number"], branch_name=row["branch_name"]),
+        room=RoomInfo(room_id=row["room_id"], room_number=row["room_number"], branch_name=row["branch_name"], type_name=row["type_name"]),
         check_in_date=row["check_in_date"],
         check_out_date=row["check_out_date"],
         rate_at_booking=float(row["rate_at_booking"]),

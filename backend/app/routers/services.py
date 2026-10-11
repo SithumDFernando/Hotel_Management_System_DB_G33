@@ -52,7 +52,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
 from app.db import get_db
-from app.dependencies import require_role
+from app.dependencies import assert_guest_owns_booking, require_role
 
 router = APIRouter()
 
@@ -244,15 +244,16 @@ async def update_service(
 async def get_booking_usage(
     booking_id: UUID,
     db=Depends(get_db),
-    _user=Depends(require_role("receptionist", "manager", "admin")),
+    _user=Depends(require_role("receptionist", "manager", "admin", "guest")),
 ):
     """
     Return every service_usage row for a booking, joined with service name and
     category. Includes a `grand_total` field summing all line totals for quick
-    display on the bill preview.
+    display on the bill preview. Guests may only read their own bookings.
 
     Raises 404 if the booking does not exist.
     """
+    await assert_guest_owns_booking(db, _user, booking_id)
     # Verify the booking exists
     booking_exists = await db.fetchval(
         "SELECT 1 FROM booking WHERE booking_id = $1",

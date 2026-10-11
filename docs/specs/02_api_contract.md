@@ -43,8 +43,31 @@
 
 ---
 
+### POST `/api/auth/signup`
+> Public — guest self-registration. Creates the guest profile and login account in one transaction; role is always `guest`.
+
+**Request:**
+```json
+{
+  "full_name": "John Silva",
+  "nic_passport": "200012345678",
+  "email": "john@mail.com",
+  "phone": "+94771234567",
+  "password": "min8chars",
+  "date_of_birth": "2000-05-15",
+  "nationality": "Sri Lankan"
+}
+```
+
+**Response (201):** `{ "account_id": "uuid-...", "guest_id": "uuid-..." }`
+
+**Errors:** `409` email already registered / NIC or passport already exists; `422` validation (invalid email, password < 8 chars).
+
+---
+
 ### POST `/api/auth/register`
-> Admin only — creates staff accounts; OR public for guest self-registration
+> Admin only — creates accounts with an explicit role. Anonymous or non-admin callers receive `403`
+> (guests use `/api/auth/signup`).
 
 **Request:**
 ```json
@@ -58,6 +81,24 @@
 ```
 
 **Response (201):** `{ "account_id": "uuid-..." }`
+
+---
+
+## 1b. Branches (public) — `/api/branches`
+
+### GET `/api/branches`
+> Public — read-only directory for the Home / Rooms pages (the admin-only `/api/admin/branches` keeps stats and CRUD).
+
+**Response (200):**
+```json
+{
+  "branches": [
+    { "branch_id": "uuid-...", "name": "SkyNest Colombo", "city": "Colombo",
+      "address": "42 Galle Face Terrace, Colombo 03", "phone": "+94 11 234 5678" }
+  ],
+  "total": 3
+}
+```
 
 ---
 
@@ -221,7 +262,7 @@ Calls `create_booking()` stored procedure (SERIALIZABLE).
     {
       "booking_id": "uuid-...",
       "guest": { "guest_id": "uuid-...", "full_name": "John Silva" },
-      "room": { "room_id": "uuid-...", "room_number": "101", "branch_name": "Colombo" },
+      "room": { "room_id": "uuid-...", "room_number": "101", "branch_name": "Colombo", "type_name": "Suite" },
       "check_in_date": "2026-02-01",
       "check_out_date": "2026-02-05",
       "rate_at_booking": 15000.00,

@@ -18,7 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.db import init_db, close_db
-from app.routers import auth, rooms, guests, bookings, services, billing, reports, admin
+from app.routers import auth, rooms, guests, bookings, services, billing, reports, admin, branches
 
 
 # ── Lifespan (startup / shutdown) ────────────────────────────────────────────
@@ -69,6 +69,7 @@ app.add_middleware(
 # auto-generated Swagger UI at http://localhost:8000/docs
 
 app.include_router(auth.router,     prefix="/api/auth",     tags=["Auth"])
+app.include_router(branches.router, prefix="/api/branches", tags=["Branches"])
 app.include_router(rooms.router,    prefix="/api/rooms",    tags=["Rooms"])
 app.include_router(guests.router,   prefix="/api/guests",   tags=["Guests"])
 app.include_router(bookings.router, prefix="/api/bookings", tags=["Bookings"])

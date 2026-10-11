@@ -11,6 +11,8 @@
 | `/` | `Home` | Public | Landing page, branch showcase, CTA to browse rooms |
 | `/rooms` | `RoomsBrowse` | Public | Browse available rooms with filters |
 | `/login` | `Login` | Public | Login form |
+| `/register` | `Register` | Public | Guest self-signup (`POST /api/auth/signup`), then auto sign-in |
+| `/my-bookings` | `MyBookings` | Guest | Own bookings (upcoming / past / cancelled), cancel `Booked`, view bill + services |
 | `/booking/:roomId` | `BookingCheckout` | Guest, Receptionist, Manager | Booking form + summary |
 | `/services/:bookingId` | `ServiceRequest` | Receptionist, Manager | Add services to a checked-in booking |
 | `/dashboard/receptionist` | `ReceptionistDashboard` | Receptionist | Today's bookings, check-in/out, payments |
@@ -122,14 +124,16 @@
 |---------|---------|---------|
 | Today's Arrivals | Bookings with `check_in_date = today`, status `Booked` | `GET /bookings?status=Booked&from=today&to=today` |
 | Current Guests | Bookings with status `Checked-In` | `GET /bookings?status=Checked-In` |
-| Today's Departures | Bookings with `check_out_date = today` | `GET /bookings?check_out=today` |
-| Quick Actions | Check-in / Check-out buttons per booking | `PATCH /bookings/:id/checkin`, `PATCH /bookings/:id/checkout` |
-| Generate Bill | Button per checked-in booking | `POST /billing/:bid/generate` |
-| Record Payment | Payment form (amount, method) | `POST /payments` |
-| New Booking | Link to `/rooms` | — |
-| Guest Registration | Inline form or link | `POST /guests` |
+| Today's Departures | Checked-In bookings with `check_out_date <= today` (filtered client-side — the API has no `check_out` filter) | `GET /bookings?status=Checked-In` |
+| Upcoming | Booked stays arriving after today | `GET /bookings?status=Booked` |
+| Quick Actions | Check-in / Check-out / Cancel per booking; a 402 on check-out opens the payment window | `PATCH /bookings/:id/checkin`, `/checkout`, `/cancel` |
+| Bill & Payment window | Recalculates the bill on open (`POST /billing/:bid/generate`, optional discount), shows charges + history, records payments | `POST /billing/:bid/generate`, `GET /payments/:bid`, `POST /payments` |
+| New Booking | Link to `/rooms?mode=booking` | — |
+| Guest Registration | Side drawer (`GuestFormDrawer`) | `POST /guests` |
 
-**Components used:** `Navbar`, `BookingSummary`, `BillTable`
+KPI cards: arrivals, in-house, departures due, rooms available (`GET /rooms?status=Available`). There is no "outstanding balances" KPI because receptionists cannot call `/reports/*`.
+
+**Components used:** `Navbar`, `BookingSummary`, `BillTable`, `BillPaymentModal`, `GuestFormDrawer`
 
 ---
 
@@ -147,9 +151,11 @@
 | Billing Summary | Guests with outstanding balances | `GET /reports/billing-summary` |
 | Service Analytics | Top services, usage trends | `GET /reports/top-services`, `GET /reports/service-usage` |
 
-**Components used:** `Navbar`, `ReportTable`
+Tabs (URL `?tab=`): **Overview** (KPIs, 6-month stacked revenue chart, top services), **Reports** (all five reports via `ReportsPanel`), **Rooms** (maintenance toggle, `PATCH /rooms/:id/status`), **Service catalogue** (create / reprice / deactivate, `/services`).
 
-**Visualization:** Simple bar/line charts for revenue trends (optional: use a lightweight chart library like `recharts`).
+**Components used:** `Navbar`, `ReportTable`, `ReportsPanel`, `BranchOverview`, `RoomManager`, `CatalogueManager`
+
+**Visualization:** `recharts` (route is lazy-loaded). Revenue counts checked-out stays only; top-services is not branch-scoped by the API.
 
 ---
 
@@ -162,11 +168,14 @@
 | Section | Content | API Call |
 |---------|---------|---------|
 | Branches | CRUD for branches | `GET/POST/PUT /admin/branches` |
-| Users | List all users, change roles, create staff accounts | `GET/POST/PATCH/DELETE /admin/users` |
-| System Reports | All 5 reports, unscoped (all branches) | `GET /reports/*` |
-| All Bookings | Cross-branch booking search | `GET /bookings` |
+| Users | List/filter users, create staff accounts, change role + branch (no delete — see API contract) | `GET/POST/PATCH /admin/users` |
+| System Reports | All 5 reports, all branches or one (`?branch=`) | `GET /reports/*` |
+| All Bookings | Cross-branch booking search (branch, status, dates) | `GET /bookings` |
+| Overview / Rooms / Service catalogue | Same components as the manager dashboard, optionally branch-scoped | — |
 
-**Components used:** `Navbar`, `ReportTable`
+Tabs are selected with `?tab=` (`overview` default, `branches`, `users`, `reports`, `bookings`, `rooms`, `catalogue`), which the Navbar links use.
+
+**Components used:** `Navbar`, `ReportTable`, `ReportsPanel`, `BranchOverview`, `RoomManager`, `CatalogueManager`, `admin/BranchesTab`, `admin/UsersTab`, `admin/BookingsTab`
 
 ---
 
@@ -176,9 +185,14 @@
 |-----------|-------|---------|
 | `Navbar` | — (reads AuthContext) | All pages |
 | `RoomCard` | `room` object | Home, RoomsBrowse |
-| `BookingSummary` | `booking` object | BookingCheckout, ReceptionistDashboard |
-| `BillTable` | `bill` object, `payments` array | ReceptionistDashboard, ManagerDashboard |
-| `ReportTable` | `columns`, `data`, `title` | ManagerDashboard, AdminDashboard |
+| `BookingSummary` | `booking` object (list shape), `children` = actions | MyBookings |
+| `BillTable` | `bill` object, `payments` array | BillPaymentModal, MyBookings |
+| `BillPaymentModal` | `booking`, `onClose`, `onChanged`, `onCheckout?` | ReceptionistDashboard, ServiceRequest |
+| `GuestPicker` / `GuestFormDrawer` | `value`, `onChange` / `open`, `onClose`, `onCreated` | BookingCheckout, ReceptionistDashboard |
+| `ReportTable` | `columns`, `data`, `title`, `toolbar`, `summary` (sort, search, paging, CSV) | ReportsPanel, BookingsTab |
+| `ReportsPanel` | `branchId?`, `showBranch?` | ManagerDashboard, AdminDashboard |
+
+Shared UI primitives (Button, Badge, Modal/Drawer, Toast, Tabs, Pagination, StatCard, Field, States) live in `src/components/ui/`.
 
 ---
 
