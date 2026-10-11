@@ -122,6 +122,49 @@ async def run_tests():
                               headers={"Authorization": f"Bearer {admin_token}"})
         check(r.status_code == 201, "admin can create staff account -> 201")
 
+        # ── guests reading their own billing data ───────────────────────────
+        print("\n-- Guest access to bill / payments / service usage (own bookings only)")
+        my_guest, booking_id = uuid4(), uuid4()
+        from datetime import datetime
+        from decimal import Decimal
+
+        bill_row = {
+            "bill_id": uuid4(), "booking_id": booking_id, "room_charges": Decimal("60000"),
+            "service_charges": Decimal("0"), "discount_amount": Decimal("0"),
+            "tax_amount": Decimal("9000"), "total_amount": Decimal("69000"),
+            "amount_paid": Decimal("0"), "outstanding_balance": Decimal("69000"),
+            "balance_flag": True, "generated_at": datetime(2026, 10, 1),
+        }
+
+        async def guest_fetchrow(query, *args):
+            if "FROM user_account" in query:
+                return {"account_id": uuid4(), "email": "g@x.com", "role": "guest",
+                        "branch_id": None, "guest_id": my_guest}
+            if "FROM bill" in query:
+                return bill_row
+            return None
+
+        conn.fetchrow.side_effect = guest_fetchrow
+        conn.fetch.return_value = []
+        g_hdr = {"Authorization": f"Bearer {create_access_token({'sub': str(uuid4()), 'role': 'guest'})}"}
+
+        conn.fetchval.side_effect = None
+        conn.fetchval.return_value = my_guest  # booking owner == caller
+        r = await client.get(f"/api/billing/{booking_id}", headers=g_hdr)
+        check(r.status_code == 200, "guest can read own bill")
+        r = await client.get(f"/api/payments/{booking_id}", headers=g_hdr)
+        check(r.status_code == 200, "guest can read own payments")
+        r = await client.get(f"/api/services/{booking_id}/usage", headers=g_hdr)
+        check(r.status_code == 200, "guest can read own service usage")
+
+        conn.fetchval.return_value = uuid4()  # someone else's booking
+        for path in (f"/api/billing/{booking_id}", f"/api/payments/{booking_id}", f"/api/services/{booking_id}/usage"):
+            r = await client.get(path, headers=g_hdr)
+            check(r.status_code == 403, f"guest blocked from another guest's data: {path.split('/')[2]}")
+
+        r = await client.post(f"/api/billing/{booking_id}/generate", headers=g_hdr)
+        check(r.status_code == 403, "guest still cannot generate a bill")
+
     app.dependency_overrides.clear()
     print(f"\n{passed} passed, {failed} failed")
     return failed == 0

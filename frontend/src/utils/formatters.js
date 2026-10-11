@@ -85,6 +85,11 @@ export function errorMessage(err, fallback = 'Something went wrong. Please try a
   return fallback;
 }
 
+// Short human-friendly reference derived from the booking UUID.
+export const bookingRef = (id) => `SN-${String(id || '').slice(0, 8).toUpperCase()}`;
+
+export const TAX_RATE = 0.15; // mirrors fn_calculate_tax default (db/functions)
+
 export function initials(name = '') {
   return (
     name

@@ -262,7 +262,7 @@ Calls `create_booking()` stored procedure (SERIALIZABLE).
     {
       "booking_id": "uuid-...",
       "guest": { "guest_id": "uuid-...", "full_name": "John Silva" },
-      "room": { "room_id": "uuid-...", "room_number": "101", "branch_name": "Colombo" },
+      "room": { "room_id": "uuid-...", "room_number": "101", "branch_name": "Colombo", "type_name": "Suite" },
       "check_in_date": "2026-02-01",
       "check_out_date": "2026-02-05",
       "rate_at_booking": 15000.00,

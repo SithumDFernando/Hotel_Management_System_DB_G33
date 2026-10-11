@@ -11,6 +11,8 @@
 | `/` | `Home` | Public | Landing page, branch showcase, CTA to browse rooms |
 | `/rooms` | `RoomsBrowse` | Public | Browse available rooms with filters |
 | `/login` | `Login` | Public | Login form |
+| `/register` | `Register` | Public | Guest self-signup (`POST /api/auth/signup`), then auto sign-in |
+| `/my-bookings` | `MyBookings` | Guest | Own bookings (upcoming / past / cancelled), cancel `Booked`, view bill + services |
 | `/booking/:roomId` | `BookingCheckout` | Guest, Receptionist, Manager | Booking form + summary |
 | `/services/:bookingId` | `ServiceRequest` | Receptionist, Manager | Add services to a checked-in booking |
 | `/dashboard/receptionist` | `ReceptionistDashboard` | Receptionist | Today's bookings, check-in/out, payments |

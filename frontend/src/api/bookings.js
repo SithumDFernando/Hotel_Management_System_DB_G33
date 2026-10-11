@@ -1,45 +1,17 @@
-// =============================================================================
-// frontend/src/api/bookings.js
-// =============================================================================
-// Purpose:
-//   API functions for all booking lifecycle operations: creating a booking,
-//   fetching bookings (with filters), and performing check-in/check-out/cancel.
-//   Used primarily by the ReceptionistDashboard and BookingCheckout pages.
-//
-// Functions to implement:
-//
-//   export async function getBookings(params = {})
-//     // GET /api/bookings?status=&guest_id=&check_in=&check_out=&...
-//     // params: { status, guest_id, room_id, check_in, check_out, branch_id }
-//
-//   export async function getBooking(bookingId)
-//     // GET /api/bookings/:bookingId — full detail with guest, room, bill
-//
-//   export async function createBooking(data)
-//     // POST /api/bookings
-//     // data: { guest_id, room_id, check_in_date, check_out_date, payment_option }
-//
-//   export async function checkIn(bookingId)
-//     // PATCH /api/bookings/:bookingId/checkin
-//     // Triggers perform_checkin() stored procedure
-//
-//   export async function checkOut(bookingId)
-//     // PATCH /api/bookings/:bookingId/checkout
-//     // Triggers perform_checkout() stored procedure
-//
-//   export async function cancelBooking(bookingId)
-//     // PATCH /api/bookings/:bookingId/cancel
-//
-// API contract:
-//   GET    /api/bookings                     → list (filterable)
-//   GET    /api/bookings/:id                 → detail
-//   POST   /api/bookings                     → create
-//   PATCH  /api/bookings/:id/checkin         → check in
-//   PATCH  /api/bookings/:id/checkout        → check out
-//   PATCH  /api/bookings/:id/cancel          → cancel
-//
-// Dependencies:
-//   - ./client
-// =============================================================================
+import client from './client';
 
-// TODO: Implement api/bookings.js
+const clean = (p) => Object.fromEntries(Object.entries(p).filter(([, v]) => v !== '' && v != null));
+
+export const createBooking = (payload) => client.post('/bookings', payload).then((r) => r.data);
+
+// -> { bookings: BookingListOut[], total, page, per_page }
+// BookingListOut: { booking_id, guest{guest_id,full_name}, room{room_id,room_number,branch_name,type_name},
+//                   check_in_date, check_out_date, rate_at_booking, status, payment_option }
+export const listBookings = (params = {}, signal) =>
+  client.get('/bookings', { params: clean({ per_page: 100, ...params }), signal }).then((r) => r.data);
+
+export const getBooking = (id, signal) => client.get(`/bookings/${id}`, { signal }).then((r) => r.data);
+
+export const cancelBooking = (id, reason) => client.patch(`/bookings/${id}/cancel`, { reason }).then((r) => r.data);
+export const checkInBooking = (id) => client.patch(`/bookings/${id}/checkin`).then((r) => r.data);
+export const checkOutBooking = (id) => client.patch(`/bookings/${id}/checkout`).then((r) => r.data);

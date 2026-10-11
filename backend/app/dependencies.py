@@ -141,3 +141,27 @@ def require_role(*allowed_roles: str):
         return current_user
 
     return _guard
+
+
+# ── Booking ownership guard ───────────────────────────────────────────────────
+
+async def assert_guest_owns_booking(db, user: dict, booking_id) -> None:
+    """
+    For read endpoints that guests may use on *their own* bookings
+    (bill, payments, service usage). Staff pass through unchanged.
+
+    Raises 404 if the booking doesn't exist, 403 if a guest asks for
+    someone else's booking.
+    """
+    if user["role"] != "guest":
+        return
+    owner = await db.fetchval(
+        "SELECT guest_id FROM booking WHERE booking_id = $1::UUID", booking_id
+    )
+    if owner is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
+    if str(owner) != str(user.get("guest_id")):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Guests can only view their own bookings.",
+        )

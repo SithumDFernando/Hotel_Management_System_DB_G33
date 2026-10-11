@@ -17,7 +17,7 @@ import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.db import get_db
-from app.dependencies import require_role
+from app.dependencies import assert_guest_owns_booking, require_role
 from app.schemas.billing import BillOut, PaymentCreate, PaymentOut
 
 router = APIRouter()           
@@ -101,9 +101,10 @@ async def generate_bill(
 async def get_bill(
     booking_id: UUID,
     db=Depends(get_db),
-    user=Depends(require_role(*STAFF_ROLES)),
+    user=Depends(require_role(*STAFF_ROLES, "guest")),
 ):
-    """Get the invoice/bill details for a booking."""
+    """Get the invoice/bill details for a booking (guests: own bookings only)."""
+    await assert_guest_owns_booking(db, user, booking_id)
     row = await db.fetchrow(BILL_SELECT, booking_id)
     if row is None:
         raise HTTPException(
@@ -150,9 +151,10 @@ async def create_payment(
 async def list_payments(
     booking_id: UUID,
     db=Depends(get_db),
-    user=Depends(require_role(*STAFF_ROLES)),
+    user=Depends(require_role(*STAFF_ROLES, "guest")),
 ):
-    """List the payment history for a booking, newest first."""
+    """List the payment history for a booking, newest first (guests: own only)."""
+    await assert_guest_owns_booking(db, user, booking_id)
     exists = await db.fetchval(
         "SELECT 1 FROM booking WHERE booking_id = $1::UUID", booking_id
     )
