@@ -1,52 +1,79 @@
-// =============================================================================
-// frontend/src/App.jsx
-// =============================================================================
-// Purpose:
-//   Root application component. Defines the client-side route map using
-//   React Router's <Routes> and <Route> elements. Applies the shared
-//   <Layout> wrapper (Navbar + main content area) to all pages.
-//
-// Route map to implement (from docs/specs/09_frontend_pages.md):
-//   /                           → <Home />              (Public)
-//   /rooms                      → <RoomsBrowse />       (Public)
-//   /login                      → <Login />             (Public)
-//   /booking/:roomId            → <BookingCheckout />   (Protected: guest, receptionist, manager)
-//   /services/:bookingId        → <ServiceRequest />    (Protected: receptionist, manager)
-//   /dashboard/receptionist     → <ReceptionistDashboard /> (Protected: receptionist)
-//   /dashboard/manager          → <ManagerDashboard />  (Protected: manager)
-//   /dashboard/admin            → <AdminDashboard />    (Protected: admin)
-//   *                           → Redirect to / (404 fallback)
-//
-// What to implement here:
-//   import { Routes, Route, Navigate } from 'react-router-dom';
-//   import Layout from './components/Layout';
-//   import ProtectedRoute from './routes/ProtectedRoute';
-//   // ... import all page components
-//
-//   export default function App() {
-//     return (
-//       <Routes>
-//         <Route path="/" element={<Layout />}>
-//           <Route index element={<Home />} />
-//           <Route path="rooms" element={<RoomsBrowse />} />
-//           <Route path="login" element={<Login />} />
-//           <Route path="booking/:roomId" element={
-//             <ProtectedRoute roles={["guest", "receptionist", "manager"]}>
-//               <BookingCheckout />
-//             </ProtectedRoute>
-//           } />
-//           {/* ... other protected routes */}
-//           <Route path="*" element={<Navigate to="/" replace />} />
-//         </Route>
-//       </Routes>
-//     );
-//   }
-//
-// Dependencies:
-//   - react-router-dom            (Routes, Route, Navigate)
-//   - ./components/Layout         (shared page shell with Navbar)
-//   - ./routes/ProtectedRoute     (role-based access guard)
-//   - ./pages/*                   (all page components)
-// =============================================================================
+import { Navigate, Route, Routes } from 'react-router-dom';
+import Layout from '@/components/Layout';
+import ProtectedRoute from '@/routes/ProtectedRoute';
+import Home from '@/pages/Home';
+import RoomsBrowse from '@/pages/RoomsBrowse';
+import Login from '@/pages/Login';
+import Register from '@/pages/Register';
+import BookingCheckout from '@/pages/BookingCheckout';
+import MyBookings from '@/pages/MyBookings';
+import ServiceRequest from '@/pages/ServiceRequest';
+import ReceptionistDashboard from '@/pages/ReceptionistDashboard';
+import ManagerDashboard from '@/pages/ManagerDashboard';
+import AdminDashboard from '@/pages/AdminDashboard';
+import NotFound from '@/pages/NotFound';
 
-// TODO: Implement App.jsx
+// Route map: docs/specs/09_frontend_pages.md (+ /register and /my-bookings).
+export default function App() {
+  return (
+    <Routes>
+      <Route element={<Layout />}>
+        <Route index element={<Home />} />
+        <Route path="rooms" element={<RoomsBrowse />} />
+        <Route path="login" element={<Login />} />
+        <Route path="register" element={<Register />} />
+
+        <Route
+          path="booking/:roomId"
+          element={
+            <ProtectedRoute roles={['guest', 'receptionist', 'manager']}>
+              <BookingCheckout />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="my-bookings"
+          element={
+            <ProtectedRoute roles={['guest']}>
+              <MyBookings />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="services/:bookingId"
+          element={
+            <ProtectedRoute roles={['receptionist', 'manager']}>
+              <ServiceRequest />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="dashboard/receptionist"
+          element={
+            <ProtectedRoute roles={['receptionist']}>
+              <ReceptionistDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="dashboard/manager"
+          element={
+            <ProtectedRoute roles={['manager']}>
+              <ManagerDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="dashboard/admin"
+          element={
+            <ProtectedRoute roles={['admin']}>
+              <AdminDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="404" element={<NotFound />} />
+        <Route path="*" element={<Navigate to="/404" replace />} />
+      </Route>
+    </Routes>
+  );
+}

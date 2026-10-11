@@ -61,6 +61,24 @@
 
 ---
 
+## 1b. Branches (public) — `/api/branches`
+
+### GET `/api/branches`
+> Public — read-only directory for the Home / Rooms pages (the admin-only `/api/admin/branches` keeps stats and CRUD).
+
+**Response (200):**
+```json
+{
+  "branches": [
+    { "branch_id": "uuid-...", "name": "SkyNest Colombo", "city": "Colombo",
+      "address": "42 Galle Face Terrace, Colombo 03", "phone": "+94 11 234 5678" }
+  ],
+  "total": 3
+}
+```
+
+---
+
 ## 2. Rooms — `/api/rooms`
 
 ### GET `/api/rooms`
