@@ -43,8 +43,31 @@
 
 ---
 
+### POST `/api/auth/signup`
+> Public — guest self-registration. Creates the guest profile and login account in one transaction; role is always `guest`.
+
+**Request:**
+```json
+{
+  "full_name": "John Silva",
+  "nic_passport": "200012345678",
+  "email": "john@mail.com",
+  "phone": "+94771234567",
+  "password": "min8chars",
+  "date_of_birth": "2000-05-15",
+  "nationality": "Sri Lankan"
+}
+```
+
+**Response (201):** `{ "account_id": "uuid-...", "guest_id": "uuid-..." }`
+
+**Errors:** `409` email already registered / NIC or passport already exists; `422` validation (invalid email, password < 8 chars).
+
+---
+
 ### POST `/api/auth/register`
-> Admin only — creates staff accounts; OR public for guest self-registration
+> Admin only — creates accounts with an explicit role. Anonymous or non-admin callers receive `403`
+> (guests use `/api/auth/signup`).
 
 **Request:**
 ```json
