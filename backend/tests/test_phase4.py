@@ -327,3 +327,5 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+    # Non-zero exit lets CI detect failed checks
+    sys.exit(1 if failed else 0)

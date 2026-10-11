@@ -31,7 +31,15 @@ BEGIN
             COALESCE(v_booking_status, 'Not Found');
     END IF;
 
-    -- Step 2: Snapshot the service price if not explicitly provided
+    -- Step 2: Service must exist and be active (docs/specs/04_triggers.md §3)
+    IF (SELECT is_active FROM service WHERE service_id = NEW.service_id) = FALSE THEN
+        RAISE EXCEPTION 'Service % is inactive', NEW.service_id;
+    END IF;
+
+    -- Default usage_date to today if not provided
+    NEW.usage_date := COALESCE(NEW.usage_date, CURRENT_DATE);
+
+    -- Step 3: Snapshot the service price if not explicitly provided
     IF NEW.unit_price IS NULL OR NEW.unit_price = 0 THEN
         SELECT base_price INTO v_unit_price
         FROM   service WHERE service_id = NEW.service_id;

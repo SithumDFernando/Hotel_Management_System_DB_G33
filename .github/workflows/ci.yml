@@ -6,9 +6,21 @@ on:
   pull_request:
     branches: [ main, dev ]
 
+# Cancel superseded runs on the same branch / PR
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DATABASE_URL: postgresql://skynest_user:skynest_dev_pass@localhost:5432/skynest
+  SECRET_KEY: testsecretkeyformodulartestingpurposeonly12345
+  ALGORITHM: HS256
+  ACCESS_TOKEN_EXPIRE_MINUTES: 1440
+  FRONTEND_ORIGIN: http://localhost:5173
+
 jobs:
   database-and-backend:
-    name: Database Schema & Backend Validation
+    name: Database Schema & Backend Tests
     runs-on: ubuntu-latest
 
     services:
@@ -40,12 +52,12 @@ jobs:
       - name: Install PostgreSQL Client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
 
+      # ON_ERROR_STOP makes any SQL error fail the build instead of being skipped
       - name: Build Database Schema & Load Seed Data
+        working-directory: db
         env:
           PGPASSWORD: skynest_dev_pass
-        run: |
-          cd db
-          psql -h localhost -U skynest_user -d skynest -f run_all.sql
+        run: psql -v ON_ERROR_STOP=1 -h localhost -U skynest_user -d skynest -f run_all.sql
 
       - name: Install Backend Dependencies
         run: |
@@ -53,29 +65,44 @@ jobs:
           pip install -r backend/requirements.txt
 
       - name: Verify FastAPI App Initialization
-        env:
-          DATABASE_URL: postgresql://skynest_user:skynest_dev_pass@localhost:5432/skynest
-          SECRET_KEY: testsecretkeyformodulartestingpurposeonly12345
-          ALGORITHM: HS256
-          ACCESS_TOKEN_EXPIRE_MINUTES: 1440
-          FRONTEND_ORIGIN: http://localhost:5173
-          PYTHONPATH: backend
-        run: |
-          python -c "from app.main import app; print('[CI] FastAPI app loaded successfully!')"
-
-      - name: Run Database Smoke Tests
         working-directory: backend
-        env:
-          DATABASE_URL: postgresql://skynest_user:skynest_dev_pass@localhost:5432/skynest
-          SECRET_KEY: testsecretkeyformodulartestingpurposeonly12345
-          ALGORITHM: HS256
-          ACCESS_TOKEN_EXPIRE_MINUTES: 1440
-          FRONTEND_ORIGIN: http://localhost:5173
+        run: python -c "from app.main import app; print('[CI] FastAPI app loaded successfully!')"
+
+      - name: Database Smoke Test (CRUD)
+        working-directory: backend
+        run: python tests/test_db_crud.py
+
+      - name: Business Logic Tests (triggers, procedures, constraints)
+        working-directory: backend
+        run: python tests/test_business_logic.py
+
+      - name: API Tests (mocked DB)
+        working-directory: backend
         run: |
-          python tests/test_db_crud.py
+          python tests/test_phase4_api_mock.py
+          python tests/test_frontend_support_api.py
+
+      - name: Start API Server
+        working-directory: backend
+        run: |
+          nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 > uvicorn.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8000/openapi.json > /dev/null && exit 0
+            sleep 1
+          done
+          echo "API server did not start"; cat uvicorn.log; exit 1
+
+      - name: Live API Tests (views + endpoints against seeded DB)
+        working-directory: backend
+        run: python tests/test_phase4.py
+
+      - name: Show API Server Log
+        if: failure()
+        working-directory: backend
+        run: cat uvicorn.log || true
 
   frontend:
-    name: Frontend Build & Type Validation
+    name: Frontend Build
     runs-on: ubuntu-latest
 
     steps:
@@ -85,7 +112,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "18"
+          node-version: "20"
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
 
@@ -96,3 +123,37 @@ jobs:
       - name: Run Production Build
         working-directory: frontend
         run: npm run build
+
+  docker:
+    name: Docker Images & Compose Smoke Test
+    runs-on: ubuntu-latest
+    needs: [ database-and-backend, frontend ]
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Build Images
+        run: docker compose build
+
+      - name: Start Stack
+        run: docker compose up -d --wait --wait-timeout 180
+
+      - name: Smoke Test Endpoints
+        run: |
+          set -e
+          echo "Backend OpenAPI:";        curl -sf http://localhost:8000/openapi.json > /dev/null && echo OK
+          echo "Frontend SPA:";           curl -sf http://localhost:8080/ | grep -q '<div id="root">' && echo OK
+          echo "SPA deep-link fallback:"; curl -sf http://localhost:8080/rooms | grep -q '<div id="root">' && echo OK
+          echo "nginx /api proxy:";       curl -sf http://localhost:8080/api/branches > /dev/null && echo OK
+
+      - name: Live API Tests Inside Backend Container
+        run: docker compose exec -T backend python tests/test_phase4.py
+
+      - name: Show Container Logs
+        if: failure()
+        run: docker compose logs
+
+      - name: Tear Down
+        if: always()
+        run: docker compose down -v
