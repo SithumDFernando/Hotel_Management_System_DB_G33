@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import Layout from '@/components/Layout';
 import ProtectedRoute from '@/routes/ProtectedRoute';
@@ -9,9 +10,16 @@ import BookingCheckout from '@/pages/BookingCheckout';
 import MyBookings from '@/pages/MyBookings';
 import ServiceRequest from '@/pages/ServiceRequest';
 import ReceptionistDashboard from '@/pages/ReceptionistDashboard';
-import ManagerDashboard from '@/pages/ManagerDashboard';
-import AdminDashboard from '@/pages/AdminDashboard';
+import Spinner from '@/components/ui/Spinner';
 import NotFound from '@/pages/NotFound';
+
+// Chart-heavy dashboards are split out so public pages stay light.
+const ManagerDashboard = lazy(() => import('@/pages/ManagerDashboard'));
+const AdminDashboard = lazy(() => import('@/pages/AdminDashboard'));
+
+const Lazy = ({ children }) => (
+  <Suspense fallback={<div className="flex min-h-[40vh] items-center justify-center"><Spinner /></div>}>{children}</Suspense>
+);
 
 // Route map: docs/specs/09_frontend_pages.md (+ /register and /my-bookings).
 export default function App() {
@@ -59,7 +67,7 @@ export default function App() {
           path="dashboard/manager"
           element={
             <ProtectedRoute roles={['manager']}>
-              <ManagerDashboard />
+              <Lazy><ManagerDashboard /></Lazy>
             </ProtectedRoute>
           }
         />
@@ -67,7 +75,7 @@ export default function App() {
           path="dashboard/admin"
           element={
             <ProtectedRoute roles={['admin']}>
-              <AdminDashboard />
+              <Lazy><AdminDashboard /></Lazy>
             </ProtectedRoute>
           }
         />
