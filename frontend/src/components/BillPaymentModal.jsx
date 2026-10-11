@@ -87,16 +87,30 @@ export default function BillPaymentModal({ booking, onClose, onChanged, onChecko
 
   const canPay = bill && !settled && booking.status !== 'Cancelled';
 
+  const printFolio = () => {
+    document.body.classList.add('print-folio');
+    const done = () => {
+      document.body.classList.remove('print-folio');
+      window.removeEventListener('afterprint', done);
+    };
+    window.addEventListener('afterprint', done);
+    window.print();
+  };
+
   return (
     <Modal
       open
+      printable
       onClose={onClose}
       size="lg"
       title={`Bill · ${booking.guest.full_name}`}
       subtitle={`${bookingRef(booking.booking_id)} · ${booking.room.type_name || ''} Room ${booking.room.room_number} · ${formatDate(booking.check_in_date)} – ${formatDate(booking.check_out_date)}`}
       footer={
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <Button variant="ghost" onClick={onClose}>Close</Button>
+          <div className="flex gap-2">
+            <Button variant="ghost" onClick={onClose}>Close</Button>
+            {bill && <Button variant="outline" onClick={printFolio}><Icon name="print" /> Print folio</Button>}
+          </div>
           {settled && onCheckout && booking.status === 'Checked-In' && (
             <Button onClick={() => onCheckout(booking)}>
               <Icon name="logout" /> Check out now
@@ -114,7 +128,7 @@ export default function BillPaymentModal({ booking, onClose, onChanged, onChecko
           <BillTable bill={bill} payments={payments} />
 
           {booking.status !== 'Checked-Out' && booking.status !== 'Cancelled' && (
-            <section aria-label="Discount" className="rounded-xl border border-navy-100 p-4">
+            <section aria-label="Discount" className="print-hide rounded-xl border border-navy-100 p-4">
               <label htmlFor="discount" className="label">Discount (LKR)</label>
               <div className="flex gap-2">
                 <input id="discount" type="number" min="0" step="0.01" className="input" placeholder="0.00" value={discount} onChange={(e) => setDiscount(e.target.value)} />
@@ -125,7 +139,7 @@ export default function BillPaymentModal({ booking, onClose, onChanged, onChecko
           )}
 
           {canPay ? (
-            <form onSubmit={submitPayment} noValidate className="rounded-xl bg-navy-50 p-4">
+            <form onSubmit={submitPayment} noValidate className="print-hide rounded-xl bg-navy-50 p-4">
               <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold">
                 <Icon name="card" className="h-4 w-4 text-gold-700" /> Record new payment
               </h3>

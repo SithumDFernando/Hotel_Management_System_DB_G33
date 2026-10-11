@@ -117,6 +117,29 @@ Once seed data is loaded, you can log in with:
 
 ---
 
+## Running the Frontend
+
+```bash
+cd frontend
+cp .env.example .env     # VITE_API_BASE_URL=/api (Vite proxies /api -> localhost:8000)
+npm install
+npm run dev              # http://localhost:5173  (backend must be running on :8000)
+npm run build            # production bundle in frontend/dist
+```
+
+Stack: React 18 + Vite, Tailwind CSS v3 (brand tokens in `tailwind.config.js`), React Router, Axios, Recharts.
+In dev builds the login page shows one-click demo-account chips for the seeded users above.
+
+| Area | Where |
+| :--- | :---- |
+| Routes & role guards | `src/App.jsx`, `src/routes/ProtectedRoute.jsx` |
+| API clients (one per router) | `src/api/*.js` |
+| Auth state (`skynest_token` in localStorage) | `src/context/AuthContext.jsx` |
+| Shared UI primitives (Button, Modal, Tabs, Toast…) | `src/components/ui/` |
+| Page components | `src/pages/` |
+
+---
+
 ## Repository Structure
 
 ```

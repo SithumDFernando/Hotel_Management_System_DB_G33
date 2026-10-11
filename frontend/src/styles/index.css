@@ -27,4 +27,15 @@
 @media print {
   header, footer, .no-print { display: none !important; }
   body { background: #fff; }
+
+  /* "Print folio": only the open bill dialog is printed, as a plain page. */
+  body.print-folio #root { display: none !important; }
+  body.print-folio .print-folio-wrap { position: static !important; display: block !important; }
+  body.print-folio .print-folio-wrap > div:first-child { display: none !important; }
+  body.print-folio .print-folio-wrap [role='dialog'] {
+    position: static !important; max-height: none !important; max-width: none !important;
+    width: 100% !important; box-shadow: none !important; border-radius: 0 !important;
+  }
+  body.print-folio .print-folio-wrap .overflow-y-auto { overflow: visible !important; }
+  body.print-folio .print-hide { display: none !important; }
 }

@@ -21,10 +21,27 @@ function Footer() {
   );
 }
 
+const TITLES = [
+  ['/rooms', 'Rooms'],
+  ['/login', 'Sign in'],
+  ['/register', 'Create account'],
+  ['/booking', 'Book a room'],
+  ['/my-bookings', 'My bookings'],
+  ['/services', 'Service requests'],
+  ['/dashboard/receptionist', 'Front desk'],
+  ['/dashboard/manager', 'Manager dashboard'],
+  ['/dashboard/admin', 'Admin console'],
+  ['/404', 'Page not found'],
+];
+
 export default function Layout() {
   const { pathname } = useLocation();
-  // Start each page at the top on navigation.
-  useEffect(() => window.scrollTo(0, 0), [pathname]);
+  // Start each page at the top on navigation and keep the tab title meaningful.
+  useEffect(() => {
+    window.scrollTo(0, 0);
+    const match = TITLES.find(([p]) => pathname.startsWith(p));
+    document.title = match ? `${match[1]} · SkyNest Hotels` : 'SkyNest Hotels';
+  }, [pathname]);
 
   return (
     <div className="flex min-h-screen flex-col">

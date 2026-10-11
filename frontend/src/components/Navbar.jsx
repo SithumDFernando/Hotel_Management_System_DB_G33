@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import useAuth from '@/hooks/useAuth';
 import { homeForRole } from '@/context/AuthContext';
@@ -87,17 +87,17 @@ export default function Navbar() {
           <span className="leading-tight">
             <span className="block font-serif text-lg font-semibold">SkyNest</span>
             <span className="block text-[9px] font-semibold uppercase tracking-[0.18em] text-gold-700">
-              {staff ? 'Staff Portal' : 'Hospitality · Sri Lanka'}
+              {staff ? 'Staff Portal' : 'Hospitality Â· Sri Lanka'}
             </span>
           </span>
         </Link>
 
-        <nav className="hidden items-center gap-1 md:flex" aria-label="Main">
+        <nav className="hidden items-center gap-1 lg:flex" aria-label="Main">
           {items.filter((i) => isAuthenticated || i.to !== '/login').map((i) => link(i))}
           {!isAuthenticated && link({ to: '/login', label: 'Login' })}
         </nav>
 
-        <div className="hidden items-center gap-3 md:flex">
+        <div className="hidden items-center gap-3 lg:flex">
           {isAuthenticated ? (
             <>
               <div className="text-right leading-tight">
@@ -114,7 +114,7 @@ export default function Navbar() {
         </div>
 
         <button
-          className="rounded-lg p-2 text-navy-700 hover:bg-navy-50 md:hidden"
+          className="rounded-lg p-2 text-navy-700 hover:bg-navy-50 lg:hidden"
           onClick={() => setOpen((o) => !o)}
           aria-label="Toggle menu"
           aria-expanded={open}
@@ -124,13 +124,13 @@ export default function Navbar() {
       </div>
 
       {open && (
-        <div className="border-t border-navy-100 bg-white px-4 py-3 md:hidden">
+        <div className="border-t border-navy-100 bg-white px-4 py-3 lg:hidden">
           <nav className="space-y-1" aria-label="Mobile">{items.map((i) => link(i, true))}</nav>
           <div className="mt-3 border-t border-navy-100 pt-3">
             {isAuthenticated ? (
               <>
                 <p className="px-3 text-xs text-navy-500">
-                  {user.email} · {ROLE_LABEL[user.role]}
+                  {user.email} Â· {ROLE_LABEL[user.role]}
                 </p>
                 <Button variant="outline" className="mt-2 w-full" onClick={onLogout}>
                   <Icon name="logout" /> Logout
