@@ -1,4 +1,4 @@
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 from uuid import UUID
 from datetime import date, datetime
 from typing import Literal
@@ -12,7 +12,7 @@ class BookingCreate(BaseModel):
     room_id: UUID
     check_in_date: date
     check_out_date: date
-    payment_option: str
+    payment_option: str = Field(min_length=1, max_length=50)
 
     @model_validator(mode="after")
     def checkout_after_checkin(self):

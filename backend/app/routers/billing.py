@@ -79,7 +79,8 @@ BILL_SELECT = """
 async def generate_bill(
     booking_id: UUID,
     discount: Decimal | None = Query(
-        None, ge=0, description="Discount amount. Omit to keep the existing discount."
+        None, ge=0, le=Decimal("99999999.99"), decimal_places=2,
+        description="Discount amount. Omit to keep the existing discount.",
     ),
     db=Depends(get_db),
     user=Depends(require_role(*STAFF_ROLES)),

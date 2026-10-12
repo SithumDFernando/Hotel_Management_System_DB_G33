@@ -67,10 +67,18 @@ DECLARE
     v_room_type_id UUID;
     v_rate         NUMERIC(10,2);
 BEGIN
+    IF NOT EXISTS (SELECT 1 FROM guest WHERE guest_id = p_guest_id) THEN
+        RAISE EXCEPTION 'Guest not found';
+    END IF;
+
     -- Look up room's branch and type
     SELECT branch_id, room_type_id
       INTO v_branch_id, v_room_type_id
       FROM room WHERE room_id = p_room_id;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Room not found';
+    END IF;
 
     -- Get the current daily rate and SNAPSHOT it
     v_rate := fn_get_current_rate(v_branch_id, v_room_type_id);

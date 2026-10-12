@@ -48,6 +48,7 @@ from datetime import date
 from typing import Optional
 from uuid import UUID
 
+import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
@@ -137,16 +138,10 @@ async def create_service(
             body.category,
             body.base_price,
         )
-    except Exception as exc:
-        error_msg = str(exc).lower()
-        if "unique" in error_msg or "duplicate" in error_msg:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"A service named '{body.service_name}' already exists.",
-            )
+    except asyncpg.exceptions.UniqueViolationError:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Database error: {exc}",
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"A service named '{body.service_name}' already exists.",
         )
 
     return ServiceOut(
@@ -209,16 +204,10 @@ async def update_service(
             """,
             *params,
         )
-    except Exception as exc:
-        error_msg = str(exc).lower()
-        if "unique" in error_msg or "duplicate" in error_msg:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="A service with this name already exists.",
-            )
+    except asyncpg.exceptions.UniqueViolationError:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Database error: {exc}",
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A service with this name already exists.",
         )
 
     if row is None:
@@ -337,7 +326,7 @@ async def add_service_usage(
     Raises:
         404 — booking or active service not found.
         422 — trigger rejected the insert (booking not Checked-In).
-        500 — unexpected database error.
+        400 — any other business rule raised by the trigger.
     """
     # Verify the booking exists and capture its current status for error messages
     booking_row = await db.fetchrow(
@@ -381,10 +370,9 @@ async def add_service_usage(
             body.quantity,
             unit_price,
         )
-    except Exception as exc:
-        error_msg = str(exc).lower()
-        # The service_usage_trigger raises when booking status != 'Checked-In'
-        if "checked-in" in error_msg or "check" in error_msg or "status" in error_msg:
+    except asyncpg.exceptions.RaiseError as exc:
+        # service_usage_trigger rejects bookings that are not Checked-In
+        if "only be added to a Checked-In booking" in exc.message:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=(
@@ -393,10 +381,7 @@ async def add_service_usage(
                     f"(current status: '{booking_row['status']}')."
                 ),
             )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Database error: {exc}",
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=exc.message)
 
     line_total = round(float(row["unit_price"]) * row["quantity"], 2)
 

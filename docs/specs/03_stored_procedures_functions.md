@@ -193,6 +193,8 @@ NOTES:
 ERRORS:
   - 'Booking not found'
   - 'Booking must be Checked-In or Checked-Out to generate a bill'
+  - 'Discount must be between 0 and the bill subtotal'
+  - 'Bill total exceeds the maximum supported amount'  (total ≥ 100,000,000; bill columns are NUMERIC(10,2))
 ```
 
 ---

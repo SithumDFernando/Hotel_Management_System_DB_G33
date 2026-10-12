@@ -43,6 +43,7 @@ from datetime import date
 from typing import Optional
 from uuid import UUID
 
+import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
@@ -227,7 +228,7 @@ async def create_guest(
 
     The Pydantic GuestCreate model already validates that company_name is
     supplied when guest_type is 'Corporate'. A unique-constraint violation
-    on nic_passport or email will be caught and surfaced as HTTP 409.
+    on nic_passport or email is surfaced as HTTP 409.
     """
     try:
         row = await db.fetchrow(
@@ -257,17 +258,10 @@ async def create_guest(
             body.company_reg_number,
             body.billing_contact_name,
         )
-    except Exception as exc:
-        # Surface DB-level constraint violations (duplicate NIC/email) as 409
-        error_msg = str(exc).lower()
-        if "unique" in error_msg or "duplicate" in error_msg:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="A guest with this NIC/passport or email already exists.",
-            )
+    except asyncpg.exceptions.UniqueViolationError:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Database error: {exc}",
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A guest with this NIC/passport or email already exists.",
         )
 
     return GuestOut(**dict(row))
@@ -328,16 +322,10 @@ async def update_guest(
             """,
             *params,
         )
-    except Exception as exc:
-        error_msg = str(exc).lower()
-        if "unique" in error_msg or "duplicate" in error_msg:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="A guest with this NIC/passport or email already exists.",
-            )
+    except asyncpg.exceptions.UniqueViolationError:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Database error: {exc}",
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A guest with this NIC/passport or email already exists.",
         )
 
     if row is None:

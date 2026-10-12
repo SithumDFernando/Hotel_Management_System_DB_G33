@@ -8,10 +8,11 @@ Purpose:
     
 """
 
-from typing import Optional
+from typing import Annotated, Literal, Optional
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 from app.auth import hash_password
 from app.db import get_db
@@ -26,20 +27,28 @@ router = APIRouter()
 
 # -- Branch -------------------------------------------------------------------
 
+# Lengths mirror the branch table in db/schema/01_tables.sql
+BranchName = Annotated[str, Field(min_length=1, max_length=100)]
+BranchCity = Annotated[str, Field(min_length=1, max_length=50)]
+BranchAddress = Annotated[str, Field(min_length=1, max_length=255)]
+BranchPhone = Annotated[str, Field(min_length=1, max_length=20)]
+ManagerName = Annotated[str, Field(min_length=1, max_length=100)]
+
+
 class BranchCreate(BaseModel):
-    name: str
-    city: str
-    address: str
-    phone: str
-    manager_name: str
+    name: BranchName
+    city: BranchCity
+    address: BranchAddress
+    phone: BranchPhone
+    manager_name: ManagerName
 
 
 class BranchUpdate(BaseModel):
-    name: Optional[str] = None
-    city: Optional[str] = None
-    address: Optional[str] = None
-    phone: Optional[str] = None
-    manager_name: Optional[str] = None
+    name: Optional[BranchName] = None
+    city: Optional[BranchCity] = None
+    address: Optional[BranchAddress] = None
+    phone: Optional[BranchPhone] = None
+    manager_name: Optional[ManagerName] = None
 
 
 class BranchOut(BaseModel):
@@ -61,16 +70,17 @@ class BranchListResponse(BaseModel):
 # -- User Account -------------------------------------------------------------
 
 class UserCreate(BaseModel):
-    email: EmailStr
+    email: EmailStr = Field(max_length=100)
     password: str
     role: str                        # 'admin' | 'manager' | 'receptionist' | 'guest'
-    branch_id: Optional[str] = None
-    guest_id: Optional[str] = None
+    branch_id: Optional[UUID] = None
+    guest_id: Optional[UUID] = None
 
 
 class UserPatch(BaseModel):
     role: Optional[str] = None
-    branch_id: Optional[str] = None
+    # "" clears the branch assignment
+    branch_id: UUID | Literal[""] | None = None
 
 
 class UserOut(BaseModel):
@@ -182,7 +192,7 @@ async def create_branch(
 
 @router.put("/branches/{branch_id}")
 async def update_branch(
-    branch_id: str,
+    branch_id: UUID,
     body: BranchUpdate,
     db=Depends(get_db),
     _user=Depends(require_role("admin")),
@@ -243,7 +253,7 @@ async def update_branch(
         branch_id,
     )
 
-    return {"branch_id": branch_id, "updated_fields": changed}
+    return {"branch_id": str(branch_id), "updated_fields": changed}
 
 
 # =============================================================================
@@ -363,8 +373,8 @@ async def create_user(
         VALUES ($1, $2, $3, $4, $5::user_role)
         RETURNING account_id
         """,
-        body.guest_id or None,
-        body.branch_id or None,
+        body.guest_id,
+        body.branch_id,
         body.email,
         hashed,
         body.role,
@@ -377,7 +387,7 @@ async def create_user(
 
 @router.patch("/users/{account_id}")
 async def patch_user(
-    account_id: str,
+    account_id: UUID,
     body: UserPatch,
     db=Depends(get_db),
     _user=Depends(require_role("admin")),
@@ -413,7 +423,7 @@ async def patch_user(
 
     if body.branch_id is not None:
         # Empty string means "clear the branch assignment"
-        if body.branch_id.strip() == "":
+        if body.branch_id == "":
             new_branch_id = None
             changed.append("branch_id")
         else:
@@ -446,7 +456,7 @@ async def patch_user(
         account_id,
     )
 
-    return {"account_id": account_id, "updated_fields": changed}
+    return {"account_id": str(account_id), "updated_fields": changed}
 
 
 

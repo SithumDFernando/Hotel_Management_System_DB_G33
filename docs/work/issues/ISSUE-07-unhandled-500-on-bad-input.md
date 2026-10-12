@@ -115,6 +115,6 @@ Parametrize over every row of the problem table and assert `status_code < 500` a
 
 ## Acceptance criteria
 
-- [ ] No request in the audit list returns 500.
-- [ ] No response body contains raw Postgres text.
-- [ ] Unexpected DB errors are logged server-side with a stack trace.
+- [x] No request in the audit list returns 500.
+- [x] No response body contains raw Postgres text.
+- [x] Unexpected DB errors are logged server-side with a stack trace.

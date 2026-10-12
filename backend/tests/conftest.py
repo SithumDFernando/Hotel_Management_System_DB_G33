@@ -4,7 +4,8 @@ backend/tests/conftest.py
 Shared pytest setup.
 
 - Puts backend/ on sys.path so `app` imports work from any directory.
-- Marks the DB-backed suites with `db` (and test_phase4 with `live_api`), so
+- Marks DB-backed tests with `db` (any test using the `db_conn`/`api` fixtures,
+  plus the script-style suites) and test_phase4 with `live_api`, so
   `pytest -m "not db and not live_api"` runs only the mock-DB tests.
 - `api` fixture: an httpx client wired to the FastAPI app in-process, with
   get_db overridden to one real connection inside a transaction that is
@@ -33,14 +34,15 @@ SEED_USERS = {
     "guest": "kamal@mail.com",
 }
 
-_DB_FILES = {"test_business_logic.py", "test_db_crud.py", "test_regressions.py"}
+_DB_SCRIPT_FILES = {"test_business_logic.py", "test_db_crud.py"}
 _LIVE_API_FILES = {"test_phase4.py"}
 
 
 def pytest_collection_modifyitems(items):
     for item in items:
         name = item.path.name
-        if name in _DB_FILES or name in _LIVE_API_FILES:
+        uses_db = "db_conn" in getattr(item, "fixturenames", ())
+        if uses_db or name in _DB_SCRIPT_FILES or name in _LIVE_API_FILES:
             item.add_marker(pytest.mark.db)
         if name in _LIVE_API_FILES:
             item.add_marker(pytest.mark.live_api)

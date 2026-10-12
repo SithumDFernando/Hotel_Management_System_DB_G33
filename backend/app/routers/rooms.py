@@ -83,7 +83,7 @@ class StatusUpdateRequest(BaseModel):
 @router.get("", response_model=RoomListResponse)
 async def list_rooms(
     db=Depends(get_db),
-    branch_id: str | None = Query(None, description="Filter by branch UUID"),
+    branch_id: UUID | None = Query(None, description="Filter by branch UUID"),
     room_type: str | None = Query(None, description="Filter by room type name"),
     room_status: RoomStatus | None = Query(None, alias="status", description="Filter by status"),
     check_in: date | None = Query(None, description="Availability check: start date YYYY-MM-DD"),
@@ -209,7 +209,7 @@ async def list_rooms(
 # ─────────────────────────────────────────────────────────────────────────────
 
 @router.get("/{room_id}", response_model=RoomOut)
-async def get_room(room_id: str, db=Depends(get_db)):
+async def get_room(room_id: UUID, db=Depends(get_db)):
     """Get full details for a single room including amenities."""
     row = await db.fetchrow(
         """
@@ -276,7 +276,7 @@ async def get_room(room_id: str, db=Depends(get_db)):
 
 @router.patch("/{room_id}/status")
 async def update_room_status(
-    room_id: str,
+    room_id: UUID,
     body: StatusUpdateRequest,
     db=Depends(get_db),
     user=Depends(require_role("admin", "manager")),
@@ -298,4 +298,4 @@ async def update_room_status(
             detail=f"Room {room_id} not found",
         )
 
-    return {"room_id": room_id, "status": body.status}
+    return {"room_id": str(room_id), "status": body.status}

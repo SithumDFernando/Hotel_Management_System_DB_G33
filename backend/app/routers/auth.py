@@ -14,7 +14,9 @@ Endpoints:
 """
 
 from datetime import date
+from uuid import UUID
 
+import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr, Field
 
@@ -44,8 +46,8 @@ class RegisterRequest(BaseModel):
     email: str
     password: str
     role: str = "guest"           # default for self-registration
-    branch_id: str | None = None  # required for receptionist/manager
-    guest_id: str | None = None   # required for guest role
+    branch_id: UUID | None = None  # required for receptionist/manager
+    guest_id: UUID | None = None   # required for guest role
 
 
 class SignupRequest(BaseModel):
@@ -161,15 +163,12 @@ async def signup(body: SignupRequest, db=Depends(get_db)):
                 hashed,
                 guest_id,
             )
-    except Exception as exc:
-        msg = str(exc).lower()
-        if "unique" in msg or "duplicate" in msg:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="A guest with this NIC/passport or email already exists. "
-                       "Please contact the front desk.",
-            )
-        raise
+    except asyncpg.exceptions.UniqueViolationError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A guest with this NIC/passport or email already exists. "
+                   "Please contact the front desk.",
+        )
 
     return {"account_id": str(account_id), "guest_id": str(guest_id)}
 

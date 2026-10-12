@@ -12,6 +12,17 @@
 - Dates are `YYYY-MM-DD`, timestamps are ISO 8601.
 - Pagination: `?page=1&per_page=20` (default 20, max 100).
 - Error responses: `{ "detail": "message" }` with appropriate HTTP status.
+- `422` validation errors (malformed UUID or date, unknown enum value, string longer than its DB column, number out of range) use FastAPI's list form: `{ "detail": [{ "loc": [...], "msg": "...", "type": "..." }] }`.
+- Request limits mirror the DB columns (`VARCHAR(n)`, `NUMERIC(10,2)` → max `99999999.99` with 2 decimal places).
+- Database errors never expose Postgres text. Unmapped DB errors return `500 { "detail": "Internal server error" }` and are logged server-side; constraint errors map to:
+
+  | DB error | Status | `detail` |
+  |---|---|---|
+  | unique violation | 409 | A record with these details already exists. |
+  | exclusion violation | 409 | Room is not available for the selected dates. |
+  | foreign-key violation | 404 | A referenced record does not exist. |
+  | check / not-null violation | 422 | The request violates a data rule. / A required field is missing. |
+  | value too long / numeric overflow / other data error | 422 | A value is too long. / A numeric value is out of range. / Invalid input. |
 
 ---
 
@@ -218,7 +229,7 @@
 }
 ```
 
-**Errors:** `409 NIC/Passport or email already exists`
+**Errors:** `409 NIC/Passport or email already exists` · `422` field too long/short (`full_name` 2–150, `nic_passport` 4–20, `email` valid and ≤ 100, `phone` 7–20, `nationality` ≤ 50, `gender` ≤ 10, company fields ≤ 150 / reg. no. ≤ 50)
 
 ### GET `/api/guests/:guest_id`
 > Receptionist, Manager, Admin, or the guest themselves
@@ -263,7 +274,7 @@ Calls `create_booking()` stored procedure (SERIALIZABLE).
 }
 ```
 
-**Errors:** `409 Room is not available for selected dates (double-booking)`
+**Errors:** `404 Guest not found` / `404 Room not found` · `409 Room is not available for selected dates (double-booking)` · `422` malformed IDs/dates, `payment_option` longer than 50
 
 ### GET `/api/bookings`
 > Receptionist (own branch), Manager (own branch), Admin (all), Guest (own bookings)
@@ -424,7 +435,7 @@ Records chargeable service order. Trigger checks that booking is 'Checked-In' an
 }
 ```
 
-**Errors:** `422 Unprocessable Entity (Booking is not Checked-In or service inactive)`
+**Errors:** `404` booking or active service not found · `422 Unprocessable Entity (Booking is not Checked-In)` · `422` `quantity` outside 1–1000
 
 ### GET `/api/services/:booking_id/usage`
 > Receptionist, Manager, Admin, owning Guest
@@ -456,7 +467,9 @@ Records chargeable service order. Trigger checks that booking is 'Checked-In' an
 ### POST `/api/billing/:booking_id/generate`
 > Receptionist, Manager, Admin
 
-Calls `generate_bill()` stored procedure (with optional `?discount=0.00` query parameter).
+Calls `generate_bill()` stored procedure (with optional `?discount=0.00` query parameter, 0–99999999.99, 2 decimal places).
+
+**Errors:** `404 Booking not found` · `400` booking not Checked-In/Checked-Out, discount larger than the subtotal, or `Bill total exceeds the maximum supported amount` · `422` invalid `discount`
 
 **Response (200):** `BillOut` object:
 ```json

@@ -3,6 +3,7 @@ backend/app/routers/bookings.py
 """
 
 from datetime import date
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from typing import Optional
@@ -33,7 +34,7 @@ async def create_booking(
         # Calls the stored procedure.
         result = await db.fetchrow(
             "CALL create_booking($1::UUID, $2::UUID, $3::DATE, $4::DATE, $5::VARCHAR, NULL)",
-            str(body.guest_id), str(body.room_id), body.check_in_date, body.check_out_date, body.payment_option
+            body.guest_id, body.room_id, body.check_in_date, body.check_out_date, body.payment_option
         )
         if not result or "p_booking_id" not in result:
              raise HTTPException(status_code=500, detail="Failed to create booking")
@@ -50,6 +51,8 @@ async def create_booking(
         msg = str(e)
         if "already booked" in msg or "Double booking" in msg or "not available" in msg:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=msg)
+        if "not found" in msg.lower():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=msg)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg)
 
 
@@ -59,9 +62,9 @@ async def list_bookings(
     db=Depends(get_db),
     user: dict = Depends(require_role("receptionist", "manager", "admin", "guest")),
     booking_status: BookingStatus | None = Query(None, alias="status", description="Filter by status"),
-    branch_id: str | None = Query(None, description="Filter by branch UUID"),
-    guest_id: str | None = Query(None, description="Filter by guest UUID"),
-    room_id: str | None = Query(None, description="Filter by room UUID"),
+    branch_id: UUID | None = Query(None, description="Filter by branch UUID"),
+    guest_id: UUID | None = Query(None, description="Filter by guest UUID"),
+    room_id: UUID | None = Query(None, description="Filter by room UUID"),
     from_date: date | None = Query(None, alias="from", description="Check-out >= this date"),
     to_date: date | None = Query(None, alias="to", description="Check-in <= this date"),
     page: int = Query(1, ge=1, description="Page number"),
@@ -96,17 +99,17 @@ async def list_bookings(
     if branch_id and user_role == "admin":
         param_idx += 1
         conditions.append(f"r.branch_id = ${param_idx}::UUID")
-        params.append(str(branch_id))
+        params.append(branch_id)
 
     if guest_id and user_role != "guest":
         param_idx += 1
         conditions.append(f"b.guest_id = ${param_idx}::UUID")
-        params.append(str(guest_id))
+        params.append(guest_id)
 
     if room_id:
         param_idx += 1
         conditions.append(f"b.room_id = ${param_idx}::UUID")
-        params.append(str(room_id))
+        params.append(room_id)
 
     if from_date:
         param_idx += 1
@@ -169,7 +172,7 @@ async def list_bookings(
 # GET /api/bookings/{booking_id}
 @router.get("/{booking_id}", response_model=BookingDetailOut)
 async def get_booking(
-    booking_id: str,
+    booking_id: UUID,
     db=Depends(get_db),
     user: dict = Depends(require_role("receptionist", "manager", "admin", "guest"))
 ):
@@ -215,7 +218,7 @@ async def get_booking(
 # PATCH /api/bookings/{booking_id}/checkin
 @router.patch("/{booking_id}/checkin", response_model=BookingCheckInResponse)
 async def checkin_booking(
-    booking_id: str,
+    booking_id: UUID,
     db=Depends(get_db),
     user: dict = Depends(require_role("receptionist", "manager", "admin"))
 ):
@@ -243,7 +246,7 @@ async def checkin_booking(
 # PATCH /api/bookings/{booking_id}/checkout
 @router.patch("/{booking_id}/checkout", response_model=BookingCheckOutResponse)
 async def checkout_booking(
-    booking_id: str,
+    booking_id: UUID,
     db=Depends(get_db),
     user: dict = Depends(require_role("receptionist", "manager", "admin"))
 ):
@@ -286,7 +289,7 @@ async def checkout_booking(
 # PATCH /api/bookings/{booking_id}/cancel
 @router.patch("/{booking_id}/cancel", response_model=BookingCancelResponse)
 async def cancel_booking(
-    booking_id: str,
+    booking_id: UUID,
     body: BookingStatusUpdate,
     db=Depends(get_db),
     user: dict = Depends(require_role("receptionist", "manager", "admin", "guest"))

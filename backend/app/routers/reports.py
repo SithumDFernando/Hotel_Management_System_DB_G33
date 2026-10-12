@@ -7,6 +7,7 @@ backend/app/routers/reports.py
 from datetime import date as Date
 from decimal import Decimal
 from typing import Optional
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
@@ -127,7 +128,7 @@ class TopServicesResponse(BaseModel):
 # Helper: apply branch scoping for managers
 # =============================================================================
 
-def _resolve_branch(user: dict, branch_id_param: Optional[str]) -> Optional[str]:
+def _resolve_branch(user: dict, branch_id_param: Optional[UUID]) -> Optional[str]:
     """
     If the logged-in user is a manager, ignore any branch_id query param and
     force the filter to their own branch. Admins may pass any branch_id or
@@ -135,7 +136,7 @@ def _resolve_branch(user: dict, branch_id_param: Optional[str]) -> Optional[str]
     """
     if user["role"] == "manager":
         return str(user["branch_id"]) if user["branch_id"] else None
-    return branch_id_param
+    return str(branch_id_param) if branch_id_param else None
 
 
 # =============================================================================
@@ -149,7 +150,7 @@ def _resolve_branch(user: dict, branch_id_param: Optional[str]) -> Optional[str]
 async def get_occupancy_report(
     db=Depends(get_db),
     user=Depends(require_role("manager", "admin")),
-    branch_id: Optional[str] = Query(None, description="Filter by branch UUID"),
+    branch_id: Optional[UUID] = Query(None, description="Filter by branch UUID"),
     on_date: Optional[Date] = Query(None, alias="date", description="Point-in-time date YYYY-MM-DD"),
     from_date: Optional[Date] = Query(None, description="Range start date YYYY-MM-DD"),
     to_date: Optional[Date] = Query(None, description="Range end date YYYY-MM-DD"),
@@ -240,7 +241,7 @@ async def get_occupancy_report(
 async def get_billing_summary(
     db=Depends(get_db),
     user=Depends(require_role("manager", "admin")),
-    branch_id: Optional[str] = Query(None, description="Filter by branch UUID"),
+    branch_id: Optional[UUID] = Query(None, description="Filter by branch UUID"),
     unpaid_only: Optional[bool] = Query(None, description="If true, return only records with outstanding balance"),
 ):
     """
@@ -312,7 +313,7 @@ async def get_billing_summary(
 async def get_service_usage(
     db=Depends(get_db),
     user=Depends(require_role("manager", "admin")),
-    branch_id: Optional[str] = Query(None, description="Filter by branch UUID"),
+    branch_id: Optional[UUID] = Query(None, description="Filter by branch UUID"),
 ):
     """
     Service usage breakdown from v_service_usage_breakdown.
@@ -371,7 +372,7 @@ async def get_monthly_revenue(
     user=Depends(require_role("manager", "admin")),
     year: int = Query(..., description="Year (e.g. 2026)", ge=2000, le=2100),
     month: Optional[int] = Query(None, description="Month number 1-12", ge=1, le=12),
-    branch_id: Optional[str] = Query(None, description="Filter by branch UUID"),
+    branch_id: Optional[UUID] = Query(None, description="Filter by branch UUID"),
 ):
     """
     Monthly revenue breakdown from v_monthly_revenue.

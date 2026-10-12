@@ -26,7 +26,9 @@ Source: full-stack audit run on **2026-10-12** (backend API probes, DB-level con
 
 ## Phase 2: Input handling foundation
 
-- [ ] **4. [ISSUE-07](ISSUE-07-unhandled-500-on-bad-input.md)** 🟠 Typed UUID/date params, schema limits, global asyncpg exception handler, remove leaked DB errors
+- [x] **4. [ISSUE-07](ISSUE-07-unhandled-500-on-bad-input.md)** 🟠 Typed UUID/date params, schema limits, global asyncpg exception handler, remove leaked DB errors
+  - ✅ Covered by `tests/test_input_validation.py` (45 tests; 33 of the DB-backed ones fail on the pre-fix code). Verified on a fresh `run_all.sql` build.
+  - ↪ `payment_option` / `payment_method` are length-limited only; the `Literal` vocabulary is left to ISSUE-08 (task 12), which owns the payment vocabulary.
 
 ## Phase 3: Access control
 
