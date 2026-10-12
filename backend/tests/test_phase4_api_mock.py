@@ -311,6 +311,11 @@ async def run_tests():
     app.dependency_overrides.clear()
     return failed == 0
 
+# pytest entry point (the suite above also runs as a plain script)
+async def test_phase4_mock_suite():
+    assert await run_tests(), f"{failed} check(s) failed"
+
+
 if __name__ == "__main__":
     success = asyncio.run(run_tests())
     if not success:

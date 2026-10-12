@@ -138,12 +138,22 @@ Run these inside `backend/` with the virtual environment activated:
 
 ```bash
 cd backend
-python tests/test_db_crud.py              # Smoke test: DB connection & CRUD permissions
-python tests/test_business_logic.py       # Core logic: double booking trigger & payment rules
-python tests/test_frontend_support_api.py # Mock API: auth & branches routes
-python tests/test_phase4_api_mock.py      # Mock API: RBAC & admin endpoints
-python tests/test_phase4.py               # Live verification: views & analytics endpoints
+pip install -r requirements-dev.txt       # pytest + pytest-asyncio (once)
+pytest -q                                 # everything (needs seeded DB + API on :8000)
+pytest -q -m "not live_api"               # skip the suite that needs a running API server
+pytest -q -m "not db and not live_api"    # mock-DB tests only, no database needed
 ```
+
+| File | Covers | Needs |
+|---|---|---|
+| `tests/test_db_crud.py` | DB connection & CRUD permissions | DB |
+| `tests/test_business_logic.py` | Double-booking trigger, payment rules | DB |
+| `tests/test_regressions.py` | One test per fixed issue in `docs/work/issues/` (rolled back after each test) | DB |
+| `tests/test_frontend_support_api.py` | Auth & branches routes | — (mock DB) |
+| `tests/test_phase4_api_mock.py` | RBAC & admin endpoints | — (mock DB) |
+| `tests/test_phase4.py` | Views & analytics endpoints | DB + API on :8000 |
+
+The older suites can still be run as plain scripts, e.g. `python tests/test_phase4.py`.
 
 To verify the frontend production build:
 ```bash

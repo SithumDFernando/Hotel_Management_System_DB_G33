@@ -1,0 +1,11 @@
+# =============================================================================
+# backend/requirements-dev.txt
+# =============================================================================
+# Test tooling on top of the runtime dependencies.
+#   pip install -r requirements-dev.txt
+#   pytest -q                       # from backend/
+# =============================================================================
+
+-r requirements.txt
+pytest==8.4.2
+pytest-asyncio==1.2.0

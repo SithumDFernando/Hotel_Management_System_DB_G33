@@ -198,6 +198,12 @@ async def run_business_logic_tests():
     else:
         print(f"  {RED}{failed} check(s) failed.{RESET}")
 
+# pytest entry point (the suite above also runs as a plain script)
+async def test_business_logic_suite():
+    await run_business_logic_tests()
+    assert failed == 0, f"{failed} business-logic check(s) failed"
+
+
 if __name__ == "__main__":
     asyncio.run(run_business_logic_tests())
     # Non-zero exit lets CI detect failed checks

@@ -170,5 +170,10 @@ async def run_tests():
     return failed == 0
 
 
+# pytest entry point (the suite above also runs as a plain script)
+async def test_frontend_support_suite():
+    assert await run_tests(), f"{failed} check(s) failed"
+
+
 if __name__ == "__main__":
     sys.exit(0 if asyncio.run(run_tests()) else 1)

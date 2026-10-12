@@ -17,9 +17,12 @@ Source: full-stack audit run on **2026-10-12** (backend API probes, DB-level con
 
 ## Phase 1: Unbreak the app (small, isolated, user-visible)
 
-- [ ] **1. [ISSUE-01](ISSUE-01-date-filters-return-500.md)** 🔴 Date filters return 500 (room search, occupancy, admin bookings)
-- [ ] **2. [ISSUE-02](ISSUE-02-status-filter-returns-500.md)** 🔴 Status filter returns 500 (Receptionist dashboard)
-- [ ] **3. Regression tests for 1–2** in `backend/tests/`. Set up the pytest config from [ISSUE-13 §13.9](ISSUE-13-low-priority-hardening.md#139-test-suite-doesnt-run-under-pytest) here, so every later fix lands with tests in one place.
+- [x] **1. [ISSUE-01](ISSUE-01-date-filters-return-500.md)** 🔴 Date filters return 500 (room search, occupancy, admin bookings)
+  - ⏳ API fixed and covered by `test_regressions.py`; browser check of the affected screens still pending.
+- [x] **2. [ISSUE-02](ISSUE-02-status-filter-returns-500.md)** 🔴 Status filter returns 500 (Receptionist dashboard)
+  - ⏳ API fixed and covered by `test_regressions.py`; browser check of the Receptionist dashboard and admin Bookings tab still pending.
+- [x] **3. Regression tests for 1–2** in `backend/tests/`. Set up the pytest config from [ISSUE-13 §13.9](ISSUE-13-low-priority-hardening.md#139-test-suite-doesnt-run-under-pytest) here, so every later fix lands with tests in one place.
+  - ✅ `backend/pytest.ini` + `requirements-dev.txt` + `tests/conftest.py`; `pytest -q` runs every suite (28 tests). 20 of the 23 new tests fail on the pre-fix code. CI now runs pytest.
 
 ## Phase 2: Input handling foundation
 
@@ -73,12 +76,12 @@ Source: full-stack audit run on **2026-10-12** (backend API probes, DB-level con
 
 Leave blank until agreed in the team channel.
 
-| Task | Owner |
-|---|---|
-| 1–3 | |
-| 4 | |
-| 5–7 | |
-| 8–12 | |
-| 13 | |
-| 14 | |
-| 15–17 | |
+| Task  | Owner |
+| ----- | ----- |
+| 1–3   |       |
+| 4     |       |
+| 5–7   |       |
+| 8–12  |       |
+| 13    |       |
+| 14    |       |
+| 15–17 |       |

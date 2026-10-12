@@ -131,6 +131,6 @@ Update `.github/workflows/ci.yml` to run `pytest -q` against the CI database.
 - [ ] 13.6 Room list query count
 - [ ] 13.7 Remove the password from `backend/.env`
 - [ ] 13.8 Port-clash detection in setup scripts
-- [ ] 13.9 pytest configuration
+- [x] 13.9 pytest configuration (done in TASKLIST task 3)
 - [ ] 13.10 Frontend lint
 - [ ] 13.11 Scope decisions documented in specs
