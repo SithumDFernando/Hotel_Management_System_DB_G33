@@ -1,0 +1,82 @@
+# =============================================================================
+# docker-compose.yml — full SkyNest stack
+# =============================================================================
+# Usage:
+#   cp .env.example .env          # optional — defaults below work as-is
+#   docker compose up --build
+#
+#   App (React):   http://localhost:8080
+#   API docs:      http://localhost:8000/docs
+#   pgAdmin:       http://localhost:5050
+#   Postgres:      localhost:5432  (set DB_PORT=5433 if a local Postgres
+#                                   already uses 5432)
+#
+# Reset the database (re-runs db/run_all.sql + seed data):
+#   docker compose down -v && docker compose up --build
+# =============================================================================
+
+name: skynest
+
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: skynest_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-skynest_dev_pass}
+      POSTGRES_DB: skynest
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Repo db/ folder — run_all.sql \i's its files relative to here
+      - ./db:/db:ro
+      # Executed once, only when the pgdata volume is empty
+      - ./db/docker/init.sh:/docker-entrypoint-initdb.d/init.sh:ro
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U skynest_user -d skynest"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  pgadmin:
+    image: dpage/pgadmin4:8
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@skynest.dev}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+      # Pre-registers the "SkyNest (Docker)" server pointing at the db service
+      - ./db/docker/pgadmin-servers.json:/pgadmin4/servers.json:ro
+    ports:
+      - "${PGADMIN_PORT:-5050}:80"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql://skynest_user:${POSTGRES_PASSWORD:-skynest_dev_pass}@db:5432/skynest
+      SECRET_KEY: ${SECRET_KEY:-dev_only_change_me_0123456789abcdef0123456789abcdef}
+      ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-1440}
+      FRONTEND_ORIGIN: http://localhost:${FRONTEND_PORT:-8080}
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  pgadmin_data:
