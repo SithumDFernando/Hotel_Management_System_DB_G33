@@ -115,18 +115,34 @@ Or manually:
 
 ---
 
-## Test Accounts & Credentials
+<a id="demo-user-login-credentials"></a>
+<a id="test-accounts--credentials"></a>
+## Demo User Login Credentials & Test Accounts
 
-Once seed data is loaded, you can log in with:
+Once seed data is loaded (`db/run_all.sql` or Docker compose initialization), all seeded test accounts use the default password: **`SkyNest@2026`**.
 
-| Email                    | Password       | Role           | Access Permissions             |
-| :----------------------- | :------------- | :------------- | :----------------------------- |
-| `admin@skynest.lk`       | `SkyNest@2026` | `ADMIN`        | System administrator, user mgmt, full reports |
-| `mgr.colombo@skynest.lk` | `SkyNest@2026` | `MANAGER`      | Branch performance, occupancy & revenue analytics |
-| `rec.colombo@skynest.lk` | `SkyNest@2026` | `RECEPTIONIST` | Front desk, check-in/out, bills & payments |
-| `kamal@mail.com`         | `SkyNest@2026` | `GUEST`        | Browse catalog, book rooms, view personal invoices |
+### Application User Logins
 
-*(In local development, the login page features one-click demo chips to instantly log into each role).*
+| Email | Password | Role | Branch / Scope | Description & Permissions |
+| :--- | :--- | :--- | :--- | :--- |
+| `admin@skynest.lk` | `SkyNest@2026` | `ADMIN` | Global (All Branches) | Superuser: branch setup, user management, full audit reports |
+| `mgr.colombo@skynest.lk` | `SkyNest@2026` | `MANAGER` | Colombo | Colombo branch manager: revenue, occupancy analytics & reports |
+| `mgr.kandy@skynest.lk` | `SkyNest@2026` | `MANAGER` | Kandy | Kandy branch manager: revenue, occupancy analytics & reports |
+| `rec.colombo@skynest.lk` | `SkyNest@2026` | `RECEPTIONIST` | Colombo | Colombo front desk: room assignment, check-in/out, folios & bills |
+| `rec.galle@skynest.lk` | `SkyNest@2026` | `RECEPTIONIST` | Galle | Galle front desk: room assignment, check-in/out, folios & bills |
+| `kamal@mail.com` | `SkyNest@2026` | `GUEST` | Guest Profile (Kamal) | Individual guest: catalog browsing, room bookings & invoices |
+| `nimali@mail.com` | `SkyNest@2026` | `GUEST` | Guest Profile (Nimali) | Individual guest: catalog browsing, room bookings & invoices |
+
+> [!TIP]
+> **One-Click Demo Logins:** On the web login screen ([`http://localhost:5173/login`](http://localhost:5173/login) or [`http://localhost:8080/login`](http://localhost:8080/login)), click any of the **Demo Account chips** (Admin, Manager, Reception, Guest) to immediately autofill credentials and sign in.
+
+### Database & Service Infrastructure Logins
+
+| Service | Access URL / Host | Username / Email | Password | Database |
+| :--- | :--- | :--- | :--- | :--- |
+| **PostgreSQL** | `localhost:5432` | `skynest_user` | `skynest_dev_pass` | `skynest` |
+| **pgAdmin 4** | [`http://localhost:5050`](http://localhost:5050) | `admin@skynest.dev` | `skynest_dev_pass` | `skynest` |
+| **FastAPI Swagger** | [`http://localhost:8000/docs`](http://localhost:8000/docs) | *(Use any seed email above)* | `SkyNest@2026` | — |
 
 ---
 
