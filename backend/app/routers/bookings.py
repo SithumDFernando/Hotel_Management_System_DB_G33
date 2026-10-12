@@ -14,7 +14,7 @@ from app.schemas.booking import (
     BookingCreate, BookingOut, BookingListOut, 
     BookingListResponse, GuestInfo, RoomInfo, BookingDetailOut,
     BookingCheckInResponse, BookingCheckOutResponse, BillSummary,
-    BookingStatusUpdate, BookingCancelResponse
+    BookingStatusUpdate, BookingCancelResponse, BookingStatus
 )
 
 router = APIRouter()
@@ -58,7 +58,7 @@ async def create_booking(
 async def list_bookings(
     db=Depends(get_db),
     user: dict = Depends(require_role("receptionist", "manager", "admin", "guest")),
-    booking_status: str | None = Query(None, alias="status", description="Filter by status"),
+    booking_status: BookingStatus | None = Query(None, alias="status", description="Filter by status"),
     branch_id: str | None = Query(None, description="Filter by branch UUID"),
     guest_id: str | None = Query(None, description="Filter by guest UUID"),
     room_id: str | None = Query(None, description="Filter by room UUID"),
@@ -90,7 +90,7 @@ async def list_bookings(
 
     if booking_status:
         param_idx += 1
-        conditions.append(f"b.status = ${param_idx}::VARCHAR")
+        conditions.append(f"b.status = ${param_idx}::booking_status")
         params.append(booking_status)
 
     if branch_id and user_role == "admin":

@@ -61,4 +61,4 @@ asyncpg.exceptions.InvalidTextRepresentationError: invalid input value for enum 
 
 - [ ] Receptionist dashboard shows today's arrivals and in-house guests.
 - [ ] Admin Bookings tab status filter works.
-- [ ] No status value causes a 500.
+- [x] No status value causes a 500.

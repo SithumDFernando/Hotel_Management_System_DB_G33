@@ -27,6 +27,7 @@ from pydantic import BaseModel
 
 from app.db import get_db
 from app.dependencies import require_role
+from app.schemas.room import RoomStatus
 
 router = APIRouter()
 
@@ -72,7 +73,7 @@ class RoomListResponse(BaseModel):
 
 
 class StatusUpdateRequest(BaseModel):
-    status: str  # "Available", "Occupied", or "Maintenance"
+    status: RoomStatus
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -84,7 +85,7 @@ async def list_rooms(
     db=Depends(get_db),
     branch_id: str | None = Query(None, description="Filter by branch UUID"),
     room_type: str | None = Query(None, description="Filter by room type name"),
-    room_status: str | None = Query(None, alias="status", description="Filter by status"),
+    room_status: RoomStatus | None = Query(None, alias="status", description="Filter by status"),
     check_in: date | None = Query(None, description="Availability check: start date YYYY-MM-DD"),
     check_out: date | None = Query(None, description="Availability check: end date YYYY-MM-DD"),
 ):
@@ -284,14 +285,6 @@ async def update_room_status(
     Manually update a room's status (e.g. mark as Maintenance).
     Only admin and manager roles can do this.
     """
-    # Validate the status value
-    valid_statuses = {"Available", "Occupied", "Maintenance"}
-    if body.status not in valid_statuses:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid status. Must be one of: {', '.join(valid_statuses)}",
-        )
-
     result = await db.execute(
         "UPDATE room SET status = $1::room_status WHERE room_id = $2::UUID",
         body.status,

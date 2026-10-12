@@ -1,6 +1,10 @@
 from pydantic import BaseModel, model_validator
 from uuid import UUID
 from datetime import date, datetime
+from typing import Literal
+
+# Mirrors the `booking_status` enum in db/schema/01_tables.sql
+BookingStatus = Literal["Booked", "Checked-In", "Checked-Out", "Cancelled"]
 
 class BookingCreate(BaseModel):
     """Validated request body for POST /api/bookings."""

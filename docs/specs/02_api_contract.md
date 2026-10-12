@@ -135,12 +135,21 @@
 
 **Errors:**
 - `400` only one of `check_in` / `check_out` given, or `check_out <= check_in`
-- `422` malformed date
+- `422` malformed date, or `status` not one of `Available`, `Occupied`, `Maintenance`
 
 ### GET `/api/rooms/:room_id`
 > Public
 
 **Response (200):** Single room object (same shape as above).
+
+### PATCH `/api/rooms/:room_id/status`
+> Manager, Admin
+
+**Request:** `{ "status": "Maintenance" }` (`Available` | `Occupied` | `Maintenance`)
+
+**Response (200):** `{ "room_id": "uuid-...", "status": "Maintenance" }`
+
+**Errors:** `404 Room not found` · `422` unknown status value
 
 ---
 
@@ -283,7 +292,7 @@ Calls `create_booking()` stored procedure (SERIALIZABLE).
 
 **Errors:**
 - `400` `to` is before `from`
-- `422` malformed date
+- `422` malformed date, or `status` not one of `Booked`, `Checked-In`, `Checked-Out`, `Cancelled`
 
 ### GET `/api/bookings/:booking_id`
 > Receptionist, Manager, Admin, or owning Guest
