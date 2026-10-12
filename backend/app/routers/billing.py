@@ -17,7 +17,7 @@ import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.db import get_db
-from app.dependencies import assert_guest_owns_booking, require_role
+from app.dependencies import assert_booking_access, require_role
 from app.schemas.billing import BillOut, PaymentCreate, PaymentOut
 
 router = APIRouter()           
@@ -86,6 +86,7 @@ async def generate_bill(
     user=Depends(require_role(*STAFF_ROLES)),
 ):
     """Generate the bill for a booking, or recalculate it if one exists."""
+    await assert_booking_access(db, user, booking_id)
     try:
         await db.execute(
             "CALL generate_bill($1::UUID, $2::NUMERIC)", booking_id, discount
@@ -105,7 +106,7 @@ async def get_bill(
     user=Depends(require_role(*STAFF_ROLES, "guest")),
 ):
     """Get the invoice/bill details for a booking (guests: own bookings only)."""
-    await assert_guest_owns_booking(db, user, booking_id)
+    await assert_booking_access(db, user, booking_id)
     row = await db.fetchrow(BILL_SELECT, booking_id)
     if row is None:
         raise HTTPException(
@@ -123,6 +124,7 @@ async def create_payment(
     user=Depends(require_role(*STAFF_ROLES)),
 ):
     """Record a payment against a booking's bill (partial payments allowed)."""
+    await assert_booking_access(db, user, body.booking_id)
     try:
         await db.execute(
             "CALL record_payment($1::UUID, $2::NUMERIC, $3, $4)",
@@ -155,15 +157,7 @@ async def list_payments(
     user=Depends(require_role(*STAFF_ROLES, "guest")),
 ):
     """List the payment history for a booking, newest first (guests: own only)."""
-    await assert_guest_owns_booking(db, user, booking_id)
-    exists = await db.fetchval(
-        "SELECT 1 FROM booking WHERE booking_id = $1::UUID", booking_id
-    )
-    if not exists:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Booking {booking_id} not found",
-        )
+    await assert_booking_access(db, user, booking_id)
 
     rows = await db.fetch(
         """

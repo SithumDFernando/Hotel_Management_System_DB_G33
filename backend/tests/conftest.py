@@ -78,12 +78,15 @@ async def api(db_conn):
 
 @pytest.fixture
 def login(api):
-    """`headers = await login("admin")` -> Authorization header for a seed user."""
+    """
+    `headers = await login("admin")` -> Authorization header for a seed user.
+    Takes a role from SEED_USERS or any seed email (e.g. "rec.galle@skynest.lk").
+    """
 
     async def _login(role: str) -> dict:
         resp = await api.post(
             "/auth/login",
-            json={"email": SEED_USERS[role], "password": SEED_PASSWORD},
+            json={"email": SEED_USERS.get(role, role), "password": SEED_PASSWORD},
         )
         assert resp.status_code == 200, resp.text
         return {"Authorization": f"Bearer {resp.json()['access_token']}"}

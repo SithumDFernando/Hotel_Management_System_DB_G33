@@ -10,4 +10,4 @@ export const getOccupancy = get('occupancy'); // { branch_id, date | from_date,t
 export const getBillingSummary = get('billing-summary'); // { branch_id, unpaid_only }
 export const getServiceUsage = get('service-usage'); // { branch_id }
 export const getMonthlyRevenue = get('monthly-revenue'); // { year (required), month, branch_id }
-export const getTopServices = get('top-services'); // { limit } — not branch-scoped
+export const getTopServices = get('top-services'); // { limit, branch_id }

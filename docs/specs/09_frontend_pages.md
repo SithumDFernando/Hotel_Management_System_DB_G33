@@ -155,7 +155,7 @@ Tabs (URL `?tab=`): **Overview** (KPIs, 6-month stacked revenue chart, top servi
 
 **Components used:** `Navbar`, `ReportTable`, `ReportsPanel`, `BranchOverview`, `RoomManager`, `CatalogueManager`
 
-**Visualization:** `recharts` (route is lazy-loaded). Revenue counts checked-out stays only; top-services is not branch-scoped by the API.
+**Visualization:** `recharts` (route is lazy-loaded). Revenue counts checked-out stays only. Top services are scoped like the other reports: managers see their own branch (ranked within it), admins see all branches or the selected one.
 
 ---
 

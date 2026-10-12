@@ -25,7 +25,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.db import get_db
-from app.dependencies import require_role
+from app.dependencies import assert_room_access, require_role
 from app.schemas.room import (
     AmenityInfo,
     BranchInfo,
@@ -246,19 +246,14 @@ async def update_room_status(
 ):
     """
     Manually update a room's status (e.g. mark as Maintenance).
-    Only admin and manager roles can do this.
+    Only admin and manager roles can do this; managers only for rooms in
+    their own branch.
     """
-    result = await db.execute(
+    await assert_room_access(db, user, room_id)
+    await db.execute(
         "UPDATE room SET status = $1::room_status WHERE room_id = $2::UUID",
         body.status,
         room_id,
     )
-
-    # asyncpg returns "UPDATE N" — check if any row was actually updated
-    if result == "UPDATE 0":
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Room {room_id} not found",
-        )
 
     return {"room_id": str(room_id), "status": body.status}

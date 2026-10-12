@@ -165,7 +165,7 @@ async def test_duplicate_guest_is_409(api, login):
 
 async def test_usage_on_non_checked_in_booking_is_422(api, login):
     resp = await api.post(
-        "/services/30000000-0000-0000-0000-000000000003/usage",  # Booked
+        "/services/30000000-0000-0000-0000-000000000002/usage",  # Colombo, Checked-Out
         json={"service_id": ROOM_SERVICE, "usage_date": "2026-10-12", "quantity": 1},
         headers=await login("receptionist"),
     )

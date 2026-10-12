@@ -334,29 +334,45 @@ async def get_monthly_revenue(
 
 # =============================================================================
 # GET /api/reports/top-services
-#   Query params: limit? (default 10)
-#   Queries: SELECT * FROM v_top_services LIMIT :limit
+#   Query params: branch_id?, limit? (default 10)
+#   Queries: v_top_services (all branches) or v_top_services_by_branch
+#   Managers: auto-filter to their branch_id.
 #   Access: manager, admin.
 
-# Database view used: v_top_services
+# Database views used: v_top_services, v_top_services_by_branch
 # =============================================================================
 
 @router.get("/top-services", response_model=TopServicesResponse)
 async def get_top_services(
     db=Depends(get_db),
     user=Depends(require_role("manager", "admin")),
+    branch_id: Optional[UUID] = Query(None, description="Filter by branch UUID (admin only)"),
     limit: int = Query(10, description="Maximum number of services to return", ge=1, le=100),
 ):
     """
-    Top services ranked by usage from v_top_services.
+    Top services ranked by usage (RANK() OVER total_quantity DESC).
+    - Managers are automatically scoped to their own branch, ranked within it.
+    - Admins see all branches combined, or one branch via ?branch_id=.
     Returns services in rank order (most used first).
-    The view uses RANK() OVER (ORDER BY total_quantity DESC).
-    Access: manager, admin.
     """
-    rows = await db.fetch(
-        "SELECT * FROM v_top_services LIMIT $1",
-        limit,
-    )
+    effective_branch = _resolve_branch(user, branch_id)
+
+    if effective_branch:
+        rows = await db.fetch(
+            """
+            SELECT * FROM v_top_services_by_branch
+            WHERE branch_id = $1::UUID
+            ORDER BY usage_rank, service_name
+            LIMIT $2
+            """,
+            effective_branch,
+            limit,
+        )
+    else:
+        rows = await db.fetch(
+            "SELECT * FROM v_top_services ORDER BY usage_rank, service_name LIMIT $1",
+            limit,
+        )
 
     report = [
         TopServiceRow(

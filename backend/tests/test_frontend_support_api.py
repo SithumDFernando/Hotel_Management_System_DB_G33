@@ -125,6 +125,7 @@ async def run_tests():
         # ── guests reading their own billing data ───────────────────────────
         print("\n-- Guest access to bill / payments / service usage (own bookings only)")
         my_guest, booking_id = uuid4(), uuid4()
+        booking_owner = {"guest_id": my_guest}  # flipped below to someone else
         from datetime import datetime
         from decimal import Decimal
 
@@ -142,14 +143,16 @@ async def run_tests():
                         "branch_id": None, "guest_id": my_guest}
             if "FROM bill" in query:
                 return bill_row
+            if "FROM booking b" in query:  # assert_booking_access lookup
+                return {"booking_id": booking_id, "guest_id": booking_owner["guest_id"],
+                        "room_id": uuid4(), "branch_id": uuid4(), "status": "Checked-Out"}
             return None
 
         conn.fetchrow.side_effect = guest_fetchrow
         conn.fetch.return_value = []
         g_hdr = {"Authorization": f"Bearer {create_access_token({'sub': str(uuid4()), 'role': 'guest'})}"}
-
         conn.fetchval.side_effect = None
-        conn.fetchval.return_value = my_guest  # booking owner == caller
+
         r = await client.get(f"/api/billing/{booking_id}", headers=g_hdr)
         check(r.status_code == 200, "guest can read own bill")
         r = await client.get(f"/api/payments/{booking_id}", headers=g_hdr)
@@ -157,7 +160,7 @@ async def run_tests():
         r = await client.get(f"/api/services/{booking_id}/usage", headers=g_hdr)
         check(r.status_code == 200, "guest can read own service usage")
 
-        conn.fetchval.return_value = uuid4()  # someone else's booking
+        booking_owner["guest_id"] = uuid4()  # someone else's booking
         for path in (f"/api/billing/{booking_id}", f"/api/payments/{booking_id}", f"/api/services/{booking_id}/usage"):
             r = await client.get(path, headers=g_hdr)
             check(r.status_code == 403, f"guest blocked from another guest's data: {path.split('/')[2]}")

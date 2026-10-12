@@ -108,6 +108,17 @@ Repeat one positive case per endpoint with a same-branch user → 2xx, and one a
 
 ## Acceptance criteria
 
-- [ ] All rows in the problem table return 403 for a different-branch user.
-- [ ] Same-branch staff and admins are unaffected.
-- [ ] A single helper is used; no inline branch checks remain in routers.
+- [x] All rows in the problem table return 403 for a different-branch user.
+- [x] Same-branch staff and admins are unaffected.
+- [x] A single helper is used; no inline branch checks remain in routers.
+
+## Resolution (2026-10-12)
+
+- `assert_booking_access` / `assert_room_access` in `app/dependencies.py` replace `assert_guest_owns_booking` (removed; all callers updated in the same change). Branch staff with no `branch_id` never match, so they fail closed (ISSUE-06 adds the validation).
+- Applied to every endpoint in the §2 table. The duplicate "booking exists" queries in `billing.py` / `services.py` and the post-procedure 404 checks in check-in/checkout are gone.
+- Open questions (recorded in `08_auth_and_roles.md` §4.1):
+  - `GET /guests` stays hotel-wide, with no minimum search length, so the front-desk guest picker keeps working.
+  - `GET /reports/top-services` is now branch-scoped for managers via the new view `v_top_services_by_branch` (ranked within the branch); admins can pass `?branch_id=`. The Overview and Reports panels pass `branch_id` and no longer say "all branches" to managers.
+- Frontend: 403 `detail` strings already surface through `errorMessage()`; no change needed.
+- Tests: `tests/test_authz_branch.py` (22 tests). 13 of them fail on the pre-fix code: every problem-table row, the no-side-effects check and both top-services tests. `test_input_validation.py` and `test_frontend_support_api.py` were adjusted to the new helper.
+- ⏳ Browser check pending: Manager/Admin **Overview** "Top performing services" card and **Reports → Top services** tab.

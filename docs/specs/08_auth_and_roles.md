@@ -81,20 +81,23 @@ Client                          Server
 | `POST /auth/register` | ✓ | — | — | ✓¹ | — |
 | `GET /rooms` | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `GET /rooms/:id` | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `GET /guests` | ✓ | ✓² | ✓² | — | — |
-| `POST /guests` | ✓ | ✓² | ✓² | — | — |
-| `GET /guests/:id` | ✓ | ✓² | ✓² | own³ | — |
-| `PUT /guests/:id` | ✓ | ✓² | ✓² | — | — |
+| `PATCH /rooms/:id/status` | ✓ | ✓² | — | — | — |
+| `GET /guests` | ✓ | ✓⁵ | ✓⁵ | — | — |
+| `POST /guests` | ✓ | ✓⁵ | ✓⁵ | — | — |
+| `GET /guests/:id` | ✓ | ✓⁵ | ✓⁵ | own³ | — |
+| `PUT /guests/:id` | ✓ | ✓⁵ | ✓⁵ | — | — |
 | `POST /bookings` | ✓ | ✓² | ✓² | ✓⁴ | — |
 | `GET /bookings` | ✓ | ✓² | ✓² | own³ | — |
-| `PATCH /bookings/:id/checkin` | — | ✓² | ✓² | — | — |
-| `PATCH /bookings/:id/checkout` | — | ✓² | ✓² | — | — |
+| `GET /bookings/:id` | ✓ | ✓² | ✓² | own³ | — |
+| `PATCH /bookings/:id/checkin` | ✓ | ✓² | ✓² | — | — |
+| `PATCH /bookings/:id/checkout` | ✓ | ✓² | ✓² | — | — |
 | `PATCH /bookings/:id/cancel` | ✓ | ✓² | ✓² | own³ | — |
-| `POST /services/:bid/usage` | — | ✓² | ✓² | — | — |
+| `POST /services/:bid/usage` | ✓ | ✓² | ✓² | — | — |
+| `GET /services/:bid/usage` | ✓ | ✓² | ✓² | own³ | — |
 | `GET /services` | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `POST /billing/:bid/generate` | — | ✓² | ✓² | — | — |
+| `POST /billing/:bid/generate` | ✓ | ✓² | ✓² | — | — |
 | `GET /billing/:bid` | ✓ | ✓² | ✓² | own³ | — |
-| `POST /payments` | — | ✓² | ✓² | — | — |
+| `POST /payments` | ✓ | ✓² | ✓² | — | — |
 | `GET /payments/:bid` | ✓ | ✓² | ✓² | own³ | — |
 | `GET /reports/*` | ✓ | ✓² | — | — | — |
 | `GET /admin/*` | ✓ | — | — | — | — |
@@ -102,9 +105,19 @@ Client                          Server
 
 **Legend:**
 - ¹ Guest self-registration only (role forced to `guest`)
-- ² Scoped to own `branch_id`
-- ³ Own records only (matched by `guest_id` from JWT)
-- ⁴ Can only book for self
+- ² Scoped to own `branch_id`: for a booking, the branch of its room; for `POST /bookings`, the branch of `room_id`. Another branch → `403`.
+- ³ Own records only (matched by `guest_id` from JWT); another guest's → `403`
+- ⁴ Can only book for self (any branch)
+- ⁵ Hotel-wide: guest profiles are shared across branches (see §4.1)
+
+### 4.1 Branch-scoping decisions
+
+- **Existence before access.** A missing booking/room is `404` for everyone; an existing one in another branch is `403`. Staff can tell that an ID exists, but IDs are random UUIDs, so this leaks nothing useful.
+- **Guest directory is global.** A guest can stay at any branch, and the front desk must find returning guests and book them, so `GET/POST/PUT /guests` and `GET /guests/:id` (including the guest's booking history across branches) are not branch-scoped for staff.
+- **All reports are branch-scoped for managers**, including `top-services` (`v_top_services_by_branch`, ranked within the branch). The `branch_id` query param is ignored for managers.
+- **Admins are global** on every endpoint above, including check-in/out, service usage, billing and payments.
+
+---
 
 ---
 
@@ -117,9 +130,21 @@ Client                          Server
 
 get_current_user(token)     → decodes JWT, returns user dict
 require_role(*roles)        → dependency that checks user.role in roles
-require_branch_access()     → ensures user can only access own branch data
 get_optional_user(token)    → returns user or None (for public endpoints)
+
+# Resource guards, awaited inside the route handler:
+assert_booking_access(db, user, booking_id)
+    → 404 if missing; 403 if a guest doesn't own it or a manager/receptionist
+      isn't in the booking's branch; returns (booking_id, guest_id, room_id,
+      branch_id, status)
+assert_room_access(db, user, room_id)
+    → 404 if missing; 403 if a manager/receptionist isn't in the room's branch;
+      returns (room_id, branch_id, status)
 ```
+
+Every endpoint that acts on one booking or room calls these helpers; routers
+contain no inline branch/ownership checks. List endpoints (`GET /bookings`,
+reports) scope their `WHERE` clause by the user's branch instead.
 
 ### Middleware Flow
 

@@ -10,6 +10,9 @@ Provides:
     - get_current_user():      Decodes JWT → returns user dict
     - require_role(*roles):    Factory that returns a dependency asserting role
     - get_optional_user():     Returns user or None (for public endpoints)
+    - assert_booking_access(): 404/403 guard for one booking (guest owns it,
+                               branch staff share its branch, admin always)
+    - assert_room_access():    404/403 guard for one room (branch staff only)
 
 Usage in routers:
     @router.get("/admin/stats")
@@ -143,25 +146,67 @@ def require_role(*allowed_roles: str):
     return _guard
 
 
-# ── Booking ownership guard ───────────────────────────────────────────────────
+# ── Resource access guards (branch scoping / guest ownership) ─────────────────
+# Every endpoint that acts on a specific booking or room calls one of these
+# instead of checking access inline, so the rules live in one place.
 
-async def assert_guest_owns_booking(db, user: dict, booking_id) -> None:
-    """
-    For read endpoints that guests may use on *their own* bookings
-    (bill, payments, service usage). Staff pass through unchanged.
+BRANCH_SCOPED_ROLES = {"manager", "receptionist"}
 
-    Raises 404 if the booking doesn't exist, 403 if a guest asks for
-    someone else's booking.
+
+def _assert_same_branch(user: dict, branch_id, detail: str) -> None:
+    # A branch-scoped user without a branch_id never matches (fails closed).
+    if user["role"] in BRANCH_SCOPED_ROLES and str(branch_id) != str(user.get("branch_id")):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
+
+
+async def assert_booking_access(db, user: dict, booking_id):
     """
-    if user["role"] != "guest":
-        return
-    owner = await db.fetchval(
-        "SELECT guest_id FROM booking WHERE booking_id = $1::UUID", booking_id
+    Check that `user` may act on booking `booking_id`.
+
+        404 if the booking doesn't exist.
+        guest                  -> must own the booking (403 otherwise)
+        manager / receptionist -> the booking's room must be in their branch (403)
+        admin                  -> unrestricted
+
+    Returns the record (booking_id, guest_id, room_id, branch_id, status) so
+    callers don't need to query the booking again.
+    """
+    row = await db.fetchrow(
+        """
+        SELECT b.booking_id, b.guest_id, b.room_id, r.branch_id, b.status
+        FROM booking b
+        JOIN room r ON r.room_id = b.room_id
+        WHERE b.booking_id = $1::UUID
+        """,
+        booking_id,
     )
-    if owner is None:
+    if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
-    if str(owner) != str(user.get("guest_id")):
+    if user["role"] == "guest" and str(row["guest_id"]) != str(user.get("guest_id")):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Guests can only view their own bookings.",
+            detail="Guests can only access their own bookings.",
         )
+    _assert_same_branch(user, row["branch_id"], "Not authorised for bookings of another branch.")
+    return row
+
+
+async def assert_room_access(db, user: dict, room_id):
+    """
+    Check that a staff `user` may act on room `room_id` (create a booking in
+    it, change its status).
+
+        404 if the room doesn't exist.
+        manager / receptionist -> the room must be in their branch (403)
+        admin, guest           -> unrestricted (rooms are publicly bookable)
+
+    Returns the record (room_id, branch_id, status).
+    """
+    row = await db.fetchrow(
+        "SELECT room_id, branch_id, status FROM room WHERE room_id = $1::UUID",
+        room_id,
+    )
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Room not found")
+    _assert_same_branch(user, row["branch_id"], "Not authorised for rooms of another branch.")
+    return row

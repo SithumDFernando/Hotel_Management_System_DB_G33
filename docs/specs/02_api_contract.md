@@ -12,6 +12,7 @@
 - Dates are `YYYY-MM-DD`, timestamps are ISO 8601.
 - Pagination: `?page=1&per_page=20` (default 20, max 100).
 - Error responses: `{ "detail": "message" }` with appropriate HTTP status.
+- Branch scoping: managers and receptionists may only act on bookings and rooms of their own branch; guests only on their own bookings; admins on everything (see `08_auth_and_roles.md`). Every endpoint that takes a `booking_id` (path or body) or acts on a room checks existence first (`404`), then access (`403 Not authorised for bookings of another branch.` / `403 Guests can only access their own bookings.`).
 - `422` validation errors (malformed UUID or date, unknown enum value, string longer than its DB column, number out of range) use FastAPI's list form: `{ "detail": [{ "loc": [...], "msg": "...", "type": "..." }] }`.
 - Request limits mirror the DB columns (`VARCHAR(n)`, `NUMERIC(10,2)` → max `99999999.99` with 2 decimal places).
 - Database errors never expose Postgres text. Unmapped DB errors return `500 { "detail": "Internal server error" }` and are logged server-side; constraint errors map to:
@@ -160,7 +161,7 @@
 
 **Response (200):** `{ "room_id": "uuid-...", "status": "Maintenance" }`
 
-**Errors:** `404 Room not found` · `422` unknown status value
+**Errors:** `403` manager of another branch · `404 Room not found` · `422` unknown status value
 
 ---
 
@@ -274,7 +275,7 @@ Calls `create_booking()` stored procedure (SERIALIZABLE).
 }
 ```
 
-**Errors:** `404 Guest not found` / `404 Room not found` · `409 Room is not available for selected dates (double-booking)` · `422` malformed IDs/dates, `payment_option` longer than 50
+**Errors:** `403` room belongs to another branch (manager/receptionist) or guest booking for someone else · `404 Guest not found` / `404 Room not found` · `409 Room is not available for selected dates (double-booking)` · `422` malformed IDs/dates, `payment_option` longer than 50
 
 ### GET `/api/bookings`
 > Receptionist (own branch), Manager (own branch), Admin (all), Guest (own bookings)
@@ -306,12 +307,16 @@ Calls `create_booking()` stored procedure (SERIALIZABLE).
 - `422` malformed date, or `status` not one of `Booked`, `Checked-In`, `Checked-Out`, `Cancelled`
 
 ### GET `/api/bookings/:booking_id`
-> Receptionist, Manager, Admin, or owning Guest
+> Receptionist (own branch), Manager (own branch), Admin, or owning Guest
+
+**Errors:** `403` other branch / other guest · `404 Booking not found`
 
 ### PATCH `/api/bookings/:booking_id/cancel`
 > Receptionist, Manager, Admin, Guest (own booking, if still 'Booked')
 
 **Response (200):** `{ "status": "Cancelled" }`
+
+**Errors:** `400 Only 'Booked' bookings can be cancelled` · `403` other branch / other guest · `404 Booking not found`
 
 ---
 
@@ -331,7 +336,7 @@ Calls `perform_checkin()` stored procedure.
 }
 ```
 
-**Errors:** `400 Booking is not in 'Booked' status`
+**Errors:** `400 Booking is not in 'Booked' status` · `403` booking of another branch · `404 Booking not found`
 
 ### PATCH `/api/bookings/:booking_id/checkout`
 > Receptionist, Manager, Admin
@@ -353,7 +358,7 @@ Calls `perform_checkout()` stored procedure. Fails if bill has outstanding balan
 }
 ```
 
-**Errors:** `402 Outstanding balance of LKR 15,000.00 — payment required before checkout`
+**Errors:** `402 Outstanding balance of LKR 15,000.00 — payment required before checkout` · `403` booking of another branch · `404 Booking not found`
 
 ---
 
@@ -435,10 +440,12 @@ Records chargeable service order. Trigger checks that booking is 'Checked-In' an
 }
 ```
 
-**Errors:** `404` booking or active service not found · `422 Unprocessable Entity (Booking is not Checked-In)` · `422` `quantity` outside 1–1000
+**Errors:** `403` booking of another branch · `404` booking or active service not found · `422 Unprocessable Entity (Booking is not Checked-In)` · `422` `quantity` outside 1–1000
 
 ### GET `/api/services/:booking_id/usage`
-> Receptionist, Manager, Admin, owning Guest
+> Receptionist (own branch), Manager (own branch), Admin, owning Guest
+
+**Errors:** `403` other branch / other guest · `404 Booking not found`
 
 **Response (200):** Itemized usage summary:
 ```json
@@ -469,7 +476,7 @@ Records chargeable service order. Trigger checks that booking is 'Checked-In' an
 
 Calls `generate_bill()` stored procedure (with optional `?discount=0.00` query parameter, 0–99999999.99, 2 decimal places).
 
-**Errors:** `404 Booking not found` · `400` booking not Checked-In/Checked-Out, discount larger than the subtotal, or `Bill total exceeds the maximum supported amount` · `422` invalid `discount`
+**Errors:** `403` booking of another branch · `404 Booking not found` · `400` booking not Checked-In/Checked-Out, discount larger than the subtotal, or `Bill total exceeds the maximum supported amount` · `422` invalid `discount`
 
 **Response (200):** `BillOut` object:
 ```json
@@ -492,6 +499,8 @@ Calls `generate_bill()` stored procedure (with optional `?discount=0.00` query p
 > Receptionist, Manager, Admin, owning Guest
 
 **Response (200):** `BillOut` object or `404 Bill not generated yet`.
+
+**Errors:** `403` other branch / other guest · `404 Booking not found`
 
 ---
 
@@ -524,12 +533,14 @@ Calls `record_payment()` stored procedure.
 }
 ```
 
-**Errors:** `400 Amount exceeds outstanding balance or <= 0`
+**Errors:** `400 Amount exceeds outstanding balance or <= 0` · `403` booking of another branch · `404 Booking not found`
 
 ### GET `/api/payments/:booking_id`
 > Receptionist, Manager, Admin, owning Guest
 
 **Response (200):** Array of `PaymentOut` records ordered by `paid_at DESC`.
+
+**Errors:** `403` other branch / other guest · `404 Booking not found`
 
 ---
 
@@ -554,7 +565,9 @@ Calls `record_payment()` stored procedure.
 **Params:** `?year=2026&month=2&branch_id=uuid`
 
 ### GET `/api/reports/top-services`
-**Params:** `?limit=10`
+**Params:** `?limit=10&branch_id=uuid` (`limit` 1–100)
+
+Managers always get their own branch, ranked within it (`v_top_services_by_branch`); `branch_id` is ignored for them. Admins get all branches combined (`v_top_services`), or one branch with `branch_id`.
 
 > Detailed report views and schema columns are specified in `05_views_and_reports.md`.
 

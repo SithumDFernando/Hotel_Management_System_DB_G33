@@ -53,7 +53,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
 from app.db import get_db
-from app.dependencies import assert_guest_owns_booking, require_role
+from app.dependencies import assert_booking_access, require_role
 
 router = APIRouter()
 
@@ -240,19 +240,10 @@ async def get_booking_usage(
     category. Includes a `grand_total` field summing all line totals for quick
     display on the bill preview. Guests may only read their own bookings.
 
-    Raises 404 if the booking does not exist.
+    Raises 404 if the booking does not exist, 403 if it belongs to another
+    guest or another branch.
     """
-    await assert_guest_owns_booking(db, _user, booking_id)
-    # Verify the booking exists
-    booking_exists = await db.fetchval(
-        "SELECT 1 FROM booking WHERE booking_id = $1",
-        booking_id,
-    )
-    if not booking_exists:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Booking {booking_id} not found.",
-        )
+    await assert_booking_access(db, _user, booking_id)
 
     rows = await db.fetch(
         """
@@ -326,18 +317,11 @@ async def add_service_usage(
     Raises:
         404 — booking or active service not found.
         422 — trigger rejected the insert (booking not Checked-In).
+        403 — booking belongs to another branch.
         400 — any other business rule raised by the trigger.
     """
-    # Verify the booking exists and capture its current status for error messages
-    booking_row = await db.fetchrow(
-        "SELECT booking_id, status FROM booking WHERE booking_id = $1",
-        booking_id,
-    )
-    if booking_row is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Booking {booking_id} not found.",
-        )
+    # Existence + branch scoping; keeps the status for error messages
+    booking_row = await assert_booking_access(db, _user, booking_id)
 
     # Fetch the active service and snapshot base_price → unit_price
     service_row = await db.fetchrow(

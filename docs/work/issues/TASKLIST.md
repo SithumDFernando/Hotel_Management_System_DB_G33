@@ -32,7 +32,10 @@ Source: full-stack audit run on **2026-10-12** (backend API probes, DB-level con
 
 ## Phase 3: Access control
 
-- [ ] **5. [ISSUE-03](ISSUE-03-cross-branch-authorization.md)** 🔴 Branch-scoped authorization helper applied to every staff endpoint
+- [x] **5. [ISSUE-03](ISSUE-03-cross-branch-authorization.md)** 🔴 Branch-scoped authorization helper applied to every staff endpoint
+  - ✅ `assert_booking_access` / `assert_room_access` on every booking/room endpoint; covered by `tests/test_authz_branch.py` (22 tests, 13 fail on the pre-fix code). Full suite: 94 passed + `test_phase4` live run passed, on a fresh `run_all.sql` build.
+  - ✅ Decisions: guest directory stays hotel-wide; `top-services` is now branch-scoped for managers (new view `v_top_services_by_branch`).
+  - ⏳ Browser check of the Overview/Reports top-services panels (manager + admin) still pending.
 - [ ] **6. [ISSUE-06](ISSUE-06-manager-without-branch-sees-all.md)** 🔴 Branch staff must have a branch (API validation + DB CHECK + fail-closed helper)
 - [ ] **7. [ISSUE-11](ISSUE-11-guest-account-without-profile.md)** 🟠 Guest accounts must have exactly one guest profile
 

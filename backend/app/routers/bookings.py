@@ -10,7 +10,7 @@ from typing import Optional
 import asyncpg
 
 from app.db import get_db
-from app.dependencies import require_role
+from app.dependencies import assert_booking_access, assert_room_access, require_role
 from app.schemas.booking import (
     BookingCreate, BookingOut, BookingListOut, 
     BookingListResponse, GuestInfo, RoomInfo, BookingDetailOut,
@@ -29,6 +29,8 @@ async def create_booking(
 ):
     if user["role"] == "guest" and str(body.guest_id) != str(user.get("guest_id")):
         raise HTTPException(status_code=403, detail="Guests can only create bookings for themselves")
+    # Branch staff may only book rooms in their own branch
+    await assert_room_access(db, user, body.room_id)
 
     try:
         # Calls the stored procedure.
@@ -176,11 +178,13 @@ async def get_booking(
     db=Depends(get_db),
     user: dict = Depends(require_role("receptionist", "manager", "admin", "guest"))
 ):
+    await assert_booking_access(db, user, booking_id)
+
     query = """
         SELECT b.booking_id, b.check_in_date, b.check_out_date, b.rate_at_booking, 
                b.status, b.payment_option, b.actual_checkin_time, b.actual_checkout_time,
                g.guest_id, g.full_name,
-               r.room_id, r.room_number, r.branch_id,
+               r.room_id, r.room_number,
                br.name AS branch_name, rt.type_name
         FROM booking b
         JOIN guest g ON g.guest_id = b.guest_id
@@ -190,17 +194,6 @@ async def get_booking(
         WHERE b.booking_id = $1::UUID
     """
     row = await db.fetchrow(query, booking_id)
-    if not row:
-        raise HTTPException(status_code=404, detail="Booking not found")
-
-    user_role = user["role"]
-    # Authorization checks
-    if user_role == "guest":
-        if str(row["guest_id"]) != str(user.get("guest_id")):
-            raise HTTPException(status_code=403, detail="Not authorized to view this booking")
-    elif user_role in ["manager", "receptionist"]:
-        if str(row["branch_id"]) != str(user.get("branch_id")):
-            raise HTTPException(status_code=403, detail="Not authorized to view bookings for other branches")
 
     return BookingDetailOut(
         booking_id=row["booking_id"],
@@ -222,6 +215,7 @@ async def checkin_booking(
     db=Depends(get_db),
     user: dict = Depends(require_role("receptionist", "manager", "admin"))
 ):
+    await assert_booking_access(db, user, booking_id)
     try:
         await db.execute("CALL perform_checkin($1::UUID)", booking_id)
         
@@ -229,9 +223,6 @@ async def checkin_booking(
             "SELECT booking_id, status, actual_checkin_time FROM booking WHERE booking_id = $1::UUID",
             booking_id
         )
-        if not row:
-            raise HTTPException(status_code=404, detail="Booking not found")
-            
         return BookingCheckInResponse(
             booking_id=row["booking_id"],
             status=row["status"],
@@ -250,6 +241,7 @@ async def checkout_booking(
     db=Depends(get_db),
     user: dict = Depends(require_role("receptionist", "manager", "admin"))
 ):
+    await assert_booking_access(db, user, booking_id)
     try:
         await db.execute("CALL perform_checkout($1::UUID)", booking_id)
         
@@ -257,9 +249,6 @@ async def checkout_booking(
             "SELECT booking_id, status, actual_checkout_time FROM booking WHERE booking_id = $1::UUID",
             booking_id
         )
-        if not row:
-            raise HTTPException(status_code=404, detail="Booking not found")
-            
         bill_row = await db.fetchrow(
             "SELECT total_amount, amount_paid FROM bill WHERE booking_id = $1::UUID",
             booking_id
@@ -294,25 +283,8 @@ async def cancel_booking(
     db=Depends(get_db),
     user: dict = Depends(require_role("receptionist", "manager", "admin", "guest"))
 ):
-    # Fetch booking to check existence, status, and authorization
-    query = """
-        SELECT b.guest_id, r.branch_id, b.status
-        FROM booking b
-        JOIN room r ON r.room_id = b.room_id
-        WHERE b.booking_id = $1::UUID
-    """
-    row = await db.fetchrow(query, booking_id)
-    if not row:
-        raise HTTPException(status_code=404, detail="Booking not found")
-
-    user_role = user["role"]
-    # Authorization checks
-    if user_role == "guest":
-        if str(row["guest_id"]) != str(user.get("guest_id")):
-            raise HTTPException(status_code=403, detail="Not authorized to cancel this booking")
-    elif user_role in ["manager", "receptionist"]:
-        if str(row["branch_id"]) != str(user.get("branch_id")):
-            raise HTTPException(status_code=403, detail="Not authorized to cancel bookings for other branches")
+    # Existence, guest ownership and branch scoping
+    row = await assert_booking_access(db, user, booking_id)
 
     # Business rule: Only 'Booked' bookings can be cancelled
     if row["status"] != "Booked":
