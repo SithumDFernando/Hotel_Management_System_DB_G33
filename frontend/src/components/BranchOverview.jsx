@@ -3,6 +3,7 @@ import {
   Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import { getBillingSummary, getMonthlyRevenue, getOccupancy, getTopServices } from '@/api/reports';
+import useAuth from '@/hooks/useAuth';
 import useFetch from '@/hooks/useFetch';
 import StatCard from '@/components/ui/StatCard';
 import { ErrorState, Skeleton } from '@/components/ui/States';
@@ -33,12 +34,13 @@ function OccupancyRing({ pct }) {
 
 // KPIs + 6-month revenue chart + top services. branchId only matters for admins.
 export default function BranchOverview({ branchId = '', ym }) {
+  const { user } = useAuth();
   const today = todayISO();
   const [year, month] = ym.split('-').map(Number);
 
   const occ = useFetch((s) => getOccupancy({ branch_id: branchId, date: today }, s), [branchId, today]);
   const unpaid = useFetch((s) => getBillingSummary({ branch_id: branchId, unpaid_only: true }, s), [branchId]);
-  const top = useFetch((s) => getTopServices({ limit: 5 }, s), []);
+  const top = useFetch((s) => getTopServices({ branch_id: branchId, limit: 5 }, s), [branchId]);
   const trend = useFetch(
     async (signal) => {
       const months = lastSixMonths(ym);
@@ -123,7 +125,7 @@ export default function BranchOverview({ branchId = '', ym }) {
 
         <section className="card p-5" aria-label="Top services">
           <h3 className="font-serif text-lg font-semibold">Top performing services</h3>
-          <p className="text-xs text-navy-500">By revenue · all branches</p>
+          <p className="text-xs text-navy-500">By revenue · {branchId || user.role === 'manager' ? 'this branch' : 'all branches'}</p>
           {top.error ? <div className="mt-4"><ErrorState message={top.error} onRetry={top.refetch} /></div> : top.isLoading ? <Skeleton className="mt-4 h-48 w-full" /> : topRows.length === 0 ? (
             <p className="py-10 text-center text-sm text-navy-500">No service usage yet.</p>
           ) : (

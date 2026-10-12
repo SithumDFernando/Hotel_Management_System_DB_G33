@@ -60,9 +60,12 @@ docker compose exec backend python tests/test_business_logic.py   # run a test i
 
 ---
 
-## Quick Automated Setup (Script Option)
+## Quick Automated Setup (Script Options)
 
-If you have the prerequisites installed, run the automated script from the project root to automatically generate `.env` files, set up Python `.venv`, install backend/frontend dependencies, and optionally configure the database:
+SkyNest provides automated setup scripts for both **Docker** and **Native Localhost** workflows:
+
+### A. Docker Setup (Root Scripts — Recommended)
+Automates `.env` creation, validates Docker daemon availability, and provides an interactive menu to build/start containers, view logs, stop services, or reset the database:
 
 ```cmd
 # Windows (Command Prompt or double-click setup.bat):
@@ -73,6 +76,22 @@ setup.bat
 
 # macOS / Linux / Git Bash:
 chmod +x setup.sh && ./setup.sh
+```
+
+*(Copies of these Docker scripts are also archived in [`scripts/docker/`](../scripts/docker/))*
+
+### B. Native Setup (No Docker)
+If you prefer running PostgreSQL, Python `.venv`, and Node.js natively on your host machine without Docker containers, run the native setup scripts:
+
+```cmd
+# Windows (Command Prompt):
+scripts\native\setup.bat
+
+# Windows (PowerShell):
+.\scripts\native\setup.ps1
+
+# macOS / Linux / Git Bash:
+chmod +x scripts/native/setup.sh && ./scripts/native/setup.sh
 ```
 
 *(Or follow the manual step-by-step instructions below)*

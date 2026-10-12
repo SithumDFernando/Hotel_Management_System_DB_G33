@@ -17,6 +17,7 @@
 
 ```
 IF NEW.status NOT IN ('Cancelled', 'Checked-Out') THEN
+  PERFORM 1 FROM room WHERE room_id = NEW.room_id FOR UPDATE;  -- serialize per room
   IF EXISTS (
     SELECT 1 FROM booking
     WHERE room_id = NEW.room_id
@@ -32,7 +33,8 @@ RETURN NEW;
 ```
 
 ### Notes
-- This is a **safety net** — `create_booking()` also checks with `FOR UPDATE` lock.
+- **Concurrency:** the trigger locks the room row first, so two concurrent bookings for the same room run one after another; the second waits for the first to commit, then sees it and gets this error. Without the lock both `EXISTS` checks would pass under READ COMMITTED, because neither sees the other's uncommitted insert.
+- The guarantee is the exclusion constraint `excl_booking_room_overlap` (see `01_database_design.md` §2.9). It also catches anything that skips the trigger; the API maps its error to 409.
 - The trigger catches edge cases like direct SQL INSERTs or status UPDATEs that reactivate a cancelled booking.
 - Does NOT fire for Cancelled/Checked-Out status transitions (those free up the room).
 
@@ -50,37 +52,44 @@ RETURN NEW;
 ### Logic
 
 ```
--- Condition: only fire when booking status actually changes
-IF OLD.status IS DISTINCT FROM NEW.status THEN
+IF OLD.status IS NOT DISTINCT FROM NEW.status THEN RETURN NEW; END IF;
 
-  CASE NEW.status
-    WHEN 'Checked-In' THEN
-      UPDATE room SET status = 'Occupied' WHERE room_id = NEW.room_id;
+IF NEW.status = 'Checked-In' THEN
+  -- Guest arrives: Available -> Occupied (never overrides Maintenance)
+  UPDATE room SET status = 'Occupied'
+   WHERE room_id = NEW.room_id AND status = 'Available';
 
-    WHEN 'Checked-Out' THEN
-      UPDATE room SET status = 'Available' WHERE room_id = NEW.room_id;
-
-    WHEN 'Cancelled' THEN
-      -- Only set Available if no other active booking exists for this room today
-      IF NOT EXISTS (
-        SELECT 1 FROM booking
-        WHERE room_id = NEW.room_id
-          AND booking_id != NEW.booking_id
-          AND status IN ('Booked', 'Checked-In')
-          AND check_in_date <= CURRENT_DATE
-          AND check_out_date > CURRENT_DATE
-      ) THEN
-        UPDATE room SET status = 'Available' WHERE room_id = NEW.room_id;
-      END IF;
-
-  END CASE;
+ELSIF OLD.status = 'Checked-In' AND NEW.status IN ('Checked-Out', 'Cancelled') THEN
+  -- Guest leaves: Occupied -> Available, unless another booking is still in
+  UPDATE room SET status = 'Available'
+   WHERE room_id = NEW.room_id AND status = 'Occupied'
+     AND NOT EXISTS (SELECT 1 FROM booking
+                      WHERE room_id = NEW.room_id
+                        AND booking_id <> NEW.booking_id
+                        AND status = 'Checked-In');
 END IF;
+-- Booked -> Cancelled: the room was never occupied by this booking -> no change
+RETURN NEW;
 ```
 
+### Room status policy
+| Room status | Who changes it |
+|---|---|
+| `Available` ↔ `Occupied` | **Only this trigger**, from booking events. `perform_checkin` / `perform_checkout` / `cancel_booking` do not touch the `room` table. |
+| `Maintenance` | **Only manually**, via `PATCH /rooms/{id}/status`. No booking event sets or clears it. |
+
+| Start room | Booking transition | Room after |
+|---|---|---|
+| Maintenance | Booked → Cancelled | Maintenance |
+| Available | Booked → Cancelled | Available |
+| Available | Booked → Checked-In | Occupied |
+| Occupied | Checked-In → Checked-Out | Available |
+| Maintenance (set mid-stay) | Checked-In → Checked-Out | Maintenance |
+
 ### Notes
-- Keeps `room.status` in sync with booking lifecycle.
-- Cancellation has extra logic: only frees the room if no other active booking occupies it.
-- The procedures (`check_in`, `check_out`) can delegate room status updates entirely to this trigger to avoid duplication.
+- Every `UPDATE room` is guarded by the status it expects, so a booking event never overwrites `Maintenance`.
+- The manual endpoint enforces the same consistency: `Available` is refused while a booking is `Checked-In`, and `Occupied` without one (409). See `02_api_contract.md`.
+- Runs `AFTER UPDATE OF status` in the same transaction as the booking change.
 
 ---
 
@@ -106,9 +115,15 @@ IF (SELECT is_active FROM service WHERE service_id = NEW.service_id) = FALSE THE
   RAISE EXCEPTION 'Service % is inactive', NEW.service_id;
 END IF;
 
--- 3. Snapshot the unit_price from service catalogue
-NEW.unit_price := (SELECT base_price FROM service WHERE service_id = NEW.service_id);
+-- 3. Usage date must fall inside the stay (ISSUE-08)
 NEW.usage_date := COALESCE(NEW.usage_date, CURRENT_DATE);
+IF NEW.usage_date < check_in_date
+   OR NEW.usage_date > GREATEST(check_out_date, CURRENT_DATE) THEN
+  RAISE EXCEPTION 'Service date % is outside the stay (% to %)', ...;
+END IF;
+
+-- 4. Snapshot the unit_price from service catalogue
+NEW.unit_price := (SELECT base_price FROM service WHERE service_id = NEW.service_id);
 
 RETURN NEW;
 ```
@@ -117,6 +132,7 @@ RETURN NEW;
 - **Auto-snapshots** `unit_price` from the service catalogue — the API layer doesn't need to pass it.
 - Defaults `usage_date` to today if not provided.
 - Prevents adding services to bookings that aren't currently checked in.
+- The check-out day itself is inside the stay (late checkout, breakfast). A guest still in house after `check_out_date` (overdue checkout) can be charged up to today, which is why the upper bound is `GREATEST(check_out_date, CURRENT_DATE)`. The staff UI always charges today's date.
 
 ---
 
@@ -154,6 +170,6 @@ END IF;
 | # | Trigger Name | Table | Timing | Purpose |
 |---|-------------|-------|--------|---------|
 | 1 | `trg_prevent_double_booking` | booking | BEFORE INSERT/UPDATE | Prevents overlapping reservations |
-| 2 | `trg_update_room_status` | booking | AFTER UPDATE (status) | Syncs room.status with booking lifecycle |
+| 2 | `trg_update_room_status` | booking | AFTER UPDATE (status) | Sole owner of room Available ↔ Occupied; never overrides Maintenance |
 | 3 | `trg_validate_service_usage` | service_usage | BEFORE INSERT | Validates booking status, snapshots price |
 | 4 | `trg_validate_payment` | payment | BEFORE INSERT | Validates bill exists, amount ≤ balance |

@@ -17,8 +17,16 @@ export default function RoomManager({ branchId }) {
     const next = room.status === 'Maintenance' ? 'Available' : 'Maintenance';
     setBusyId(room.room_id);
     try {
-      await setRoomStatus(room.room_id, next);
-      toast.success(`Room ${room.room_number} marked ${next.toLowerCase()}`);
+      try {
+        await setRoomStatus(room.room_id, next);
+        toast.success(`Room ${room.room_number} marked ${next.toLowerCase()}`);
+      } catch (err) {
+        // Maintenance set mid-stay: the API refuses Available (409) while a guest
+        // is checked in, so the room goes back to Occupied instead.
+        if (next !== 'Available' || err.response?.status !== 409) throw err;
+        await setRoomStatus(room.room_id, 'Occupied');
+        toast.success(`Room ${room.room_number} is back in service. A guest is checked in, so it shows as occupied.`);
+      }
       refetch();
     } catch (err) {
       toast.error(errorMessage(err));

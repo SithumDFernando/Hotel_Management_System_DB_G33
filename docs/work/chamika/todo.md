@@ -17,6 +17,7 @@
   - [x] Implement `trg_validate_service_usage()` trigger function
   - [x] Check `booking.status` for the target booking: raise exception if not `'Checked-In'`
   - [x] If `NEW.unit_price IS NULL OR NEW.unit_price = 0`, snapshot price from `service.base_price`
+  - [x] Reject usage dates outside the stay (`check_in_date` to `GREATEST(check_out_date, CURRENT_DATE)`) (ISSUE-08)
   - [x] Define `BEFORE INSERT ON service_usage FOR EACH ROW` trigger
 
 ---

@@ -15,6 +15,7 @@
   - [x] Configure Foreign Key relationships with appropriate `ON DELETE` rules
   - [x] Configure CHECK constraints (positive prices, valid date intervals, capacity checks)
   - [x] Configure composite UNIQUE constraints (`branch_id + room_number`, `branch_id + room_type_id`)
+  - [x] Exclusion constraint `excl_booking_room_overlap` (`btree_gist`) against overlapping active bookings (ISSUE-05)
 - [x] **Performance Indexes** (`db/schema/03_indexes.sql`)
   - [x] Create B-Tree indexes on all foreign key columns
   - [x] Create B-Tree indexes on high-frequency lookup fields (`guest.email`, `guest.nic_passport`, `booking.status`)
@@ -32,6 +33,7 @@
   - [x] Implement `get_db()` and `get_connection()` context managers for transactional execution
 - [x] **Security & Cryptography** (`backend/app/auth.py`)
   - [x] Implement bcrypt password hashing (`hash_password`) and verification (`verify_password`)
+  - [x] One password policy `validate_new_password` (8 characters to 72 bytes) + `DUMMY_PASSWORD_HASH` for timing-safe login (ISSUE-10)
   - [x] Implement JWT token creation (`create_access_token`) and verification (`decode_access_token`)
 - [x] **Authentication & RBAC Dependencies** (`backend/app/dependencies.py`)
   - [x] Implement `get_current_user` OAuth2 Bearer token extractor
@@ -47,6 +49,7 @@
 
 - [x] **Auth Router** (`backend/app/routers/auth.py`)
   - [x] `POST /api/auth/login` (credential validation, JWT token return)
+  - [x] Case-insensitive emails (`NormEmail`, unique `LOWER(email)` index) and failed-login / signup rate limits → 429 (ISSUE-10)
   - [x] `POST /api/auth/register` (account creation with role handling)
   - [x] `GET /api/auth/me` (current authenticated profile retrieval)
 - [x] **Golden Template Room Router** (`backend/app/routers/rooms.py`)

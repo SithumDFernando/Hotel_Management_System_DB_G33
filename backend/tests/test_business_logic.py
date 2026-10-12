@@ -124,9 +124,10 @@ async def run_business_logic_tests():
         print(f"\n  Checking Service Usage Restrictions...")
         try:
             # Active service for Checked-In booking (should work)
+            # (dated inside the stay: the trigger rejects dates outside it, ISSUE-08)
             await conn.execute("""
                 INSERT INTO service_usage (usage_id, booking_id, service_id, usage_date, quantity)
-                VALUES ($1, $2, $3, CURRENT_DATE, 1)
+                VALUES ($1, $2, $3, (SELECT check_in_date FROM booking WHERE booking_id = $2), 1)
             """, str(uuid.uuid4()), b1_id, service_id)
             ok("Service added successfully to Checked-In booking.")
             
@@ -136,7 +137,7 @@ async def run_business_logic_tests():
                     async with conn.transaction():
                         await conn.execute("""
                             INSERT INTO service_usage (usage_id, booking_id, service_id, usage_date, quantity)
-                            VALUES ($1, $2, $3, CURRENT_DATE, 1)
+                            VALUES ($1, $2, $3, (SELECT check_in_date FROM booking WHERE booking_id = $2), 1)
                         """, str(uuid.uuid4()), b1_id, inactive_service_id)
                     fail("Failed to block inactive service usage.")
                 except asyncpg.exceptions.RaiseError as e:
@@ -197,6 +198,12 @@ async def run_business_logic_tests():
         print(f"  {GREEN}ALL BUSINESS LOGIC CHECKS PASSED{RESET}")
     else:
         print(f"  {RED}{failed} check(s) failed.{RESET}")
+
+# pytest entry point (the suite above also runs as a plain script)
+async def test_business_logic_suite():
+    await run_business_logic_tests()
+    assert failed == 0, f"{failed} business-logic check(s) failed"
+
 
 if __name__ == "__main__":
     asyncio.run(run_business_logic_tests())

@@ -1,6 +1,12 @@
 from pydantic import BaseModel, model_validator
 from uuid import UUID
 from datetime import date, datetime
+from typing import Literal
+
+from app.schemas.billing import PaymentMethod
+
+# Mirrors the `booking_status` enum in db/schema/01_tables.sql
+BookingStatus = Literal["Booked", "Checked-In", "Checked-Out", "Cancelled"]
 
 class BookingCreate(BaseModel):
     """Validated request body for POST /api/bookings."""
@@ -8,17 +14,13 @@ class BookingCreate(BaseModel):
     room_id: UUID
     check_in_date: date
     check_out_date: date
-    payment_option: str
+    payment_option: PaymentMethod
 
     @model_validator(mode="after")
     def checkout_after_checkin(self):
         if self.check_out_date <= self.check_in_date:
             raise ValueError("check_out_date must be after check_in_date")
         return self
-
-class BookingStatusUpdate(BaseModel):
-    """Used for PATCH /cancel — optionally accept a reason."""
-    reason: str | None = None
 
 class BookingOut(BaseModel):
     """Full booking response."""
@@ -75,12 +77,15 @@ class BookingCheckInResponse(BaseModel):
 class BillSummary(BaseModel):
     total_amount: float
     amount_paid: float
+    outstanding_balance: float
+    balance_flag: bool
 
 class BookingCheckOutResponse(BaseModel):
     booking_id: UUID
     status: str
     actual_checkout_time: datetime | None = None
-    bill: BillSummary | None = None
+    # perform_checkout always refreshes (or creates) the bill first
+    bill: BillSummary
 
 class BookingCancelResponse(BaseModel):
     status: str

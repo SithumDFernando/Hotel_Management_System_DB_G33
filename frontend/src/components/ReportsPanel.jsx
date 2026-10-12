@@ -42,7 +42,7 @@ export default function ReportsPanel({ branchId = '', showBranch = false }) {
     billing: (s) => getBillingSummary({ branch_id: branchId, unpaid_only: unpaidOnly }, s),
     usage: (s) => getServiceUsage({ branch_id: branchId }, s),
     revenue: (s) => getMonthlyRevenue({ branch_id: branchId, year: revYear, month: revMonth }, s),
-    top: (s) => getTopServices({ limit }, s),
+    top: (s) => getTopServices({ branch_id: branchId, limit }, s),
   };
   const { data, isLoading, error, refetch } = useFetch(fetchers[tab], [tab, branchId, from, to, unpaidOnly, revYear, revMonth, limit]);
 
@@ -182,9 +182,6 @@ export default function ReportsPanel({ branchId = '', showBranch = false }) {
         summary={config.summary}
         exportName={`skynest-${tab}-${today}`}
       />
-      {tab === 'top' && user.role === 'manager' && (
-        <p className="text-xs text-navy-400">Top-service rankings cover all branches (the report isn’t branch-scoped).</p>
-      )}
     </div>
   );
 }

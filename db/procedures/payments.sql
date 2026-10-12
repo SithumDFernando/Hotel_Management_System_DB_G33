@@ -1,5 +1,6 @@
--- record_payment(booking, amount, method, notes)
--- (call with: CALL record_payment(...))
+-- record_payment(booking, amount, method, notes, OUT payment_id)
+-- (call with: CALL record_payment(id, amount, method, notes_or_NULL, NULL);
+--  the last NULL is the placeholder for the OUT parameter)
 
 -- Inserts a payment and updates the bill's amount_paid, outstanding_balance
 -- and balance_flag in one atomic call. Supports partial payments.
@@ -11,7 +12,8 @@ CREATE OR REPLACE PROCEDURE record_payment(
     p_booking_id     UUID,
     p_amount         NUMERIC,
     p_payment_method VARCHAR,
-    p_notes          VARCHAR DEFAULT NULL
+    p_notes          VARCHAR,
+    OUT p_payment_id UUID
 )
 LANGUAGE plpgsql
 AS $$
@@ -47,7 +49,8 @@ BEGIN
     END IF;
 
     INSERT INTO payment (booking_id, amount, payment_method, notes)
-    VALUES (p_booking_id, p_amount, p_payment_method, p_notes);
+    VALUES (p_booking_id, p_amount, p_payment_method, p_notes)
+    RETURNING payment_id INTO p_payment_id;
 
     -- Recalculate from the payment ledger (source of truth)
     SELECT COALESCE(SUM(p.amount), 0.00)

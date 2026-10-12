@@ -9,7 +9,7 @@ import { Field, Input, Select } from '@/components/ui/Field';
 import Pagination from '@/components/ui/Pagination';
 import { EmptyState, ErrorState, InlineAlert, Skeleton } from '@/components/ui/States';
 import { useToast } from '@/components/ui/Toast';
-import { errorMessage, initials } from '@/utils/formatters';
+import { errorMessage, initials, passwordError } from '@/utils/formatters';
 
 const PAGE_SIZE = 10;
 const STAFF_ROLES = [
@@ -59,7 +59,7 @@ function CreateDrawer({ open, onClose, branches, onSaved }) {
     e.preventDefault();
     const v = {};
     if (!/^\S+@\S+\.\S+$/.test(f.email)) v.email = 'Enter a valid email';
-    if (f.password.length < 8) v.password = 'Use at least 8 characters';
+    if (passwordError(f.password)) v.password = passwordError(f.password);
     if (needsBranch && !f.branch_id) v.branch_id = 'Select a branch';
     setErrors(v);
     if (Object.keys(v).length) return;
@@ -119,7 +119,7 @@ function CreateDrawer({ open, onClose, branches, onSaved }) {
           </Select>
           {needsBranch && (
             <Select label="Branch" required value={f.branch_id} error={errors.branch_id} onChange={(e) => setF({ ...f, branch_id: e.target.value })}>
-              <option value="">Select a branch…</option>
+              <option value="" disabled>Select a branch…</option>
               {branches.map((b) => <option key={b.branch_id} value={b.branch_id}>{b.name}</option>)}
             </Select>
           )}
@@ -185,8 +185,8 @@ function EditDrawer({ user, branches, onClose, onSaved }) {
           {STAFF_ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
         </Select>
         {needsBranch && (
-          <Select label="Branch" value={branchId} onChange={(e) => setBranchId(e.target.value)}>
-            <option value="">Select a branch…</option>
+          <Select label="Branch" required value={branchId} onChange={(e) => setBranchId(e.target.value)}>
+            <option value="" disabled>Select a branch…</option>
             {branches.map((b) => <option key={b.branch_id} value={b.branch_id}>{b.name}</option>)}
           </Select>
         )}

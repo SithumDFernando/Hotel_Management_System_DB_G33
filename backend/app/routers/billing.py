@@ -17,7 +17,8 @@ import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.db import get_db
-from app.dependencies import assert_guest_owns_booking, require_role
+from app.db_errors import raise_error_to_http
+from app.dependencies import assert_booking_access, require_role
 from app.schemas.billing import BillOut, PaymentCreate, PaymentOut
 
 router = APIRouter()           
@@ -28,14 +29,8 @@ STAFF_ROLES = ("admin", "manager", "receptionist")
 # Helpers
 
 def _db_error_to_http(exc: asyncpg.exceptions.RaiseError) -> HTTPException:
-    """Map RAISE EXCEPTION messages from the SQL functions to HTTP errors."""
-    msg = exc.message
-    lowered = msg.lower()
-    if "not found" in lowered or "not yet generated" in lowered:
-        code = status.HTTP_404_NOT_FOUND
-    else:
-        code = status.HTTP_400_BAD_REQUEST
-    return HTTPException(status_code=code, detail=msg)
+    """Map RAISE EXCEPTION messages from the billing procedures to HTTP errors."""
+    return raise_error_to_http(exc, (("not yet generated", status.HTTP_404_NOT_FOUND),))
 
 
 def _bill_from_row(row) -> BillOut:
@@ -79,20 +74,23 @@ BILL_SELECT = """
 async def generate_bill(
     booking_id: UUID,
     discount: Decimal | None = Query(
-        None, ge=0, description="Discount amount. Omit to keep the existing discount."
+        None, ge=0, le=Decimal("99999999.99"), decimal_places=2,
+        description="Discount amount. Omit to keep the existing discount.",
     ),
     db=Depends(get_db),
     user=Depends(require_role(*STAFF_ROLES)),
 ):
     """Generate the bill for a booking, or recalculate it if one exists."""
+    await assert_booking_access(db, user, booking_id)
     try:
-        await db.execute(
-            "CALL generate_bill($1::UUID, $2::NUMERIC)", booking_id, discount
-        )
+        async with db.transaction():
+            await db.execute(
+                "CALL generate_bill($1::UUID, $2::NUMERIC)", booking_id, discount
+            )
+            row = await db.fetchrow(BILL_SELECT, booking_id)
     except asyncpg.exceptions.RaiseError as exc:
         raise _db_error_to_http(exc)
 
-    row = await db.fetchrow(BILL_SELECT, booking_id)
     return _bill_from_row(row)
 
 # GET /api/billing/{booking_id}
@@ -104,7 +102,7 @@ async def get_bill(
     user=Depends(require_role(*STAFF_ROLES, "guest")),
 ):
     """Get the invoice/bill details for a booking (guests: own bookings only)."""
-    await assert_guest_owns_booking(db, user, booking_id)
+    await assert_booking_access(db, user, booking_id)
     row = await db.fetchrow(BILL_SELECT, booking_id)
     if row is None:
         raise HTTPException(
@@ -122,27 +120,29 @@ async def create_payment(
     user=Depends(require_role(*STAFF_ROLES)),
 ):
     """Record a payment against a booking's bill (partial payments allowed)."""
+    await assert_booking_access(db, user, body.booking_id)
     try:
-        await db.execute(
-            "CALL record_payment($1::UUID, $2::NUMERIC, $3, $4)",
-            body.booking_id,
-            body.amount,
-            body.payment_method,
-            body.notes,
-        )
+        async with db.transaction():
+            # The last NULL is the placeholder for OUT p_payment_id
+            result = await db.fetchrow(
+                "CALL record_payment($1::UUID, $2::NUMERIC, $3, $4, NULL)",
+                body.booking_id,
+                body.amount,
+                body.payment_method,
+                body.notes,
+            )
+            # Read back this call's own payment, not "the newest one"
+            row = await db.fetchrow(
+                """
+                SELECT payment_id, booking_id, amount, payment_method, paid_at, notes
+                FROM payment
+                WHERE payment_id = $1::UUID
+                """,
+                result["p_payment_id"],
+            )
     except asyncpg.exceptions.RaiseError as exc:
         raise _db_error_to_http(exc)
 
-    row = await db.fetchrow(
-        """
-        SELECT payment_id, booking_id, amount, payment_method, paid_at, notes
-        FROM payment
-        WHERE booking_id = $1::UUID
-        ORDER BY paid_at DESC
-        LIMIT 1
-        """,
-        body.booking_id,
-    )
     return _payment_from_row(row)
 
 # GET /api/payments/{booking_id}
@@ -154,15 +154,7 @@ async def list_payments(
     user=Depends(require_role(*STAFF_ROLES, "guest")),
 ):
     """List the payment history for a booking, newest first (guests: own only)."""
-    await assert_guest_owns_booking(db, user, booking_id)
-    exists = await db.fetchval(
-        "SELECT 1 FROM booking WHERE booking_id = $1::UUID", booking_id
-    )
-    if not exists:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Booking {booking_id} not found",
-        )
+    await assert_booking_access(db, user, booking_id)
 
     rows = await db.fetch(
         """

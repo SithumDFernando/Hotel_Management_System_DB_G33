@@ -89,6 +89,14 @@ export function errorMessage(err, fallback = 'Something went wrong. Please try a
 export const bookingRef = (id) => `SN-${String(id || '').slice(0, 8).toUpperCase()}`;
 
 export const TAX_RATE = 0.15; // mirrors fn_calculate_tax default (db/functions)
+// Mirrors validate_new_password in backend/app/auth.py (bcrypt reads 72 bytes)
+export function passwordError(pw) {
+  if (pw.length < 8) return 'Use at least 8 characters';
+  if (new TextEncoder().encode(pw).length > 72) return 'Use at most 72 characters';
+  return '';
+}
+
+export const MAX_STAY_NIGHTS = 30; // mirrors the cap in create_booking (db/procedures/booking.sql)
 
 export function initials(name = '') {
   return (

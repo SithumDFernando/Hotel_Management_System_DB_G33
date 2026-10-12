@@ -29,6 +29,7 @@ calculate_bill()
   └── fn_calculate_tax()
 
 check_out()
+  ├── generate_bill()            ← recalculates the bill first (ISSUE-04)
   └── fn_get_outstanding_balance()
 
 record_payment()
@@ -103,28 +104,33 @@ RETURNS: Outstanding balance amount
 ### `create_booking(p_guest_id, p_room_id, p_check_in, p_check_out, p_payment_option) → UUID`
 
 ```
-ISOLATION:  SERIALIZABLE
-LOCKING:    SELECT ... FOR UPDATE on the target room's bookings
-
 LOGIC:
   1. Validate guest exists
-  2. Validate room exists, get branch_id and room_type_id
-  3. Lock: SELECT 1 FROM booking
-       WHERE room_id = p_room_id
-         AND status NOT IN ('Cancelled', 'Checked-Out')
-         AND check_in_date < p_check_out
-         AND check_out_date > p_check_in
-       FOR UPDATE
-     → If any rows: RAISE 'Room not available for selected dates'
+  2. Validate room exists, get branch_id, room_type_id and status
+  3. Business rules (ISSUE-08):
+       p_check_in < CURRENT_DATE            → RAISE 'Check-in date cannot be in the past'
+       p_check_out - p_check_in > 30        → RAISE 'Stays longer than 30 nights must be
+                                               arranged with the front desk'
+       room status = 'Maintenance'          → RAISE 'Room is under maintenance and cannot
+                                               be booked'
   4. Snapshot rate: rate := fn_get_current_rate(branch_id, room_type_id)
-  5. INSERT INTO booking (...) VALUES (...) RETURNING booking_id
-  6. RETURN booking_id
+  5. INSERT INTO booking (...) VALUES (...) RETURNING booking_id INTO OUT p_booking_id
+     → trg_check_double_booking locks the room row and checks overlaps;
+       excl_booking_room_overlap is the guarantee (ISSUE-05)
+
+CONSTANTS:
+  - Max stay: 30 nights (c_max_nights in booking.sql; MAX_STAY_NIGHTS in the
+    frontend). Agreed business value; change both together.
+  - No limit on how far ahead a booking can be made.
 
 ERRORS:
-  - 'Guest not found'
-  - 'Room not found'
-  - 'Room not available for selected dates'
-  - 'Check-out date must be after check-in date'
+  - 'Guest not found' / 'Room not found'                     → 404
+  - 'Check-in date cannot be in the past'                    → 400
+  - 'Stays longer than 30 nights must be arranged ...'       → 400
+  - 'Room is under maintenance and cannot be booked'         → 409
+  - 'Room % is already booked for the selected dates.'       → 409
+  - payment_option outside the list: CHECK chk_booking_payment_option
+  - check-out not after check-in: CHECK chk_booking_dates
 ```
 
 ---
@@ -135,13 +141,45 @@ ERRORS:
 LOGIC:
   1. SELECT status FROM booking WHERE booking_id = p_booking_id FOR UPDATE
   2. Validate status = 'Booked' → else RAISE 'Only Booked bookings can be checked in'
+     CURRENT_DATE < check_in_date      → RAISE 'Check-in is not allowed before %'   (no early check-in)
+     CURRENT_DATE >= check_out_date    → RAISE 'This booking''s stay period has already ended'
+     room status = 'Maintenance'       → RAISE 'Room is under maintenance'          (API 409)
   3. UPDATE booking SET status = 'Checked-In', actual_checkin_time = NOW()
-  4. UPDATE room SET status = 'Occupied' WHERE room_id = (booking's room_id)
-     → (can also be handled by room_status_trigger)
+  4. Room -> 'Occupied' is done by trg_room_status (the procedure does not
+     update the room table; see 04_triggers.md)
 
 ERRORS:
   - 'Booking not found'
   - 'Only Booked bookings can be checked in'
+  - 'Check-in is not allowed before YYYY-MM-DD'
+  - 'This booking''s stay period has already ended'
+  - 'Room is under maintenance'
+
+CONCURRENCY:
+  - The FOR UPDATE in step 1 makes a concurrent second check-in wait, then
+    see 'Checked-In' and raise, so exactly one of N simultaneous check-ins wins.
+```
+
+---
+
+### `cancel_booking(p_booking_id UUID) → VOID`
+
+```
+LOGIC:
+  1. SELECT status FROM booking WHERE booking_id = p_booking_id FOR UPDATE
+  2. Validate status = 'Booked'
+       → else RAISE 'Only Booked bookings can be cancelled (current status: %)'
+  3. UPDATE booking SET status = 'Cancelled'
+     → room status is handled by trg_room_status
+
+ERRORS:
+  - 'Booking not found'
+  - 'Only Booked bookings can be cancelled (current status: X)'
+
+NOTES:
+  - Replaces the router's SELECT-then-UPDATE: a cancel racing a check-in
+    waits for it and then raises, instead of cancelling a checked-in guest.
+  - Authorization (branch / own booking) stays in the router.
 ```
 
 ---
@@ -152,17 +190,22 @@ ERRORS:
 LOGIC:
   1. SELECT status FROM booking WHERE booking_id = p_booking_id FOR UPDATE
   2. Validate status = 'Checked-In'
-  3. balance := fn_get_outstanding_balance(p_booking_id)
-  4. IF balance > 0 THEN RAISE 'Outstanding balance of LKR % — pay before checkout'
-  5. UPDATE booking SET status = 'Checked-Out', actual_checkout_time = NOW()
-  6. UPDATE room SET status = 'Available' WHERE room_id = (booking's room_id)
-     → (can also be handled by room_status_trigger)
+  3. CALL generate_bill(p_booking_id, NULL)
+     → the stored bill is only as fresh as the last generate, so recalculate
+       it here: creates it if missing, bills services added since, keeps the
+       existing discount (NULL)
+  4. balance := fn_get_outstanding_balance(p_booking_id)
+  5. IF balance > 0 THEN RAISE 'Outstanding balance of LKR % — pay before checkout'
+     → rolls back the whole CALL, including the bill refresh (API → 402)
+  6. UPDATE booking SET status = 'Checked-Out', actual_checkout_time = NOW()
+  7. Room -> 'Available' is done by trg_room_status (a Maintenance flag set
+     during the stay is kept)
 
 ERRORS:
   - 'Booking not found'
   - 'Only Checked-In bookings can be checked out'
-  - 'Outstanding balance of LKR X — payment required before checkout'
-  - 'Bill not yet generated for this booking'
+  - 'Outstanding balance of LKR X — pay before checkout'
+  (No 'Bill not yet generated' path: step 3 always creates the bill.)
 ```
 
 ---
@@ -193,24 +236,27 @@ NOTES:
 ERRORS:
   - 'Booking not found'
   - 'Booking must be Checked-In or Checked-Out to generate a bill'
+  - 'Discount must be between 0 and the bill subtotal'
+  - 'Bill total exceeds the maximum supported amount'  (total ≥ 100,000,000; bill columns are NUMERIC(10,2))
 ```
 
 ---
 
-### `record_payment(p_booking_id UUID, p_amount NUMERIC, p_method VARCHAR, p_notes VARCHAR DEFAULT NULL) → UUID`
+### `record_payment(p_booking_id UUID, p_amount NUMERIC, p_method VARCHAR, p_notes VARCHAR, OUT p_payment_id UUID)`
+
+Call with all five arguments; the last `NULL` is the OUT placeholder:
+`CALL record_payment(id, amount, 'Cash', notes_or_NULL, NULL)` → one row `{p_payment_id}`.
 
 ```
 LOGIC:
-  1. balance := fn_get_outstanding_balance(p_booking_id)
-  2. IF p_amount > balance THEN RAISE 'Amount exceeds outstanding balance'
-  3. INSERT INTO payment (booking_id, amount, payment_method, notes)
-     VALUES (...) RETURNING payment_id
-  4. UPDATE bill SET
-       amount_paid = amount_paid + p_amount,
-       outstanding_balance = outstanding_balance - p_amount,
-       balance_flag = (outstanding_balance - p_amount > 0)
-     WHERE booking_id = p_booking_id
-  5. RETURN payment_id
+  1. SELECT total_amount FROM bill WHERE booking_id = p_booking_id FOR UPDATE
+     → serializes concurrent payments on one bill
+  2. balance := fn_get_outstanding_balance(p_booking_id)
+  3. IF p_amount > balance THEN RAISE 'Amount exceeds outstanding balance'
+  4. INSERT INTO payment (booking_id, amount, payment_method, notes)
+     VALUES (...) RETURNING payment_id INTO p_payment_id
+  5. UPDATE bill SET amount_paid / outstanding_balance / balance_flag
+     recalculated from SUM(payment.amount)
 
 NOTES:
   - Supports partial payments (multiple calls).
@@ -238,7 +284,7 @@ db/
 │   ├── fn_calculate_tax.sql
 │   └── fn_get_outstanding_balance.sql
 ├── procedures/
-│   ├── booking.sql                     # create_booking()
+│   ├── booking.sql                     # create_booking(), cancel_booking()
 │   ├── checkin_checkout.sql            # check_in(), check_out()
 │   ├── billing.sql                     # calculate_bill()
 │   └── payments.sql                    # record_payment()

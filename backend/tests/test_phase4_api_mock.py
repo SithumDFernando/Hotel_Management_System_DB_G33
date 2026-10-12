@@ -72,7 +72,7 @@ async def run_tests():
     }
 
     async def mock_fetchrow(query, *args):
-        if "SELECT account_id FROM user_account WHERE email" in query:
+        if "SELECT account_id FROM user_account WHERE LOWER(email)" in query:
             return None # no conflict
         if "SELECT account_id, role, branch_id FROM user_account" in query:
             return {"account_id": args[0], "role": "receptionist", "branch_id": branch_id}
@@ -83,6 +83,8 @@ async def run_tests():
             return None # no conflict
         if "INSERT INTO branch" in query:
             return {"branch_id": str(uuid4())}
+        if "SELECT branch_id FROM branch WHERE branch_id" in query:
+            return {"branch_id": args[0]}  # branch exists
         if "SELECT * FROM branch WHERE branch_id" in query:
             return {"branch_id": args[0], "name": "Test Branch", "city": "Colombo", "address": "123 Street", "phone": "0112345678", "manager_name": "John"}
         if "INSERT INTO user_account" in query:
@@ -285,7 +287,7 @@ async def run_tests():
         # Create user
         r = await client.post(
             "/api/admin/users",
-            json={"email": "newrec@skynest.lk", "password": "SecurePassword123!", "role": "receptionist"},
+            json={"email": "newrec@skynest.lk", "password": "SecurePassword123!", "role": "receptionist", "branch_id": branch_id},
             headers=admin_headers
         )
         if r.status_code == 201 and "account_id" in r.json():
@@ -310,6 +312,11 @@ async def run_tests():
 
     app.dependency_overrides.clear()
     return failed == 0
+
+# pytest entry point (the suite above also runs as a plain script)
+async def test_phase4_mock_suite():
+    assert await run_tests(), f"{failed} check(s) failed"
+
 
 if __name__ == "__main__":
     success = asyncio.run(run_tests())

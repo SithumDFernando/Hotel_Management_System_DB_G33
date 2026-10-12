@@ -13,10 +13,25 @@ Database table mapped:
 from __future__ import annotations
 
 from datetime import date
-from typing import Literal, Optional
+from typing import Annotated, Literal, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
+
+from app.schemas.fields import NormEmail
+
+
+# Input limits mirror the guest table in db/schema/01_tables.sql.
+# GuestOut keeps plain str so existing rows always serialise.
+FullName      = Annotated[str, Field(min_length=2, max_length=150)]
+NicPassport   = Annotated[str, Field(min_length=4, max_length=20)]
+GuestEmail    = NormEmail  # trimmed + lower-cased, max 100 (app/schemas/fields.py)
+Phone         = Annotated[str, Field(min_length=7, max_length=20)]
+Nationality   = Annotated[str, Field(max_length=50)]
+Gender        = Annotated[str, Field(max_length=10)]
+CompanyName   = Annotated[str, Field(max_length=150)]
+CompanyRegNo  = Annotated[str, Field(max_length=50)]
+ContactName   = Annotated[str, Field(max_length=150)]
 
 
 # ---------------------------------------------------------------------------
@@ -52,7 +67,16 @@ class GuestBase(BaseModel):
 
 class GuestCreate(GuestBase):
     """Payload for POST /guests — all required base fields must be present."""
-    pass
+
+    full_name:            FullName
+    nic_passport:         NicPassport
+    email:                GuestEmail
+    phone:                Phone
+    nationality:          Optional[Nationality]  = None
+    gender:               Optional[Gender]       = None
+    company_name:         Optional[CompanyName]  = None
+    company_reg_number:   Optional[CompanyRegNo] = None
+    billing_contact_name: Optional[ContactName]  = None
 
 
 # ---------------------------------------------------------------------------
@@ -62,17 +86,17 @@ class GuestCreate(GuestBase):
 class GuestUpdate(BaseModel):
     """Payload for PUT/PATCH /guests/{id} — every field is optional."""
 
-    full_name:            Optional[str]   = None
-    nic_passport:         Optional[str]   = None
-    email:                Optional[str]   = None
-    phone:                Optional[str]   = None
-    date_of_birth:        Optional[date]  = None
-    nationality:          Optional[str]   = None
-    gender:               Optional[str]   = None
+    full_name:            Optional[FullName]     = None
+    nic_passport:         Optional[NicPassport]  = None
+    email:                Optional[GuestEmail]   = None
+    phone:                Optional[Phone]        = None
+    date_of_birth:        Optional[date]         = None
+    nationality:          Optional[Nationality]  = None
+    gender:               Optional[Gender]       = None
     guest_type:           Optional[Literal["Individual", "Corporate"]] = None
-    company_name:         Optional[str]   = None
-    company_reg_number:   Optional[str]   = None
-    billing_contact_name: Optional[str]   = None
+    company_name:         Optional[CompanyName]  = None
+    company_reg_number:   Optional[CompanyRegNo] = None
+    billing_contact_name: Optional[ContactName]  = None
 
     @model_validator(mode="after")
     def corporate_must_have_company(self) -> "GuestUpdate":
@@ -95,3 +119,22 @@ class GuestOut(GuestBase):
 
     class Config:
         from_attributes = True  # Enables mapping from asyncpg Record / ORM objects
+
+
+# Booking history embedded in GET /guests/{guest_id}
+class BookingSummary(BaseModel):
+    booking_id: UUID
+    room_id: UUID
+    room_number: str
+    check_in_date: date
+    check_out_date: date
+    rate_at_booking: float
+    status: str
+    payment_option: str
+    actual_checkin_time: Optional[str] = None
+    actual_checkout_time: Optional[str] = None
+
+
+class GuestDetailOut(GuestOut):
+    """Full guest profile including their booking history."""
+    bookings: list[BookingSummary] = []

@@ -12,7 +12,7 @@
 | `/rooms` | `RoomsBrowse` | Public | Browse available rooms with filters |
 | `/login` | `Login` | Public | Login form |
 | `/register` | `Register` | Public | Guest self-signup (`POST /api/auth/signup`), then auto sign-in |
-| `/my-bookings` | `MyBookings` | Guest | Own bookings (upcoming / past / cancelled), cancel `Booked`, view bill + services |
+| `/my-bookings` | `MyBookings` | Guest | Own bookings (upcoming / past / cancelled), cancel `Booked`, view bill + services. A guest login with no linked guest profile sees a "contact the front desk" empty state instead (no API call). |
 | `/booking/:roomId` | `BookingCheckout` | Guest, Receptionist, Manager | Booking form + summary |
 | `/services/:bookingId` | `ServiceRequest` | Receptionist, Manager | Add services to a checked-in booking |
 | `/dashboard/receptionist` | `ReceptionistDashboard` | Receptionist | Today's bookings, check-in/out, payments |
@@ -81,7 +81,7 @@
 **Features:**
 - Room details display (type, rate, amenities, branch)
 - Guest selection (receptionist picks from list) or auto-filled (guest user)
-- Date pickers: check-in, check-out
+- Date pickers: check-in, check-out (check-in not in the past, at most 30 nights, same rules as `create_booking`)
 - Live cost calculator: `rate × nights` preview
 - Payment method selector
 - Booking confirmation summary → submit
@@ -126,8 +126,8 @@
 | Current Guests | Bookings with status `Checked-In` | `GET /bookings?status=Checked-In` |
 | Today's Departures | Checked-In bookings with `check_out_date <= today` (filtered client-side — the API has no `check_out` filter) | `GET /bookings?status=Checked-In` |
 | Upcoming | Booked stays arriving after today | `GET /bookings?status=Booked` |
-| Quick Actions | Check-in / Check-out / Cancel per booking; a 402 on check-out opens the payment window | `PATCH /bookings/:id/checkin`, `/checkout`, `/cancel` |
-| Bill & Payment window | Recalculates the bill on open (`POST /billing/:bid/generate`, optional discount), shows charges + history, records payments | `POST /billing/:bid/generate`, `GET /payments/:bid`, `POST /payments` |
+| Quick Actions | Check-in / Check-out / Cancel per booking. Check-in is disabled before the arrival date ("Arrives on …") and once the stay has ended. A 402 on check-out opens the payment window | `PATCH /bookings/:id/checkin`, `/checkout`, `/cancel` |
+| Bill & Payment window | Recalculates the bill on open for in-house guests (`POST /billing/:bid/generate`, optional discount; a Checked-Out booking shows its final bill), shows charges + history, records payments | `POST /billing/:bid/generate`, `GET /payments/:bid`, `POST /payments` |
 | New Booking | Link to `/rooms?mode=booking` | — |
 | Guest Registration | Side drawer (`GuestFormDrawer`) | `POST /guests` |
 
@@ -151,11 +151,11 @@ KPI cards: arrivals, in-house, departures due, rooms available (`GET /rooms?stat
 | Billing Summary | Guests with outstanding balances | `GET /reports/billing-summary` |
 | Service Analytics | Top services, usage trends | `GET /reports/top-services`, `GET /reports/service-usage` |
 
-Tabs (URL `?tab=`): **Overview** (KPIs, 6-month stacked revenue chart, top services), **Reports** (all five reports via `ReportsPanel`), **Rooms** (maintenance toggle, `PATCH /rooms/:id/status`), **Service catalogue** (create / reprice / deactivate, `/services`).
+Tabs (URL `?tab=`): **Overview** (KPIs, 6-month stacked revenue chart, top services), **Reports** (all five reports via `ReportsPanel`), **Rooms** (maintenance toggle, `PATCH /rooms/:id/status`; clearing Maintenance on a room with a checked-in guest gets a 409 for `Available`, so the toggle sets it back to `Occupied`), **Service catalogue** (create / reprice / deactivate, `/services`).
 
 **Components used:** `Navbar`, `ReportTable`, `ReportsPanel`, `BranchOverview`, `RoomManager`, `CatalogueManager`
 
-**Visualization:** `recharts` (route is lazy-loaded). Revenue counts checked-out stays only; top-services is not branch-scoped by the API.
+**Visualization:** `recharts` (route is lazy-loaded). Revenue counts checked-out stays only. Top services are scoped like the other reports: managers see their own branch (ranked within it), admins see all branches or the selected one.
 
 ---
 

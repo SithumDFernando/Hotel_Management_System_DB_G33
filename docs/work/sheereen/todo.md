@@ -28,6 +28,8 @@
   - [x] Execute atomic UPSERT into `bill` table (`ON CONFLICT (booking_id) DO UPDATE`)
 - [x] **Payment Recording Stored Procedure** (`db/procedures/payments.sql`)
   - [x] Implement `record_payment(p_booking_id UUID, p_amount NUMERIC(10,2), p_payment_method VARCHAR(50), p_notes VARCHAR(255) DEFAULT NULL)`
+  - [x] `payment_method` limited to `Credit Card` / `Cash` / `Bank Transfer` (CHECK `chk_payment_method` + `PaymentMethod` Literal) (ISSUE-08)
+  - [x] Return the inserted payment's ID (`OUT p_payment_id UUID`; `p_notes` no longer has a default) so `POST /api/payments` returns its own payment (ISSUE-12)
   - [x] Verify bill exists for the booking (raise exception if not found)
   - [x] Insert payment record into `payment` table
   - [x] Atomically update `bill.amount_paid`, `bill.outstanding_balance`, and `bill.balance_flag`

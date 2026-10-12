@@ -7,9 +7,15 @@ NUMERIC(10,2) columns in the database.
 
 from datetime import datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from uuid import UUID
+
+# Mirrors the CHECKs chk_booking_payment_option / chk_payment_method in
+# db/schema/02_constraints.sql (used for booking.payment_option and
+# payment.payment_method)
+PaymentMethod = Literal["Credit Card", "Cash", "Bank Transfer"]
 
 
 class BillOut(BaseModel):
@@ -31,7 +37,7 @@ class BillOut(BaseModel):
 class PaymentCreate(BaseModel):
     booking_id: UUID
     amount: Decimal
-    payment_method: str = Field(..., min_length=1, max_length=50)
+    payment_method: PaymentMethod
     notes: str | None = Field(None, max_length=255)
 
     @field_validator("amount")

@@ -3,41 +3,45 @@
 -- =============================================================================
 -- Purpose:
 --   Stored procedures for performing guest check-in and check-out operations.
---   Each procedure transitions the booking status AND the room status in a
---   single atomic transaction, keeping both tables consistent.
+--   Each procedure transitions the booking status in one atomic call. The
+--   room status follows from trg_room_status (room_status_trigger.sql),
+--   which fires in the same transaction and is the only owner of
+--   Available <-> Occupied (ISSUE-09).
 --
 -- Procedures to implement:
 --
 --   1. perform_checkin(p_booking_id UUID)
 --      -----------------------------------------
 --      Steps:
---        a. Validate: booking.status must be 'Booked'. Raise exception otherwise.
+--        a. Lock the booking row (FOR UPDATE) so concurrent check-ins run one
+--           after another; validate status = 'Booked'. Raise exception otherwise.
+--           Also (ISSUE-08): not before check_in_date (no early check-in),
+--           not once check_out_date is reached, not while the room is
+--           under Maintenance.
 --        b. Update booking:
 --             SET status = 'Checked-In',
 --                 actual_checkin_time = NOW()
 --             WHERE booking_id = p_booking_id
---        c. Update room status (alternatively handled by room_status_trigger):
---             SET status = 'Occupied'
---             WHERE room_id = (SELECT room_id FROM booking WHERE booking_id = p_booking_id)
+--        c. Room -> 'Occupied' is done by trg_room_status.
 --
 --   2. perform_checkout(p_booking_id UUID)
 --      -----------------------------------------
 --      Steps:
---        a. Validate: booking.status must be 'Checked-In'. Raise exception otherwise.
---        b. Update booking:
+--        a. Lock the booking row; validate status = 'Checked-In'.
+--        b. CALL generate_bill(p_booking_id, NULL): creates the bill if missing,
+--           or recalculates it so every service added since the last
+--           generate is billed. NULL keeps the existing discount.
+--        c. Raise 'Outstanding balance ...' if anything is still unpaid. The
+--           whole CALL rolls back, including the bill refresh (API -> 402).
+--        d. Update booking:
 --             SET status = 'Checked-Out',
 --                 actual_checkout_time = NOW()
 --             WHERE booking_id = p_booking_id
---        c. Update room status:
---             SET status = 'Available'
---             WHERE room_id = (SELECT room_id FROM booking WHERE booking_id = p_booking_id)
---        d. (Optional) Auto-generate the bill if not already present:
---             CALL generate_bill(p_booking_id);
+--        e. Room -> 'Available' is done by trg_room_status.
 --
 -- Notes:
---   - If room_status_trigger is implemented, steps (c) above may be handled
---     automatically by the trigger on booking status change. Decide on one
---     approach and document it clearly in both files to avoid duplication.
+--   - Neither procedure updates the room table; that keeps a Maintenance
+--     flag from being overwritten by a check-in or checkout.
 --   - Both procedures should COMMIT atomically — no partial updates.
 --
 -- Called by:
@@ -49,28 +53,46 @@ CREATE OR REPLACE PROCEDURE perform_checkin(p_booking_id UUID)
 LANGUAGE plpgsql
 AS $$
 DECLARE
-    v_status VARCHAR;
-    v_room_id UUID;
+    v_status      booking_status;
+    v_ci          DATE;
+    v_co          DATE;
+    v_room_status room_status;
 BEGIN
-    SELECT status, room_id INTO v_status, v_room_id
-    FROM booking WHERE booking_id = p_booking_id;
-    
-    IF v_status IS NULL THEN
+    -- A concurrent second check-in waits here, then sees 'Checked-In'
+    SELECT b.status, b.check_in_date, b.check_out_date, r.status
+      INTO v_status, v_ci, v_co, v_room_status
+      FROM booking b
+      JOIN room r ON r.room_id = b.room_id
+     WHERE b.booking_id = p_booking_id
+       FOR UPDATE OF b;
+
+    IF NOT FOUND THEN
         RAISE EXCEPTION 'Booking not found';
     END IF;
 
-    IF v_status != 'Booked' THEN
+    IF v_status <> 'Booked' THEN
         RAISE EXCEPTION 'Only Booked bookings can be checked in';
+    END IF;
+
+    -- No early check-in: the room would show Occupied and charges would
+    -- cover the wrong period
+    IF CURRENT_DATE < v_ci THEN
+        RAISE EXCEPTION 'Check-in is not allowed before %', v_ci;
+    END IF;
+
+    IF CURRENT_DATE >= v_co THEN
+        RAISE EXCEPTION 'This booking''s stay period has already ended';
+    END IF;
+
+    IF v_room_status = 'Maintenance' THEN
+        RAISE EXCEPTION 'Room is under maintenance';
     END IF;
 
     UPDATE booking 
     SET status = 'Checked-In', 
         actual_checkin_time = NOW()
     WHERE booking_id = p_booking_id;
-
-    UPDATE room 
-    SET status = 'Occupied' 
-    WHERE room_id = v_room_id;
+    -- Room status: trg_room_status (room_status_trigger.sql) owns it
 END;
 $$;
 
@@ -78,33 +100,35 @@ CREATE OR REPLACE PROCEDURE perform_checkout(p_booking_id UUID)
 LANGUAGE plpgsql
 AS $$
 DECLARE
-    v_status VARCHAR;
-    v_room_id UUID;
+    v_status  booking_status;
     v_balance NUMERIC;
 BEGIN
-    SELECT status, room_id INTO v_status, v_room_id
-    FROM booking WHERE booking_id = p_booking_id;
-    
-    IF v_status IS NULL THEN
+    SELECT status INTO v_status
+      FROM booking
+     WHERE booking_id = p_booking_id
+       FOR UPDATE;
+
+    IF NOT FOUND THEN
         RAISE EXCEPTION 'Booking not found';
     END IF;
 
-    IF v_status != 'Checked-In' THEN
+    IF v_status <> 'Checked-In' THEN
         RAISE EXCEPTION 'Only Checked-In bookings can be checked out';
     END IF;
+
+    -- The stored bill is only as fresh as the last generate_bill call, so
+    -- bring it up to date first (creates it if missing, keeps the discount)
+    CALL generate_bill(p_booking_id, NULL);
 
     v_balance := fn_get_outstanding_balance(p_booking_id);
     IF v_balance > 0 THEN
         RAISE EXCEPTION 'Outstanding balance of LKR % — pay before checkout', v_balance;
     END IF;
 
-    UPDATE booking 
-    SET status = 'Checked-Out', 
+    UPDATE booking
+    SET status = 'Checked-Out',
         actual_checkout_time = NOW()
     WHERE booking_id = p_booking_id;
-
-    UPDATE room 
-    SET status = 'Available' 
-    WHERE room_id = v_room_id;
+    -- Room status: trg_room_status (room_status_trigger.sql) owns it
 END;
 $$;

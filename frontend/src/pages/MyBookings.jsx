@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { cancelBooking, listBookings } from '@/api/bookings';
 import { getBill, getPayments } from '@/api/billing';
 import { getUsage } from '@/api/services';
+import useAuth from '@/hooks/useAuth';
 import useFetch from '@/hooks/useFetch';
 import BillTable from '@/components/BillTable';
 import BookingSummary from '@/components/BookingSummary';
@@ -85,7 +86,10 @@ function BillModal({ booking, onClose }) {
 
 export default function MyBookings() {
   const toast = useToast();
-  const { data, isLoading, error, refetch } = useFetch((s) => listBookings({}, s), []);
+  const { user } = useAuth();
+  // A guest login with no guest profile can't have bookings (the API answers 403)
+  const noProfile = !user.guest_id;
+  const { data, isLoading, error, refetch } = useFetch((s) => listBookings({}, s), [], { enabled: !noProfile });
   const [tab, setTab] = useState('upcoming');
   const [billFor, setBillFor] = useState(null);
   const [cancelFor, setCancelFor] = useState(null);
@@ -131,7 +135,13 @@ export default function MyBookings() {
 
       <Tabs tabs={tabs} value={tab} onChange={setTab} className="mb-5 w-fit max-w-full" />
 
-      {error ? (
+      {noProfile ? (
+        <EmptyState
+          icon="user"
+          title="No guest profile linked"
+          message="Your account isn't linked to a guest profile yet, so there are no bookings to show. Please contact the front desk."
+        />
+      ) : error ? (
         <ErrorState message={error} onRetry={refetch} />
       ) : isLoading ? (
         <div className="space-y-4">{[...Array(2)].map((_, i) => <Skeleton key={i} className="h-40 w-full rounded-2xl" />)}</div>

@@ -19,24 +19,27 @@
 | 9 | `idx_payment_booking` | payment | `booking_id` | B-tree | Payment listing per booking, `record_payment()` sum |
 | 10 | `idx_bill_booking` | bill | `booking_id` | B-tree (UNIQUE) | `fn_get_outstanding_balance()`, 1:1 lookup |
 | 11 | `idx_guest_nic` | guest | `nic_passport` | B-tree (UNIQUE) | Guest lookup by NIC/passport, duplicate prevention |
-| 12 | `idx_user_email` | user_account | `email` | B-tree (UNIQUE) | Login authentication lookup |
+| 12 | `uq_user_account_email_ci` | user_account | `LOWER(email)` | B-tree (UNIQUE, expression) | Login lookup (`WHERE LOWER(email) = $1`) and case-insensitive email uniqueness |
 | 13 | `idx_user_branch` | user_account | `branch_id` | B-tree | Staff listing per branch |
 | 14 | `idx_room_rate_branch_type` | room_rate | `branch_id, room_type_id` | B-tree (UNIQUE) | `fn_get_current_rate()` lookup |
 | 15 | `idx_booking_checkout_date` | booking | `check_out_date` | B-tree | `v_monthly_revenue` grouping by month |
+| 16 | `excl_booking_room_overlap` (constraint index) | booking | `room_id, daterange(check_in_date, check_out_date, '[)')` WHERE status IN ('Booked','Checked-In') | GiST (`btree_gist`) | Enforces no overlapping active bookings per room (exclusion constraint); also usable by room-availability overlap queries |
 
 ---
 
 ## Notes
 
-### Why not GIN or GiST?
-- No full-text search columns in the current schema.
-- Date-range overlap queries (`check_in < X AND check_out > Y`) work efficiently with composite B-tree on `(room_id, check_in_date, check_out_date)`.
+### GIN and GiST
+- No full-text search columns in the current schema, so no GIN.
+- One GiST index: the one behind the exclusion constraint `excl_booking_room_overlap`. A B-tree can't enforce "no overlapping ranges", only uniqueness. `btree_gist` adds GiST support for the `room_id WITH =` part.
+- The trigger's overlap query (`check_in < X AND check_out > Y`) still uses the composite B-tree on `(room_id, check_in_date, check_out_date)`, so `idx_booking_room_dates` stays.
 - If we later add search on guest name or address, a GIN index with `pg_trgm` could be considered.
 
 ### Indexes created implicitly by constraints
 These do NOT need explicit `CREATE INDEX`:
 - All PRIMARY KEYs → automatic unique B-tree index
-- `UNIQUE` constraints on `guest.nic_passport`, `user_account.email`, `bill.booking_id`, `room_rate(branch_id, room_type_id)` → automatic indexes
+- `EXCLUDE` constraint `excl_booking_room_overlap` → automatic GiST index
+- `UNIQUE` constraints on `guest.nic_passport`, `user_account.guest_id`, `bill.booking_id`, `room_rate(branch_id, room_type_id)` → automatic indexes
 
 ### Performance impact
 - Write overhead is minimal — most tables have ≤ 2 additional indexes.
@@ -55,7 +58,7 @@ These do NOT need explicit `CREATE INDEX`:
 | `record_payment()` — sum payments | `idx_payment_booking` |
 | `GET /api/rooms?branch_id=&status=` | `idx_room_branch` |
 | `GET /api/bookings?guest_id=` | `idx_booking_guest` |
-| `POST /api/auth/login` | `idx_user_email` |
+| `POST /api/auth/login` | `uq_user_account_email_ci` |
 | `v_room_occupancy` | `idx_booking_room_dates`, `idx_room_branch` |
 | `v_guest_billing_summary` | `idx_booking_guest`, `idx_bill_booking` |
 | `v_service_usage_breakdown` | `idx_service_usage_booking`, `idx_service_usage_service` |

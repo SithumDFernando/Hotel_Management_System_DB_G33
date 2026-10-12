@@ -11,10 +11,13 @@ Run with:
     uvicorn app.main:app --reload --port 8000
 """
 
+import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+import asyncpg
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.db import init_db, close_db
@@ -50,6 +53,45 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+
+# ── Database Error Handling ───────────────────────────────────────────────────
+# Routers catch RaiseError locally to turn business-rule messages into 400/404/409.
+# Anything else from Postgres lands here: known classes get a generic 4xx, the
+# rest a logged 500. Raw Postgres text is never sent to the client.
+
+log = logging.getLogger("skynest")
+
+# Checked in order, so subclasses (e.g. StringDataRightTruncationError) come
+# before their base class (DataError).
+_PG_ERROR_MAP = (
+    (asyncpg.exceptions.UniqueViolationError,           409, "A record with these details already exists."),
+    (asyncpg.exceptions.ExclusionViolationError,        409, "Room is not available for the selected dates."),
+    (asyncpg.exceptions.ForeignKeyViolationError,       404, "A referenced record does not exist."),
+    (asyncpg.exceptions.CheckViolationError,            422, "The request violates a data rule."),
+    (asyncpg.exceptions.NotNullViolationError,          422, "A required field is missing."),
+    (asyncpg.exceptions.StringDataRightTruncationError, 422, "A value is too long."),
+    (asyncpg.exceptions.NumericValueOutOfRangeError,    422, "A numeric value is out of range."),
+    (asyncpg.exceptions.DataError,                      422, "Invalid input."),
+)
+
+
+@app.exception_handler(asyncpg.PostgresError)
+async def postgres_error_handler(request: Request, exc: asyncpg.PostgresError):
+    for cls, code, message in _PG_ERROR_MAP:
+        if isinstance(exc, cls):
+            log.warning("%s on %s %s: %s", type(exc).__name__,
+                        request.method, request.url.path, exc)
+            return JSONResponse(status_code=code, content={"detail": message})
+    log.error("Unhandled database error on %s %s",
+              request.method, request.url.path, exc_info=exc)
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+
+
+@app.exception_handler(ValueError)
+async def value_error_handler(request: Request, exc: ValueError):
+    log.warning("ValueError on %s %s: %s", request.method, request.url.path, exc)
+    return JSONResponse(status_code=422, content={"detail": "Invalid input."})
 
 
 # ── CORS Middleware ───────────────────────────────────────────────────────────

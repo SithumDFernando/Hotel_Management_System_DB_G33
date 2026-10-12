@@ -2,17 +2,23 @@
 backend/app/routers/bookings.py
 """
 
+from datetime import date
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from typing import Optional
 import asyncpg
 
 from app.db import get_db
-from app.dependencies import require_role
+from app.db_errors import raise_error_to_http
+from app.dependencies import (
+    assert_booking_access, assert_room_access, require_branch, require_guest_id, require_role,
+)
 from app.schemas.booking import (
     BookingCreate, BookingOut, BookingListOut, 
     BookingListResponse, GuestInfo, RoomInfo, BookingDetailOut,
     BookingCheckInResponse, BookingCheckOutResponse, BillSummary,
-    BookingStatusUpdate, BookingCancelResponse
+    BookingCancelResponse, BookingStatus
 )
 
 router = APIRouter()
@@ -24,31 +30,30 @@ async def create_booking(
     db=Depends(get_db),
     user: dict = Depends(require_role("receptionist", "manager", "admin", "guest"))
 ):
-    if user["role"] == "guest" and str(body.guest_id) != str(user.get("guest_id")):
+    if user["role"] == "guest" and str(body.guest_id) != require_guest_id(user):
         raise HTTPException(status_code=403, detail="Guests can only create bookings for themselves")
+    # Branch staff may only book rooms in their own branch
+    await assert_room_access(db, user, body.room_id)
 
     try:
-        # Calls the stored procedure.
-        result = await db.fetchrow(
-            "CALL create_booking($1::UUID, $2::UUID, $3::DATE, $4::DATE, $5::VARCHAR, NULL)",
-            str(body.guest_id), str(body.room_id), body.check_in_date, body.check_out_date, body.payment_option
-        )
-        if not result or "p_booking_id" not in result:
-             raise HTTPException(status_code=500, detail="Failed to create booking")
-        booking_id = result["p_booking_id"]
-        
-        # Fetch the created booking
-        booking = await db.fetchrow(
-            "SELECT * FROM booking WHERE booking_id = $1",
-            booking_id
-        )
+        # CALL + read back in one transaction, so the response is what was committed
+        async with db.transaction():
+            result = await db.fetchrow(
+                "CALL create_booking($1::UUID, $2::UUID, $3::DATE, $4::DATE, $5::VARCHAR, NULL)",
+                body.guest_id, body.room_id, body.check_in_date, body.check_out_date,
+                body.payment_option
+            )
+            booking = await db.fetchrow(
+                "SELECT * FROM booking WHERE booking_id = $1", result["p_booking_id"]
+            )
         return BookingOut(**dict(booking))
         
     except asyncpg.exceptions.RaiseError as e:
-        msg = str(e)
-        if "already booked" in msg or "Double booking" in msg or "not available" in msg:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=msg)
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg)
+        # Past check-in / stay too long -> 400 (default)
+        raise raise_error_to_http(e, (
+            ("already booked", status.HTTP_409_CONFLICT),
+            ("under maintenance", status.HTTP_409_CONFLICT),
+        ))
 
 
 # GET /api/bookings
@@ -56,15 +61,21 @@ async def create_booking(
 async def list_bookings(
     db=Depends(get_db),
     user: dict = Depends(require_role("receptionist", "manager", "admin", "guest")),
-    booking_status: str | None = Query(None, alias="status", description="Filter by status"),
-    branch_id: str | None = Query(None, description="Filter by branch UUID"),
-    guest_id: str | None = Query(None, description="Filter by guest UUID"),
-    room_id: str | None = Query(None, description="Filter by room UUID"),
-    from_date: str | None = Query(None, alias="from", description="Check-out >= this date"),
-    to_date: str | None = Query(None, alias="to", description="Check-in <= this date"),
+    booking_status: BookingStatus | None = Query(None, alias="status", description="Filter by status"),
+    branch_id: UUID | None = Query(None, description="Filter by branch UUID"),
+    guest_id: UUID | None = Query(None, description="Filter by guest UUID"),
+    room_id: UUID | None = Query(None, description="Filter by room UUID"),
+    from_date: date | None = Query(None, alias="from", description="Check-out >= this date"),
+    to_date: date | None = Query(None, alias="to", description="Check-in <= this date"),
     page: int = Query(1, ge=1, description="Page number"),
     per_page: int = Query(20, ge=1, le=100, description="Items per page")
 ):
+    if from_date and to_date and to_date < from_date:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="'to' must not be before 'from'",
+        )
+
     conditions = []
     params = []
     param_idx = 0
@@ -74,31 +85,31 @@ async def list_bookings(
     if user_role == "guest":
         param_idx += 1
         conditions.append(f"b.guest_id = ${param_idx}::UUID")
-        params.append(str(user.get("guest_id")))
+        params.append(require_guest_id(user))
     elif user_role in ["manager", "receptionist"]:
         param_idx += 1
         conditions.append(f"r.branch_id = ${param_idx}::UUID")
-        params.append(str(user.get("branch_id")))
+        params.append(require_branch(user))
 
     if booking_status:
         param_idx += 1
-        conditions.append(f"b.status = ${param_idx}::VARCHAR")
+        conditions.append(f"b.status = ${param_idx}::booking_status")
         params.append(booking_status)
 
     if branch_id and user_role == "admin":
         param_idx += 1
         conditions.append(f"r.branch_id = ${param_idx}::UUID")
-        params.append(str(branch_id))
+        params.append(branch_id)
 
     if guest_id and user_role != "guest":
         param_idx += 1
         conditions.append(f"b.guest_id = ${param_idx}::UUID")
-        params.append(str(guest_id))
+        params.append(guest_id)
 
     if room_id:
         param_idx += 1
         conditions.append(f"b.room_id = ${param_idx}::UUID")
-        params.append(str(room_id))
+        params.append(room_id)
 
     if from_date:
         param_idx += 1
@@ -161,15 +172,17 @@ async def list_bookings(
 # GET /api/bookings/{booking_id}
 @router.get("/{booking_id}", response_model=BookingDetailOut)
 async def get_booking(
-    booking_id: str,
+    booking_id: UUID,
     db=Depends(get_db),
     user: dict = Depends(require_role("receptionist", "manager", "admin", "guest"))
 ):
+    await assert_booking_access(db, user, booking_id)
+
     query = """
         SELECT b.booking_id, b.check_in_date, b.check_out_date, b.rate_at_booking, 
                b.status, b.payment_option, b.actual_checkin_time, b.actual_checkout_time,
                g.guest_id, g.full_name,
-               r.room_id, r.room_number, r.branch_id,
+               r.room_id, r.room_number,
                br.name AS branch_name, rt.type_name
         FROM booking b
         JOIN guest g ON g.guest_id = b.guest_id
@@ -179,17 +192,6 @@ async def get_booking(
         WHERE b.booking_id = $1::UUID
     """
     row = await db.fetchrow(query, booking_id)
-    if not row:
-        raise HTTPException(status_code=404, detail="Booking not found")
-
-    user_role = user["role"]
-    # Authorization checks
-    if user_role == "guest":
-        if str(row["guest_id"]) != str(user.get("guest_id")):
-            raise HTTPException(status_code=403, detail="Not authorized to view this booking")
-    elif user_role in ["manager", "receptionist"]:
-        if str(row["branch_id"]) != str(user.get("branch_id")):
-            raise HTTPException(status_code=403, detail="Not authorized to view bookings for other branches")
 
     return BookingDetailOut(
         booking_id=row["booking_id"],
@@ -207,111 +209,80 @@ async def get_booking(
 # PATCH /api/bookings/{booking_id}/checkin
 @router.patch("/{booking_id}/checkin", response_model=BookingCheckInResponse)
 async def checkin_booking(
-    booking_id: str,
+    booking_id: UUID,
     db=Depends(get_db),
     user: dict = Depends(require_role("receptionist", "manager", "admin"))
 ):
+    await assert_booking_access(db, user, booking_id)
     try:
-        await db.execute("CALL perform_checkin($1::UUID)", booking_id)
-        
-        row = await db.fetchrow(
-            "SELECT booking_id, status, actual_checkin_time FROM booking WHERE booking_id = $1::UUID",
-            booking_id
-        )
-        if not row:
-            raise HTTPException(status_code=404, detail="Booking not found")
-            
+        async with db.transaction():
+            await db.execute("CALL perform_checkin($1::UUID)", booking_id)
+            row = await db.fetchrow(
+                "SELECT booking_id, status, actual_checkin_time FROM booking WHERE booking_id = $1::UUID",
+                booking_id
+            )
         return BookingCheckInResponse(
             booking_id=row["booking_id"],
             status=row["status"],
             actual_checkin_time=row["actual_checkin_time"]
         )
     except asyncpg.exceptions.RaiseError as e:
-        msg = str(e)
-        if "not found" in msg.lower():
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=msg)
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg)
+        # Not Booked / before check-in date / stay ended -> 400 (default)
+        raise raise_error_to_http(e, (("under maintenance", status.HTTP_409_CONFLICT),))
 
 # PATCH /api/bookings/{booking_id}/checkout
 @router.patch("/{booking_id}/checkout", response_model=BookingCheckOutResponse)
 async def checkout_booking(
-    booking_id: str,
+    booking_id: UUID,
     db=Depends(get_db),
     user: dict = Depends(require_role("receptionist", "manager", "admin"))
 ):
+    await assert_booking_access(db, user, booking_id)
     try:
-        await db.execute("CALL perform_checkout($1::UUID)", booking_id)
-        
-        row = await db.fetchrow(
-            "SELECT booking_id, status, actual_checkout_time FROM booking WHERE booking_id = $1::UUID",
-            booking_id
-        )
-        if not row:
-            raise HTTPException(status_code=404, detail="Booking not found")
-            
-        bill_row = await db.fetchrow(
-            "SELECT total_amount, amount_paid FROM bill WHERE booking_id = $1::UUID",
-            booking_id
-        )
-        
-        bill_summary = None
-        if bill_row:
-            bill_summary = BillSummary(
-                total_amount=float(bill_row["total_amount"]),
-                amount_paid=float(bill_row["amount_paid"])
+        async with db.transaction():
+            await db.execute("CALL perform_checkout($1::UUID)", booking_id)
+            row = await db.fetchrow(
+                "SELECT booking_id, status, actual_checkout_time FROM booking WHERE booking_id = $1::UUID",
+                booking_id
             )
-            
+            # perform_checkout has just recalculated this bill
+            bill_row = await db.fetchrow(
+                """
+                SELECT total_amount, amount_paid, outstanding_balance, balance_flag
+                  FROM bill WHERE booking_id = $1::UUID
+                """,
+                booking_id
+            )
+
         return BookingCheckOutResponse(
             booking_id=row["booking_id"],
             status=row["status"],
             actual_checkout_time=row["actual_checkout_time"],
-            bill=bill_summary
+            bill=BillSummary(
+                total_amount=float(bill_row["total_amount"]),
+                amount_paid=float(bill_row["amount_paid"]),
+                outstanding_balance=float(bill_row["outstanding_balance"]),
+                balance_flag=bill_row["balance_flag"],
+            )
         )
     except asyncpg.exceptions.RaiseError as e:
-        msg = str(e)
-        if "not found" in msg.lower():
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=msg)
-        elif "outstanding balance" in msg.lower():
-            raise HTTPException(status_code=status.HTTP_402_PAYMENT_REQUIRED, detail=msg)
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg)
+        raise raise_error_to_http(e, (("outstanding balance", status.HTTP_402_PAYMENT_REQUIRED),))
 
 # PATCH /api/bookings/{booking_id}/cancel
 @router.patch("/{booking_id}/cancel", response_model=BookingCancelResponse)
 async def cancel_booking(
-    booking_id: str,
-    body: BookingStatusUpdate,
+    booking_id: UUID,
     db=Depends(get_db),
     user: dict = Depends(require_role("receptionist", "manager", "admin", "guest"))
 ):
-    # Fetch booking to check existence, status, and authorization
-    query = """
-        SELECT b.guest_id, r.branch_id, b.status
-        FROM booking b
-        JOIN room r ON r.room_id = b.room_id
-        WHERE b.booking_id = $1::UUID
-    """
-    row = await db.fetchrow(query, booking_id)
-    if not row:
-        raise HTTPException(status_code=404, detail="Booking not found")
+    # Existence, guest ownership and branch scoping
+    await assert_booking_access(db, user, booking_id)
 
-    user_role = user["role"]
-    # Authorization checks
-    if user_role == "guest":
-        if str(row["guest_id"]) != str(user.get("guest_id")):
-            raise HTTPException(status_code=403, detail="Not authorized to cancel this booking")
-    elif user_role in ["manager", "receptionist"]:
-        if str(row["branch_id"]) != str(user.get("branch_id")):
-            raise HTTPException(status_code=403, detail="Not authorized to cancel bookings for other branches")
-
-    # Business rule: Only 'Booked' bookings can be cancelled
-    if row["status"] != "Booked":
-        raise HTTPException(status_code=400, detail="Only 'Booked' bookings can be cancelled")
-
-    # Update status to Cancelled
-    # Note: reason is in body.reason, but we have no DB column for it, so it's ignored.
-    await db.execute(
-        "UPDATE booking SET status = 'Cancelled' WHERE booking_id = $1::UUID",
-        booking_id
-    )
+    # The procedure locks the booking and checks it is still 'Booked', so a
+    # cancel racing a check-in or another cancel can't overwrite it
+    try:
+        await db.execute("CALL cancel_booking($1::UUID)", booking_id)
+    except asyncpg.exceptions.RaiseError as e:
+        raise raise_error_to_http(e)
 
     return BookingCancelResponse(status="Cancelled")
