@@ -3,7 +3,7 @@ import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import useAuth from '@/hooks/useAuth';
 import { homeForRole } from '@/context/AuthContext';
 import { signup } from '@/api/auth';
-import { errorMessage } from '@/utils/formatters';
+import { errorMessage, passwordError } from '@/utils/formatters';
 import Button from '@/components/ui/Button';
 import Icon from '@/components/ui/Icon';
 import { Input } from '@/components/ui/Field';
@@ -18,7 +18,7 @@ function validate(f) {
   if (f.nic_passport.trim().length < 4) e.nic_passport = 'Enter a valid NIC or passport number';
   if (!/^\S+@\S+\.\S+$/.test(f.email)) e.email = 'Enter a valid email address';
   if (f.phone.replace(/\D/g, '').length < 7) e.phone = 'Enter a valid phone number';
-  if (f.password.length < 8) e.password = 'Use at least 8 characters';
+  if (passwordError(f.password)) e.password = passwordError(f.password);
   if (f.confirm !== f.password) e.confirm = 'Passwords do not match';
   return e;
 }
@@ -89,7 +89,7 @@ export default function Register() {
           <Input label="Phone" type="tel" required value={f.phone} onChange={set('phone')} error={errors.phone} placeholder="+94 77 123 4567" autoComplete="tel" />
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Input label="Password" type="password" required value={f.password} onChange={set('password')} error={errors.password} hint="At least 8 characters" autoComplete="new-password" />
+          <Input label="Password" type="password" required value={f.password} onChange={set('password')} error={errors.password} hint="8 to 72 characters" autoComplete="new-password" />
           <Input label="Confirm password" type="password" required value={f.confirm} onChange={set('confirm')} error={errors.confirm} autoComplete="new-password" />
         </div>
 

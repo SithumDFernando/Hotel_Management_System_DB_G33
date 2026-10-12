@@ -52,6 +52,18 @@ def pytest_collection_modifyitems(items):
             item.add_marker(pytest.mark.live_api)
 
 
+@pytest.fixture(autouse=True)
+def _reset_rate_limits():
+    """The suite logs in from one client address; start each test fresh."""
+    from app.rate_limit import login_failures, signup_attempts
+
+    login_failures.reset()
+    signup_attempts.reset()
+    yield
+    login_failures.reset()
+    signup_attempts.reset()
+
+
 @pytest.fixture
 async def db_conn():
     """One real connection; everything done through it is rolled back."""

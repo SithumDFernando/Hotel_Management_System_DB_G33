@@ -56,8 +56,32 @@ Client                          Server
 ### Password Hashing
 
 - Algorithm: **bcrypt** with 12 salt rounds
-- Library: `passlib[bcrypt]` (Python backend)
+- Library: `bcrypt` (Python backend, `app/auth.py`)
 - Passwords are never stored in plain text
+
+### Password policy (ISSUE-10)
+
+One rule for every endpoint that sets a password: `POST /auth/signup`, `POST /auth/register` and `POST /admin/users`. It's applied by `validate_new_password` in `app/auth.py` through the `NewPassword` field type, and the API returns **422** when it fails.
+
+- At least **8 characters**.
+- At most **72 bytes** in UTF-8. bcrypt ignores anything past 72 bytes, so a longer password would silently match its own prefix.
+- No character-class rules (letters/digits) for now. The frontend shows the same rule ("8 to 72 characters", `passwordError()` in `utils/formatters.js`).
+- At login, an input over 72 bytes always fails (no account can have one), so `prefix + anything` can't log in.
+
+### Email normalisation
+
+- Emails are **trimmed and lower-cased** on input (`NormEmail` / `LoginEmail` in `app/schemas/fields.py`). This covers signup, register, admin-created users, guest profiles and login.
+- The DB enforces case-insensitive uniqueness with the unique index `uq_user_account_email_ci ON user_account (LOWER(email))`. Lookups use `LOWER(email) = $1`.
+- So `Kamal@mail.com` can't sign up next to `kamal@mail.com` (409), and `KAMAL@MAIL.COM` logs in.
+
+### Login hardening and rate limits
+
+- **Timing:** an unknown email is checked against a dummy bcrypt hash, so "no such user" takes as long as "wrong password". Both return `401 Invalid credentials`.
+- **Failed logins:** 10 per (client IP, email) in 5 minutes. The 11th attempt, even with the right password, gets `429 Too many attempts. Try again later.` with a `Retry-After` header. Only failures count, and a successful login clears the counter.
+- **Sign-ups:** 10 per client IP per hour, then 429.
+- The limiters (`app/rate_limit.py`) live in process memory. That's fine for the single uvicorn process in docker-compose; with several workers or hosts, use a shared store (e.g. slowapi + Redis).
+- The client IP comes from nginx's `X-Forwarded-For`: uvicorn runs with `--proxy-headers --forwarded-allow-ips=*`. That trusts any caller's header, so in production only nginx should reach the backend port (don't publish `8000` publicly).
+- **Accepted leak:** signup still returns `409` for an email that's already registered, so anyone can check whether an email has an account. That's normal for sign-up flows, and the rate limit slows down bulk probing.
 
 ---
 

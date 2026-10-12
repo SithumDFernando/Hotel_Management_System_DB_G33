@@ -19,7 +19,7 @@
 | 9 | `idx_payment_booking` | payment | `booking_id` | B-tree | Payment listing per booking, `record_payment()` sum |
 | 10 | `idx_bill_booking` | bill | `booking_id` | B-tree (UNIQUE) | `fn_get_outstanding_balance()`, 1:1 lookup |
 | 11 | `idx_guest_nic` | guest | `nic_passport` | B-tree (UNIQUE) | Guest lookup by NIC/passport, duplicate prevention |
-| 12 | `idx_user_email` | user_account | `email` | B-tree (UNIQUE) | Login authentication lookup |
+| 12 | `uq_user_account_email_ci` | user_account | `LOWER(email)` | B-tree (UNIQUE, expression) | Login lookup (`WHERE LOWER(email) = $1`) and case-insensitive email uniqueness |
 | 13 | `idx_user_branch` | user_account | `branch_id` | B-tree | Staff listing per branch |
 | 14 | `idx_room_rate_branch_type` | room_rate | `branch_id, room_type_id` | B-tree (UNIQUE) | `fn_get_current_rate()` lookup |
 | 15 | `idx_booking_checkout_date` | booking | `check_out_date` | B-tree | `v_monthly_revenue` grouping by month |
@@ -39,7 +39,7 @@
 These do NOT need explicit `CREATE INDEX`:
 - All PRIMARY KEYs → automatic unique B-tree index
 - `EXCLUDE` constraint `excl_booking_room_overlap` → automatic GiST index
-- `UNIQUE` constraints on `guest.nic_passport`, `user_account.email`, `user_account.guest_id`, `bill.booking_id`, `room_rate(branch_id, room_type_id)` → automatic indexes
+- `UNIQUE` constraints on `guest.nic_passport`, `user_account.guest_id`, `bill.booking_id`, `room_rate(branch_id, room_type_id)` → automatic indexes
 
 ### Performance impact
 - Write overhead is minimal — most tables have ≤ 2 additional indexes.
@@ -58,7 +58,7 @@ These do NOT need explicit `CREATE INDEX`:
 | `record_payment()` — sum payments | `idx_payment_booking` |
 | `GET /api/rooms?branch_id=&status=` | `idx_room_branch` |
 | `GET /api/bookings?guest_id=` | `idx_booking_guest` |
-| `POST /api/auth/login` | `idx_user_email` |
+| `POST /api/auth/login` | `uq_user_account_email_ci` |
 | `v_room_occupancy` | `idx_booking_room_dates`, `idx_room_branch` |
 | `v_guest_billing_summary` | `idx_booking_guest`, `idx_bill_booking` |
 | `v_service_usage_breakdown` | `idx_service_usage_booking`, `idx_service_usage_service` |

@@ -63,7 +63,9 @@ Source: full-stack audit run on **2026-10-12** (backend API probes, DB-level con
 
 ## Phase 5: Authentication hardening
 
-- [ ] **13. [ISSUE-10](ISSUE-10-login-and-password-weaknesses.md)** 🟠 Timing-safe login, rate limiting, case-insensitive email, password policy
+- [x] **13. [ISSUE-10](ISSUE-10-login-and-password-weaknesses.md)** 🟠 Timing-safe login, rate limiting, case-insensitive email, password policy
+  - ✅ Dummy-hash login, failed-login limiter (10 per IP + email in 5 minutes → 429) and signup limiter (10 per IP per hour), `NormEmail` + unique `LOWER(email)` index, `NewPassword` policy (8 characters to 72 bytes) on signup/register/admin create, and longer login input rejected. Covered by `tests/test_auth_hardening.py` (27 tests, 20 fail on the pre-fix code). Full suite: 225 passed + `test_phase4` live run passed, on a fresh `run_all.sql` build.
+  - ⏳ Browser check: Register 72-byte limit message; Login shows the 429 text after 10 failures.
 
 ## Phase 6: Hardening and housekeeping
 

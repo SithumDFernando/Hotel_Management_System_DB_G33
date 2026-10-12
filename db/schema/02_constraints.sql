@@ -102,10 +102,12 @@ ALTER TABLE guest
     ADD CONSTRAINT uq_guest_nic_passport
         UNIQUE (nic_passport);
 
--- Email is the login identifier — must be unique across all accounts
-ALTER TABLE user_account
-    ADD CONSTRAINT uq_user_account_email
-        UNIQUE (email);
+-- Email is the login identifier — unique across all accounts, ignoring case
+-- (ISSUE-10: Kamal@mail.com and kamal@mail.com are one account). A unique
+-- index rather than a constraint because it is on an expression; the API
+-- also lower-cases emails on input and looks them up with LOWER(email).
+CREATE UNIQUE INDEX uq_user_account_email_ci
+    ON user_account (LOWER(email));
 
 -- One login per guest profile (NULLs, i.e. staff accounts, are not compared)
 ALTER TABLE user_account

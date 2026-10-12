@@ -119,7 +119,7 @@
 | `account_id` | UUID | PK, DEFAULT gen_random_uuid() |
 | `guest_id` | UUID | NULL, UNIQUE, FK → guest (ON DELETE RESTRICT) |
 | `branch_id` | UUID | NULL, FK → branch (ON DELETE RESTRICT) |
-| `email` | VARCHAR(100) | NOT NULL, UNIQUE |
+| `email` | VARCHAR(100) | NOT NULL, unique ignoring case (`uq_user_account_email_ci` on `LOWER(email)`); stored lower-cased |
 | `password_hash` | VARCHAR(255) | NOT NULL |
 | `role` | user_role | NOT NULL |
 

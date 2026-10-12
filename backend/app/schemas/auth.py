@@ -8,12 +8,14 @@ Purpose:
 from datetime import date
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field
+
+from app.schemas.fields import LoginEmail, NewPassword, NormEmail
 
 
 class LoginRequest(BaseModel):
-    email: str
-    password: str
+    email: LoginEmail
+    password: str = Field(max_length=1024)
 
 
 class LoginResponse(BaseModel):
@@ -25,8 +27,8 @@ class LoginResponse(BaseModel):
 
 
 class RegisterRequest(BaseModel):
-    email: str
-    password: str
+    email: NormEmail
+    password: NewPassword
     role: str = "guest"           # default for self-registration
     branch_id: UUID | None = None  # required for receptionist/manager
     guest_id: UUID | None = None   # required for guest role
@@ -35,9 +37,9 @@ class RegisterRequest(BaseModel):
 class SignupRequest(BaseModel):
     full_name: str = Field(min_length=2, max_length=150)
     nic_passport: str = Field(min_length=4, max_length=20)
-    email: EmailStr
+    email: NormEmail
     phone: str = Field(min_length=7, max_length=20)
-    password: str
+    password: NewPassword
     date_of_birth: date | None = None
     nationality: str | None = Field(default=None, max_length=50)
 

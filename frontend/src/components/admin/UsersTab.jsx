@@ -9,7 +9,7 @@ import { Field, Input, Select } from '@/components/ui/Field';
 import Pagination from '@/components/ui/Pagination';
 import { EmptyState, ErrorState, InlineAlert, Skeleton } from '@/components/ui/States';
 import { useToast } from '@/components/ui/Toast';
-import { errorMessage, initials } from '@/utils/formatters';
+import { errorMessage, initials, passwordError } from '@/utils/formatters';
 
 const PAGE_SIZE = 10;
 const STAFF_ROLES = [
@@ -59,7 +59,7 @@ function CreateDrawer({ open, onClose, branches, onSaved }) {
     e.preventDefault();
     const v = {};
     if (!/^\S+@\S+\.\S+$/.test(f.email)) v.email = 'Enter a valid email';
-    if (f.password.length < 8) v.password = 'Use at least 8 characters';
+    if (passwordError(f.password)) v.password = passwordError(f.password);
     if (needsBranch && !f.branch_id) v.branch_id = 'Select a branch';
     setErrors(v);
     if (Object.keys(v).length) return;

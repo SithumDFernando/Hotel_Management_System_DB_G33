@@ -256,7 +256,7 @@ async def create_user(
 
     # Email must be unique across all accounts
     existing = await db.fetchrow(
-        "SELECT account_id FROM user_account WHERE email = $1",
+        "SELECT account_id FROM user_account WHERE LOWER(email) = $1",
         body.email,
     )
     if existing:

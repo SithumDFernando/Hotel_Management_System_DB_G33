@@ -38,8 +38,32 @@ def verify_password(plain: str, hashed: str) -> bool:
     Compare a plain-text password against a stored bcrypt hash.
     Returns True if they match, False otherwise.
     """
+    # The [:72] slices are only a safety net: bcrypt ignores bytes past 72,
+    # and validate_new_password stops anyone setting a longer password
     pw_bytes = plain.encode("utf-8")[:72]
     return bcrypt.checkpw(pw_bytes, hashed.encode("utf-8"))
+
+
+PASSWORD_MIN_CHARS = 8
+PASSWORD_MAX_BYTES = 72  # bcrypt's limit
+
+
+def validate_new_password(pw: str) -> str:
+    """
+    The one password policy for every account-creating endpoint (signup,
+    register, admin create user). Raises ValueError, so Pydantic returns 422.
+    """
+    if len(pw) < PASSWORD_MIN_CHARS:
+        raise ValueError(f"Password must be at least {PASSWORD_MIN_CHARS} characters")
+    if len(pw.encode("utf-8")) > PASSWORD_MAX_BYTES:
+        raise ValueError(f"Password must be at most {PASSWORD_MAX_BYTES} bytes")
+    return pw
+
+
+# A real bcrypt hash of a throwaway value: login checks unknown emails against
+# it, so "no such user" costs the same bcrypt time as "wrong password" and
+# response timing doesn't reveal which emails have accounts
+DUMMY_PASSWORD_HASH = hash_password("timing-equaliser-not-a-real-password")
 
 
 # ── JWT Token Management ─────────────────────────────────────────────────────

@@ -52,7 +52,9 @@
 }
 ```
 
-**Errors:** `401 Invalid credentials`
+Email is matched case-insensitively (trimmed + lower-cased).
+
+**Errors:** `401 Invalid credentials` (unknown email and wrong password look the same, timing included) · `429 Too many attempts. Try again later.` after 10 failed logins for one IP + email in 5 minutes (`Retry-After` header)
 
 ---
 
@@ -74,7 +76,7 @@
 
 **Response (201):** `{ "account_id": "uuid-...", "guest_id": "uuid-..." }`
 
-**Errors:** `409` email already registered / NIC or passport already exists; `422` validation (invalid email, password < 8 chars).
+**Errors:** `409` email already registered (case-insensitive) / NIC or passport already exists; `422` validation (invalid email, password under 8 characters or over 72 bytes); `429` more than 10 sign-ups from one IP in an hour.
 
 ---
 
@@ -95,7 +97,7 @@
 
 **Response (201):** `{ "account_id": "uuid-..." }`
 
-**Errors:** `403` caller not admin · `400 Invalid role` · `409` email exists, or `This guest profile is already linked to another account.` · `404` referenced branch/guest doesn't exist · `422` invalid role ↔ link combination (same rules as `POST /api/admin/users`)
+**Errors:** `403` caller not admin · `400 Invalid role` · `422` password under 8 characters or over 72 bytes · `409` email exists (case-insensitive), or `This guest profile is already linked to another account.` · `404` referenced branch/guest doesn't exist · `422` invalid role ↔ link combination (same rules as `POST /api/admin/users`)
 
 ---
 
@@ -613,7 +615,7 @@ Creates a new user account with hashed password, assigned role, and branch.
 | `manager` / `receptionist` | **required** | must be empty |
 | `guest` | must be empty | **required** |
 
-**Errors:** `400` invalid role · `404` branch/guest not found · `409` email exists, or `This guest profile is already linked to another account.` (one login per guest profile) · `422` invalid role ↔ link combination (e.g. `A manager account must be assigned to a branch.`)
+**Errors:** `400` invalid role · `404` branch/guest not found · `422` password under 8 characters or over 72 bytes, or invalid email · `409` email exists (case-insensitive), or `This guest profile is already linked to another account.` (one login per guest profile) · `422` invalid role ↔ link combination (e.g. `A manager account must be assigned to a branch.`)
 
 ### PATCH `/api/admin/users/:account_id`
 Updates a user account's role and/or branch assignment:

@@ -16,14 +16,16 @@ from datetime import date
 from typing import Annotated, Literal, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field, model_validator
+from pydantic import BaseModel, Field, model_validator
+
+from app.schemas.fields import NormEmail
 
 
 # Input limits mirror the guest table in db/schema/01_tables.sql.
 # GuestOut keeps plain str so existing rows always serialise.
 FullName      = Annotated[str, Field(min_length=2, max_length=150)]
 NicPassport   = Annotated[str, Field(min_length=4, max_length=20)]
-GuestEmail    = Annotated[EmailStr, Field(max_length=100)]
+GuestEmail    = NormEmail  # trimmed + lower-cased, max 100 (app/schemas/fields.py)
 Phone         = Annotated[str, Field(min_length=7, max_length=20)]
 Nationality   = Annotated[str, Field(max_length=50)]
 Gender        = Annotated[str, Field(max_length=10)]
