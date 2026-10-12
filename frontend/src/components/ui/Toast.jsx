@@ -3,12 +3,12 @@ import Icon from './Icon';
 
 const ToastContext = createContext(null);
 
-const STYLE = {
-  success: 'border-emerald-200 bg-emerald-50 text-emerald-800',
-  error: 'border-red-200 bg-red-50 text-red-800',
-  info: 'border-navy-200 bg-white text-navy-800',
+// Spec 11 §6: ink text on white; a 3px left rule carries the tone. Only errors get an icon.
+const RULE = {
+  success: 'border-l-tea-500',
+  error: 'border-l-signal-700',
+  info: 'border-l-ink-300',
 };
-const ICON = { success: 'check', error: 'alert', info: 'info' };
 
 export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([]);
@@ -40,12 +40,12 @@ export function ToastProvider({ children }) {
         {toasts.map((t) => (
           <div
             key={t.id}
-            role="status"
-            className={`pointer-events-auto flex items-start gap-2.5 rounded-xl border px-4 py-3 text-sm shadow-lift ${STYLE[t.type]}`}
+            role={t.type === 'error' ? 'alert' : 'status'}
+            className={`pointer-events-auto flex animate-toast-in items-start gap-2.5 rounded-lg border border-l-[3px] border-ink-100 bg-paper-50 px-4 py-3 text-sm text-ink-900 shadow-overlay ${RULE[t.type]}`}
           >
-            <Icon name={ICON[t.type]} className="mt-0.5 h-4 w-4 shrink-0" />
+            {t.type === 'error' && <Icon name="alert" className="mt-0.5 h-4 w-4 shrink-0 text-signal-700" />}
             <p className="flex-1">{t.message}</p>
-            <button onClick={() => dismiss(t.id)} aria-label="Dismiss" className="opacity-60 hover:opacity-100">
+            <button onClick={() => dismiss(t.id)} aria-label="Dismiss" className="rounded-sm text-ink-600 hover:text-ink-900">
               <Icon name="x" className="h-4 w-4" />
             </button>
           </div>

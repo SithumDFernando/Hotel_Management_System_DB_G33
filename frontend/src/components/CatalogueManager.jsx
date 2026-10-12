@@ -108,7 +108,7 @@ export default function CatalogueManager() {
                         />
                       </div>
                       <Button size="sm" disabled={!edited} loading={savingId === s.service_id} onClick={() => savePrice(s)}>Save</Button>
-                      <Button size="sm" variant="dangerOutline" onClick={() => setDeactivate(s)}>Deactivate</Button>
+                      <Button size="sm" variant="secondary" onClick={() => setDeactivate(s)}>Deactivate</Button>
                     </div>
                   </li>
                 );

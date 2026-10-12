@@ -17,7 +17,7 @@ const STAFF_ROLES = [
   { value: 'manager', label: 'Manager', scope: 'Branch reports, room inventory, service catalogue and billing oversight for one branch.' },
   { value: 'admin', label: 'Administrator', scope: 'Full cross-branch authority: branches, users and all reports.' },
 ];
-const ROLE_TONE = { admin: 'navy', manager: 'blue', receptionist: 'amber', guest: 'gray' };
+const ROLE_LABEL = { admin: 'Administrator', manager: 'Manager', receptionist: 'Receptionist', guest: 'Guest' };
 
 function generatePassword(len = 14) {
   const sets = ['ABCDEFGHJKLMNPQRSTUVWXYZ', 'abcdefghijkmnopqrstuvwxyz', '23456789', '!@#$%&*?'];
@@ -92,12 +92,12 @@ function CreateDrawer({ open, onClose, branches, onSaved }) {
     >
       {created ? (
         <div className="space-y-4">
-          <InlineAlert tone="success">Account created. Share these credentials securely — the password is not shown again.</InlineAlert>
+          <InlineAlert tone="info">Account created. Share these credentials securely — the password is not shown again.</InlineAlert>
           <div className="rounded-xl bg-navy-50 p-4 font-mono text-sm">
             <p>{created.email}</p>
             <p className="mt-1">{created.password}</p>
           </div>
-          <Button variant="outline" onClick={() => navigator.clipboard?.writeText(`${created.email}\n${created.password}`).then(() => toast.success('Copied'))}>
+          <Button variant="secondary" onClick={() => navigator.clipboard?.writeText(`${created.email}\n${created.password}`).then(() => toast.success('Copied'))}>
             <Icon name="download" /> Copy credentials
           </Button>
         </div>
@@ -257,10 +257,10 @@ export default function UsersTab({ branches }) {
                         <div><p className="font-semibold">{u.guest_name || u.email.split('@')[0]}</p><p className="text-xs text-navy-500">{u.email}</p></div>
                       </div>
                     </td>
-                    <td className="td"><Badge tone={ROLE_TONE[u.role]}>{u.role}</Badge></td>
+                    <td className="td"><Badge>{ROLE_LABEL[u.role] || u.role}</Badge></td>
                     <td className="td">{u.branch_name || (u.role === 'admin' ? 'Global (all branches)' : '—')}</td>
                     <td className="td text-right">
-                      <Button size="sm" variant="outline" disabled={u.role === 'guest'} title={u.role === 'guest' ? 'Guest accounts are self-managed' : undefined} onClick={() => setEditing(u)}>
+                      <Button size="sm" variant="secondary" disabled={u.role === 'guest'} title={u.role === 'guest' ? 'Guest accounts are self-managed' : undefined} onClick={() => setEditing(u)}>
                         <Icon name="edit" className="h-3.5 w-3.5" /> Edit role
                       </Button>
                     </td>

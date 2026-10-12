@@ -61,7 +61,7 @@ function BillModal({ booking, onClose }) {
           {state.bill ? (
             <BillTable bill={state.bill} payments={state.payments} />
           ) : (
-            <InlineAlert tone="warn">
+            <InlineAlert tone="info">
               Your bill hasn’t been generated yet. It is prepared by the front desk at check-out and will include your room charges, services and tax.
             </InlineAlert>
           )}
@@ -157,12 +157,12 @@ export default function MyBookings() {
           {shown.map((b) => (
             <BookingSummary key={b.booking_id} booking={b}>
               {b.status !== 'Cancelled' && (
-                <Button variant="outline" size="sm" onClick={() => setBillFor(b)}>
+                <Button variant="secondary" size="sm" onClick={() => setBillFor(b)}>
                   <Icon name="receipt" className="h-3.5 w-3.5" /> Bill &amp; services
                 </Button>
               )}
               {b.status === 'Booked' && (
-                <Button variant="dangerOutline" size="sm" onClick={() => setCancelFor(b)}>Cancel booking</Button>
+                <Button variant="secondary" size="sm" onClick={() => setCancelFor(b)}>Cancel booking</Button>
               )}
             </BookingSummary>
           ))}

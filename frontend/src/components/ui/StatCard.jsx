@@ -1,29 +1,18 @@
-import Icon from './Icon';
 import { Skeleton } from './States';
 
-export default function StatCard({ label, value, sub, icon, loading, tone = 'navy' }) {
-  const tones = {
-    navy: 'bg-navy-50 text-navy-700',
-    gold: 'bg-gold-100 text-gold-800',
-    green: 'bg-emerald-50 text-emerald-700',
-    red: 'bg-red-50 text-red-700',
-  };
+// Deprecated: replaced by SummaryStrip (spec 11 §6). Restyled only so nothing breaks until
+// UI-07 and UI-09 move ReceptionistDashboard and BranchOverview off it; then delete this file.
+// Callers still pass `icon` and `tone`; both are ignored.
+export default function StatCard({ label, value, sub, loading }) {
   return (
-    <div className="card p-5">
-      <div className="flex items-start justify-between gap-3">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-navy-500">{label}</p>
-        {icon && (
-          <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${tones[tone]}`}>
-            <Icon name={icon} className="h-[18px] w-[18px]" />
-          </span>
-        )}
-      </div>
+    <div className="card p-4">
+      <p className="text-[13px] text-ink-600">{label}</p>
       {loading ? (
-        <Skeleton className="mt-3 h-8 w-24" />
+        <Skeleton className="mt-2 h-6 w-24" />
       ) : (
-        <p className="mt-2 font-serif text-3xl font-semibold">{value}</p>
+        <p className="mt-1 text-xl font-semibold tabular text-ink-900">{value}</p>
       )}
-      {sub && <p className="mt-1 text-xs text-navy-500">{sub}</p>}
+      {sub && <p className="mt-1 text-2xs text-ink-600">{sub}</p>}
     </div>
   );
 }

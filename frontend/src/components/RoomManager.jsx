@@ -55,7 +55,7 @@ export default function RoomManager({ branchId }) {
               <td className="td text-right">
                 <Button
                   size="sm"
-                  variant="outline"
+                  variant="secondary"
                   loading={busyId === r.room_id}
                   disabled={r.status === 'Occupied'}
                   title={r.status === 'Occupied' ? 'A guest is checked in' : undefined}

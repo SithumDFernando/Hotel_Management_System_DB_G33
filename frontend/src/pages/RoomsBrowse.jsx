@@ -129,7 +129,7 @@ export default function RoomsBrowse() {
           onChange={(v) => update(v)}
         />
         {partialDates && (
-          <div className="mt-3"><InlineAlert tone="warn">Pick both check-in and check-out to see availability for your dates.</InlineAlert></div>
+          <div className="mt-3"><InlineAlert tone="info">Pick both check-in and check-out to see availability for your dates.</InlineAlert></div>
         )}
         {amenityOptions.length > 0 && (
           <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-navy-100 pt-4">
@@ -199,7 +199,7 @@ export default function RoomsBrowse() {
             icon="bed"
             title="No rooms match your search"
             message={datesValid ? 'Try different dates, another branch, or fewer filters.' : 'Try removing some filters.'}
-            action={filtersActive ? <Button variant="outline" onClick={clearAll}>Clear all filters</Button> : null}
+            action={filtersActive ? <Button variant="secondary" onClick={clearAll}>Clear all filters</Button> : null}
           />
         ) : (
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">

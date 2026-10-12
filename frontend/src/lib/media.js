@@ -38,7 +38,7 @@ export const ROOM_TYPE_BLURB = {
   Deluxe: 'Elevated comfort with a king bed and private balcony.',
 };
 
-export const FALLBACK_GRADIENT = 'linear-gradient(135deg,#12233a 0%,#2a4161 60%,#7a5c00 140%)';
+export const FALLBACK_GRADIENT = 'linear-gradient(135deg,#EEEBE3 0%,#E3EEE7 100%)';
 
 export const branchMedia = (city) =>
   BRANCH_MEDIA[city] || { image: HERO_IMAGE, tag: 'SkyNest boutique stay', blurb: '' };

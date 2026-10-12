@@ -18,7 +18,6 @@ export default function BillTable({ bill, payments = [] }) {
   const outstanding = Number(bill.outstanding_balance);
   const discount = Number(bill.discount_amount);
   const settled = outstanding <= 0;
-  const partially = !settled && Number(bill.amount_paid) > 0;
 
   return (
     <div className="space-y-5">
@@ -27,9 +26,7 @@ export default function BillTable({ bill, payments = [] }) {
           <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-navy-600">
             <Icon name="receipt" className="h-4 w-4 text-gold-700" /> Charges
           </h3>
-          <Badge tone={settled ? 'green' : partially ? 'amber' : 'red'}>
-            {settled ? 'Settled' : partially ? 'Partially paid' : 'Unpaid'}
-          </Badge>
+          <Badge balance={outstanding} />
         </div>
         <div className="divide-y divide-navy-100 overflow-hidden rounded-xl border border-navy-100">
           <Row label="Room charges" value={formatCurrency(bill.room_charges)} />

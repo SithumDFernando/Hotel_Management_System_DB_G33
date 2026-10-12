@@ -125,14 +125,14 @@ export default function ReportsPanel({ branchId = '', showBranch = false }) {
         },
         {
           key: 'balance_flag', label: 'Status', sortable: false,
-          format: (_, r) => (!r.bill_id ? 'No bill' : r.balance_flag ? 'Balance due' : 'Settled'),
-          render: (r) => (!r.bill_id ? <Badge tone="gray">No bill</Badge> : r.balance_flag ? <Badge tone="amber">Balance due</Badge> : <Badge tone="green">Settled</Badge>),
+          format: (_, r) => (!r.bill_id ? 'No bill' : r.balance_flag ? `Balance due ${money(r.outstanding_balance)}` : 'Paid'),
+          render: (r) => (!r.bill_id ? <Badge>No bill</Badge> : <Badge balance={r.balance_flag ? r.outstanding_balance : 0} />),
         },
         ...(['manager', 'admin'].includes(user.role)
           ? [{
             label: 'Bill',
             render: (r) => (
-              <Button size="sm" variant="outline" loading={opening === r.booking_id} disabled={Boolean(opening)} onClick={() => openBill(r.booking_id)}>
+              <Button size="sm" variant="secondary" loading={opening === r.booking_id} disabled={Boolean(opening)} onClick={() => openBill(r.booking_id)}>
                 View bill
               </Button>
             ),

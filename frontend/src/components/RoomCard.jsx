@@ -75,7 +75,7 @@ export default function RoomCard({ room, stay = {} }) {
             </p>
           </div>
           <div className="flex flex-col items-end gap-2">
-            {hasDates && <Badge tone="green">Available for your dates</Badge>}
+            {hasDates && <Badge status="Available">Available for your dates</Badge>}
             <Button to={`/booking/${room.room_id}${q.size ? `?${q}` : ''}`} disabled={!bookable} aria-disabled={!bookable} className={bookable ? '' : 'pointer-events-none opacity-50'}>
               Book now <Icon name="arrowRight" />
             </Button>

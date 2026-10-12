@@ -143,7 +143,7 @@ export default function BookingCheckout() {
             ) : (
               <Button to={user.role === 'manager' ? '/dashboard/manager' : '/dashboard/receptionist'}>Back to dashboard</Button>
             )}
-            <Button variant="outline" to="/rooms">Book another room</Button>
+            <Button variant="secondary" to="/rooms">Book another room</Button>
           </div>
         </div>
       </div>
@@ -154,7 +154,7 @@ export default function BookingCheckout() {
     return (
       <div className="mx-auto max-w-3xl px-4 py-14">
         <ErrorState message={room.error.includes('404') || /not found/i.test(room.error) ? 'This room could not be found.' : room.error} onRetry={room.refetch} />
-        <div className="mt-4 text-center"><Button variant="outline" to="/rooms">Back to rooms</Button></div>
+        <div className="mt-4 text-center"><Button variant="secondary" to="/rooms">Back to rooms</Button></div>
       </div>
     );
   }
@@ -208,7 +208,7 @@ export default function BookingCheckout() {
             )}
           </Section>
 
-          <Section n="3" title="Stay dates" aside={nights > 0 && <Badge tone="amber">{nights} night{nights > 1 ? 's' : ''}</Badge>}>
+          <Section n="3" title="Stay dates" aside={nights > 0 && <span className="text-sm tabular text-ink-600">{nights} night{nights > 1 ? 's' : ''}</span>}>
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="block">
                 <span className="label">Check-in</span>

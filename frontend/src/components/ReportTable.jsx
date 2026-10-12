@@ -63,7 +63,7 @@ export default function ReportTable({
             <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-navy-400" />
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search…" aria-label="Search report" className="input w-48 pl-9" />
           </div>
-          <Button variant="outline" onClick={exportCSV} disabled={!rows.length}>
+          <Button variant="secondary" onClick={exportCSV} disabled={!rows.length}>
             <Icon name="download" /> Export CSV
           </Button>
         </div>

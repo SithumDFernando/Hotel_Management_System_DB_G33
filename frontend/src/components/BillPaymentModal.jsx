@@ -109,7 +109,7 @@ export default function BillPaymentModal({ booking, onClose, onChanged, onChecko
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex gap-2">
             <Button variant="ghost" onClick={onClose}>Close</Button>
-            {bill && <Button variant="outline" onClick={printFolio}><Icon name="print" /> Print folio</Button>}
+            {bill && <Button variant="secondary" onClick={printFolio}><Icon name="print" /> Print folio</Button>}
           </div>
           {settled && onCheckout && booking.status === 'Checked-In' && (
             <Button onClick={() => onCheckout(booking)}>
@@ -132,7 +132,7 @@ export default function BillPaymentModal({ booking, onClose, onChanged, onChecko
               <label htmlFor="discount" className="label">Discount (LKR)</label>
               <div className="flex gap-2">
                 <input id="discount" type="number" min="0" step="0.01" className="input" placeholder="0.00" value={discount} onChange={(e) => setDiscount(e.target.value)} />
-                <Button variant="outline" onClick={applyDiscount} disabled={busy}>Apply</Button>
+                <Button variant="secondary" onClick={applyDiscount} disabled={busy}>Apply</Button>
               </div>
               <p className="mt-1 text-[11px] text-navy-400">Applied before tax. Recalculates the bill.</p>
             </section>
@@ -183,7 +183,7 @@ export default function BillPaymentModal({ booking, onClose, onChanged, onChecko
               </Button>
             </form>
           ) : (
-            settled && <InlineAlert tone="success">This bill is fully settled.</InlineAlert>
+            settled && <InlineAlert tone="info">This bill is fully settled.</InlineAlert>
           )}
         </div>
       )}

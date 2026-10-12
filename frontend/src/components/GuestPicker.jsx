@@ -139,7 +139,7 @@ export default function GuestPicker({ value, onChange }) {
             <p className="truncate font-semibold">{value.full_name}</p>
             <p className="truncate text-xs text-navy-500">{value.nic_passport} · {value.email} · {value.phone}</p>
           </div>
-          <Button variant="outline" size="sm" onClick={() => onChange(null)}>Change</Button>
+          <Button variant="secondary" size="sm" onClick={() => onChange(null)}>Change</Button>
         </div>
       ) : (
         <>

@@ -154,15 +154,15 @@ export default function ReceptionistDashboard() {
           <Button size="sm" loading={busy} disabled={Boolean(blockedReason)} title={blockedReason} onClick={() => doCheckIn(b)}>
             Check in
           </Button>
-          <Button size="sm" variant="dangerOutline" onClick={() => setCancelFor(b)}>Cancel</Button>
+          <Button size="sm" variant="secondary" onClick={() => setCancelFor(b)}>Cancel</Button>
         </>
       );
     }
     return (
       <>
-        <Button size="sm" variant="outline" to={`/services/${b.booking_id}`}>Services</Button>
-        <Button size="sm" variant="outline" onClick={() => setBillFor(b)}>Bill</Button>
-        <Button size="sm" variant="dark" loading={busy} onClick={() => setCheckoutFor(b)}>Check out</Button>
+        <Button size="sm" variant="secondary" to={`/services/${b.booking_id}`}>Services</Button>
+        <Button size="sm" variant="secondary" onClick={() => setBillFor(b)}>Bill</Button>
+        <Button size="sm" variant="secondary" loading={busy} onClick={() => setCheckoutFor(b)}>Check out</Button>
       </>
     );
   };
@@ -179,7 +179,7 @@ export default function ReceptionistDashboard() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={() => setGuestDrawer(true)}><Icon name="user" /> Register guest</Button>
+          <Button variant="secondary" onClick={() => setGuestDrawer(true)}><Icon name="user" /> Register guest</Button>
           <Button to="/rooms?mode=booking"><Icon name="plus" /> New booking</Button>
         </div>
       </header>
@@ -199,7 +199,7 @@ export default function ReceptionistDashboard() {
               <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-navy-400" />
               <input value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} placeholder="Search guest, room or ref…" aria-label="Search bookings" className="input w-64 pl-9" />
             </div>
-            <Button variant="outline" size="md" onClick={refresh} aria-label="Refresh"><Icon name="refresh" /></Button>
+            <Button variant="secondary" size="md" onClick={refresh} aria-label="Refresh"><Icon name="refresh" /></Button>
           </div>
         </div>
 
@@ -242,9 +242,9 @@ export default function ReceptionistDashboard() {
                         <td className="td">
                           <div className="flex flex-wrap gap-1">
                             <Badge status={b.status} />
-                            {overdueArrival && <Badge tone="red">Overdue arrival</Badge>}
-                            {overdueDeparture && <Badge tone="red">Overdue checkout</Badge>}
-                            {!overdueDeparture && b.status === 'Checked-In' && b.check_out_date === today && <Badge tone="amber">Departs today</Badge>}
+                            {overdueArrival && <Badge kind="problem">Overdue arrival</Badge>}
+                            {overdueDeparture && <Badge kind="problem">Overdue checkout</Badge>}
+                            {!overdueDeparture && b.status === 'Checked-In' && b.check_out_date === today && <Badge>Departs today</Badge>}
                           </div>
                         </td>
                         <td className="td"><div className="flex flex-wrap justify-end gap-1.5">{actions(b)}</div></td>

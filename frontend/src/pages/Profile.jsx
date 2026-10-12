@@ -182,7 +182,7 @@ export default function Profile() {
           {data.role === 'guest' && (data.guest ? (
             <DetailsForm guest={data.guest} onSaved={(guest) => setData((p) => ({ ...p, guest }))} />
           ) : (
-            <InlineAlert tone="warn">This account has no guest profile yet. Contact the front desk to set it up.</InlineAlert>
+            <InlineAlert tone="info">This account has no guest profile yet. Contact the front desk to set it up.</InlineAlert>
           ))}
 
           <PasswordForm />

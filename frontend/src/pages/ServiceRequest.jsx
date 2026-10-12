@@ -94,7 +94,7 @@ export default function ServiceRequest() {
     return (
       <div className="mx-auto max-w-3xl px-4 py-14">
         <ErrorState message={booking.error} onRetry={booking.refetch} />
-        <div className="mt-4 text-center"><Button variant="outline" to={dashboard} onClick={goBack}>Back</Button></div>
+        <div className="mt-4 text-center"><Button variant="secondary" to={dashboard} onClick={goBack}>Back</Button></div>
       </div>
     );
   }
@@ -112,7 +112,7 @@ export default function ServiceRequest() {
           <h1 className="mt-1 text-4xl font-semibold">Service requests</h1>
           <p className="mt-1 text-sm text-navy-500">Post chargeable guest services to the stay’s folio.</p>
         </div>
-        <Button variant="outline" to={dashboard} onClick={goBack}><Icon name="arrowLeft" /> Back</Button>
+        <Button variant="secondary" to={dashboard} onClick={goBack}><Icon name="arrowLeft" /> Back</Button>
       </header>
 
       {/* Booking header */}
@@ -140,7 +140,7 @@ export default function ServiceRequest() {
 
       {b && !canOrder && (
         <div className="mb-6">
-          <InlineAlert tone="warn">
+          <InlineAlert tone="info">
             Services can only be added while a guest is <strong>Checked-In</strong>. This booking is <strong>{b.status}</strong>
             {b.status === 'Booked' ? ' — check the guest in from the dashboard first.' : '.'}
           </InlineAlert>
@@ -200,7 +200,7 @@ export default function ServiceRequest() {
                             </div>
                             <div className="flex items-center gap-2">
                               <Stepper label={s.service_name} value={quantity} disabled={!canOrder} onChange={(v) => setQty((p) => ({ ...p, [s.service_id]: v }))} />
-                              <Button variant="dark" size="sm" disabled={!canOrder} loading={adding === s.service_id} onClick={() => add(s)} title={canOrder ? undefined : 'Guest must be checked in'}>
+                              <Button variant="secondary" size="sm" disabled={!canOrder} loading={adding === s.service_id} onClick={() => add(s)} title={canOrder ? undefined : 'Guest must be checked in'}>
                                 <Icon name="plus" className="h-3.5 w-3.5" /> Add · {formatCurrency(s.base_price * quantity)}
                               </Button>
                             </div>
@@ -223,7 +223,6 @@ export default function ServiceRequest() {
                 <h2 className="text-xl font-semibold">Services used</h2>
                 <p className="text-xs text-navy-500">{usages.length} item{usages.length === 1 ? '' : 's'} on this folio</p>
               </div>
-              <Badge tone="green">Live folio</Badge>
             </div>
 
             {usage.error ? (
@@ -258,7 +257,7 @@ export default function ServiceRequest() {
               <p className="mt-1 text-[11px] text-navy-500">Tax is applied when the final bill is generated.</p>
             </div>
             <div className="p-4">
-              <Button variant="dark" className="w-full" disabled={!b} onClick={() => setFolio(true)}>
+              <Button variant="secondary" className="w-full" disabled={!b} onClick={() => setFolio(true)}>
                 <Icon name="receipt" /> View complete folio &amp; bill
               </Button>
             </div>

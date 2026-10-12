@@ -64,7 +64,7 @@ export default function StaySearch({ branches = [], types = [], value, onChange,
       </label>
 
       {onSubmit && (
-        <Button type="submit" variant="dark" size="lg" className="sm:col-span-2 lg:col-span-1">
+        <Button type="submit" variant="primary" size="lg" className="sm:col-span-2 lg:col-span-1">
           <Icon name="search" /> {submitLabel}
         </Button>
       )}

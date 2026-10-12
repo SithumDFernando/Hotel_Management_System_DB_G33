@@ -109,7 +109,7 @@ export default function BranchesTab({ branches }) {
                   <td className="td">{b.manager_name}</td>
                   <td className="td text-right tabular-nums">{b.total_rooms}</td>
                   <td className="td text-right tabular-nums">{b.active_bookings}</td>
-                  <td className="td text-right"><Button size="sm" variant="outline" onClick={() => setDrawer({ open: true, branch: b })}><Icon name="edit" className="h-3.5 w-3.5" /> Edit</Button></td>
+                  <td className="td text-right"><Button size="sm" variant="secondary" onClick={() => setDrawer({ open: true, branch: b })}><Icon name="edit" className="h-3.5 w-3.5" /> Edit</Button></td>
                 </tr>
               ))}
             </tbody>
