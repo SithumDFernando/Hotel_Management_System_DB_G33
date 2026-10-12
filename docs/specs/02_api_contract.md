@@ -12,6 +12,7 @@
 - Dates are `YYYY-MM-DD`, timestamps are ISO 8601.
 - Pagination: `?page=1&per_page=20` (default 20, max 100).
 - Error responses: `{ "detail": "message" }` with appropriate HTTP status.
+- A guest token whose account has no guest profile gets `403 This account has no guest profile. Contact the front desk.` on every guest-scoped endpoint.
 - Branch scoping: managers and receptionists may only act on bookings and rooms of their own branch; guests only on their own bookings; admins on everything (see `08_auth_and_roles.md`). Every endpoint that takes a `booking_id` (path or body) or acts on a room checks existence first (`404`), then access (`403 Not authorised for bookings of another branch.` / `403 Guests can only access their own bookings.`).
 - `422` validation errors (malformed UUID or date, unknown enum value, string longer than its DB column, number out of range) use FastAPI's list form: `{ "detail": [{ "loc": [...], "msg": "...", "type": "..." }] }`.
 - Request limits mirror the DB columns (`VARCHAR(n)`, `NUMERIC(10,2)` → max `99999999.99` with 2 decimal places).
@@ -94,7 +95,7 @@
 
 **Response (201):** `{ "account_id": "uuid-..." }`
 
-**Errors:** `403` caller not admin · `400 Invalid role` · `409` email exists · `404` referenced branch/guest doesn't exist · `422` invalid role ↔ link combination (same rules as `POST /api/admin/users`)
+**Errors:** `403` caller not admin · `400 Invalid role` · `409` email exists, or `This guest profile is already linked to another account.` · `404` referenced branch/guest doesn't exist · `422` invalid role ↔ link combination (same rules as `POST /api/admin/users`)
 
 ---
 
@@ -602,7 +603,7 @@ Creates a new user account with hashed password, assigned role, and branch.
 | `manager` / `receptionist` | **required** | must be empty |
 | `guest` | must be empty | **required** |
 
-**Errors:** `400` invalid role · `404` branch/guest not found · `409` email exists · `422` invalid role ↔ link combination (e.g. `A manager account must be assigned to a branch.`)
+**Errors:** `400` invalid role · `404` branch/guest not found · `409` email exists, or `This guest profile is already linked to another account.` (one login per guest profile) · `422` invalid role ↔ link combination (e.g. `A manager account must be assigned to a branch.`)
 
 ### PATCH `/api/admin/users/:account_id`
 Updates a user account's role and/or branch assignment:

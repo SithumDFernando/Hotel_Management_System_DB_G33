@@ -12,7 +12,7 @@
 | `/rooms` | `RoomsBrowse` | Public | Browse available rooms with filters |
 | `/login` | `Login` | Public | Login form |
 | `/register` | `Register` | Public | Guest self-signup (`POST /api/auth/signup`), then auto sign-in |
-| `/my-bookings` | `MyBookings` | Guest | Own bookings (upcoming / past / cancelled), cancel `Booked`, view bill + services |
+| `/my-bookings` | `MyBookings` | Guest | Own bookings (upcoming / past / cancelled), cancel `Booked`, view bill + services. A guest login with no linked guest profile sees a "contact the front desk" empty state instead (no API call). |
 | `/booking/:roomId` | `BookingCheckout` | Guest, Receptionist, Manager | Booking form + summary |
 | `/services/:bookingId` | `ServiceRequest` | Receptionist, Manager | Add services to a checked-in booking |
 | `/dashboard/receptionist` | `ReceptionistDashboard` | Receptionist | Today's bookings, check-in/out, payments |

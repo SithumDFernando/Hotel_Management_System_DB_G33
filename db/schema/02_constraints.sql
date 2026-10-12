@@ -101,6 +101,11 @@ ALTER TABLE user_account
     ADD CONSTRAINT uq_user_account_email
         UNIQUE (email);
 
+-- One login per guest profile (NULLs, i.e. staff accounts, are not compared)
+ALTER TABLE user_account
+    ADD CONSTRAINT uq_user_account_guest
+        UNIQUE (guest_id);
+
 -- 1:1 relationship between bill and booking
 ALTER TABLE bill
     ADD CONSTRAINT uq_bill_booking

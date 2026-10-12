@@ -10,7 +10,9 @@ from typing import Optional
 import asyncpg
 
 from app.db import get_db
-from app.dependencies import assert_booking_access, assert_room_access, require_branch, require_role
+from app.dependencies import (
+    assert_booking_access, assert_room_access, require_branch, require_guest_id, require_role,
+)
 from app.schemas.booking import (
     BookingCreate, BookingOut, BookingListOut, 
     BookingListResponse, GuestInfo, RoomInfo, BookingDetailOut,
@@ -27,7 +29,7 @@ async def create_booking(
     db=Depends(get_db),
     user: dict = Depends(require_role("receptionist", "manager", "admin", "guest"))
 ):
-    if user["role"] == "guest" and str(body.guest_id) != str(user.get("guest_id")):
+    if user["role"] == "guest" and str(body.guest_id) != require_guest_id(user):
         raise HTTPException(status_code=403, detail="Guests can only create bookings for themselves")
     # Branch staff may only book rooms in their own branch
     await assert_room_access(db, user, body.room_id)
@@ -87,7 +89,7 @@ async def list_bookings(
     if user_role == "guest":
         param_idx += 1
         conditions.append(f"b.guest_id = ${param_idx}::UUID")
-        params.append(str(user.get("guest_id")))
+        params.append(require_guest_id(user))
     elif user_role in ["manager", "receptionist"]:
         param_idx += 1
         conditions.append(f"r.branch_id = ${param_idx}::UUID")

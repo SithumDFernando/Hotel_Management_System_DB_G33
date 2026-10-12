@@ -39,7 +39,9 @@ Source: full-stack audit run on **2026-10-12** (backend API probes, DB-level con
 - [x] **6. [ISSUE-06](ISSUE-06-manager-without-branch-sees-all.md)** 🔴 Branch staff must have a branch (API validation + DB CHECK + fail-closed helper)
   - ✅ `require_branch` + `assert_role_links` in `dependencies.py`, `chk_user_account_role_links` CHECK, `user_account` FKs → `RESTRICT`, admins can't demote themselves (409). Covered by `tests/test_role_links.py` (35 tests, 32 fail on the pre-fix code/schema). Full suite: 129 passed + `test_phase4` live run passed, on a fresh `run_all.sql` build.
   - ⏳ Browser check of Admin → Users create/edit drawers (branch now required, empty option disabled) still pending.
-- [ ] **7. [ISSUE-11](ISSUE-11-guest-account-without-profile.md)** 🟠 Guest accounts must have exactly one guest profile
+- [x] **7. [ISSUE-11](ISSUE-11-guest-account-without-profile.md)** 🟠 Guest accounts must have exactly one guest profile
+  - ✅ `UNIQUE (guest_id)` + `assert_guest_profile_free` (409), `require_guest_id` fail-closed helper at every guest call site, My Bookings no-profile empty state. Covered by `tests/test_guest_links.py` (19 tests, 11 fail on the pre-fix code/schema). Full suite: 148 passed + `test_phase4` live run passed, on a fresh `run_all.sql` build.
+  - ⏳ Browser check: a normal guest's My Bookings still works (no-profile state can't be produced without bypassing the DB CHECK).
 
 ## Phase 4: Money and data integrity (DB procedures/triggers)
 

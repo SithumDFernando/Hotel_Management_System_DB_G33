@@ -18,7 +18,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.auth import verify_password, hash_password, create_access_token
 from app.db import get_db
-from app.dependencies import assert_role_links, get_current_user, get_optional_user, require_role
+from app.dependencies import (
+    assert_guest_profile_free, assert_role_links, get_current_user, get_optional_user, require_role,
+)
 from app.schemas.auth import (
     LoginRequest,
     LoginResponse,
@@ -173,6 +175,7 @@ async def register(
             status_code=status.HTTP_409_CONFLICT,
             detail="An account with this email already exists",
         )
+    await assert_guest_profile_free(db, body.guest_id)
 
     # Hash the password
     hashed = hash_password(body.password)

@@ -36,7 +36,7 @@
 ### Indexes created implicitly by constraints
 These do NOT need explicit `CREATE INDEX`:
 - All PRIMARY KEYs → automatic unique B-tree index
-- `UNIQUE` constraints on `guest.nic_passport`, `user_account.email`, `bill.booking_id`, `room_rate(branch_id, room_type_id)` → automatic indexes
+- `UNIQUE` constraints on `guest.nic_passport`, `user_account.email`, `user_account.guest_id`, `bill.booking_id`, `room_rate(branch_id, room_type_id)` → automatic indexes
 
 ### Performance impact
 - Write overhead is minimal — most tables have ≤ 2 additional indexes.

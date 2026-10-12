@@ -47,7 +47,7 @@ import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.db import get_db
-from app.dependencies import get_current_user, require_role
+from app.dependencies import get_current_user, require_guest_id, require_role
 from app.schemas.guest import BookingSummary, GuestCreate, GuestDetailOut, GuestOut, GuestUpdate
 
 router = APIRouter()
@@ -122,7 +122,7 @@ async def get_guest(
 
     # Guests may only view their own profile
     if role == "guest":
-        if str(current_user.get("guest_id")) != str(guest_id):
+        if require_guest_id(current_user) != str(guest_id):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Guests can only view their own profile.",

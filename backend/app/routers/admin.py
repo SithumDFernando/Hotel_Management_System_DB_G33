@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.auth import hash_password
 from app.db import get_db
-from app.dependencies import assert_role_links, require_role
+from app.dependencies import assert_guest_profile_free, assert_role_links, require_role
 from app.schemas.branch import BranchCreate, BranchListResponse, BranchOut, BranchUpdate
 from app.schemas.user import UserCreate, UserListResponse, UserOut, UserPatch
 
@@ -288,6 +288,7 @@ async def create_user(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Guest {body.guest_id} not found.",
             )
+        await assert_guest_profile_free(db, body.guest_id)
 
     # Hash the plaintext password before persisting
     hashed = hash_password(body.password)

@@ -75,5 +75,19 @@ Use it in `bookings.list_bookings`, `create_booking` (guest branch), `get_bookin
 
 ## Acceptance criteria
 
-- [ ] Guest accounts always have exactly one guest profile; staff accounts never do.
-- [ ] No `"None"` strings reach SQL anywhere (`grep -rn 'str(user.get' backend/app` → only inside the helpers).
+- [x] Guest accounts always have exactly one guest profile; staff accounts never do.
+- [x] No `"None"` strings reach SQL anywhere (`grep -rn 'str(user.get' backend/app` → only inside the helpers).
+
+## Resolution (2026-10-12)
+
+- Role ↔ link validation and the CHECK `chk_user_account_role_links` were done in ISSUE-06 (`assert_role_links`):
+  - a guest account needs a `guest_id` (422);
+  - a staff account can't have one (422);
+  - guest ↔ staff role changes are rejected (422);
+  - `fk_user_account_guest` is already `ON DELETE RESTRICT`.
+- New here:
+  - `UNIQUE (guest_id)` (`uq_user_account_guest`, edited into `02_constraints.sql`). `assert_guest_profile_free` returns a clear 409 from `admin.create_user` and `auth.register`.
+  - `require_guest_id(user)` in `app/dependencies.py` returns 403 `This account has no guest profile. Contact the front desk.` It's used by `assert_booking_access` (which covers get/cancel booking, bill, payments and usage), `bookings.list_bookings`, `bookings.create_booking` and `guests.get_guest`. `grep -rn 'str(user.get\|str(current_user.get' backend/app` now finds nothing.
+  - `MyBookings.jsx`: a guest login with no `guest_id` gets a friendly "No guest profile linked" empty state and makes no API call. `BookingCheckout.jsx` already handled `!user.guest_id`.
+- Tests: `tests/test_guest_links.py` (19 tests). 11 fail on the pre-fix code and schema: a duplicate login was created (201), `GET /bookings` returned 422 (it was a 500 before ISSUE-07), and the other endpoints returned the misleading "can only access their own…" 403. The other 8 were already enforced by ISSUE-06.
+- ⏳ Browser check pending: My Bookings with a profile-less guest login (hard to set up now, because the DB CHECK prevents one). A normal guest's My Bookings should be unchanged.

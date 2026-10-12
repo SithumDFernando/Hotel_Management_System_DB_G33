@@ -11,7 +11,7 @@ This file (`AGENTS.md`) is used by the Antigravity agent to understand project-s
 2. **Code Style**:
    - **Database**: Use clear names for tables and columns (snake_case). All logic must ensure ACID compliance.
    - **Backend (Python)**: Follow PEP 8 guidelines. Use Pydantic models for request/response validation. Keep routers clean and delegate logic where possible.
-   - **Frontend (React)**: Use functional components and hooks. Use Vanilla CSS or Tailwind CSS for styling depending on user preference, with a focus on modern, premium aesthetics.
+   - **Frontend (React)**: Use functional components and hooks with Tailwind CSS. All visual design (colours, type, components, status display, copy, error messages) must follow `docs/specs/11_design_system.md`: a three-colour palette (ink, paper, tea green) plus signal red for problems only.
 
 3. **Documentation Integrity**:
    - Specifications in `docs/specs/` act as the source of truth for the API contract, database schema, and overall architecture.

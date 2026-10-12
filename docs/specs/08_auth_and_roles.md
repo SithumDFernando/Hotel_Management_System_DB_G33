@@ -117,6 +117,7 @@ Client                          Server
 - **All reports are branch-scoped for managers**, including `top-services` (`v_top_services_by_branch`, ranked within the branch). The `branch_id` query param is ignored for managers.
 - **Admins are global** on every endpoint above, including check-in/out, service usage, billing and payments.
 - **Branch staff always have a branch.** `POST /admin/users`, `POST /auth/register` and `PATCH /admin/users/:id` reject a manager/receptionist without a branch (`422`), backed by the DB CHECK `chk_user_account_role_links`. If such an account exists anyway, it fails closed: every branch-scoped endpoint returns `403 Your account is not assigned to a branch.`, never all branches' data.
+- **Guests always have exactly one guest profile.** A guest account needs a `guest_id` (`422`), a guest profile can back only one login (`409`, UNIQUE `uq_user_account_guest`), and staff accounts never have one. A guest token without a profile fails closed with `403 This account has no guest profile.`
 - **No self-demotion.** An admin can't remove their own admin role (`409`). Only admins can change roles, so this also keeps at least one admin.
 
 ---
@@ -138,6 +139,11 @@ require_branch(user)        → manager/receptionist: their branch_id (403 if no
 assert_role_links(role, branch_id, guest_id)
                             → 422 unless the account links fit the role
                               (create/patch/register)
+require_guest_id(user)      → guest: their guest_id (403 if none). Used for every
+                              ownership check and guest filter, so no "None"
+                              string ever reaches SQL
+assert_guest_profile_free(db, guest_id)
+                            → 409 if the guest profile already has a login
 
 # Resource guards, awaited inside the route handler:
 assert_booking_access(db, user, booking_id)

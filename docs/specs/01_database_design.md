@@ -117,7 +117,7 @@
 | Column | Type | Constraints |
 |--------|------|-------------|
 | `account_id` | UUID | PK, DEFAULT gen_random_uuid() |
-| `guest_id` | UUID | NULL, FK → guest (ON DELETE RESTRICT) |
+| `guest_id` | UUID | NULL, UNIQUE, FK → guest (ON DELETE RESTRICT) |
 | `branch_id` | UUID | NULL, FK → branch (ON DELETE RESTRICT) |
 | `email` | VARCHAR(100) | NOT NULL, UNIQUE |
 | `password_hash` | VARCHAR(255) | NOT NULL |
@@ -226,7 +226,7 @@ BOOKING ──1:M──  SERVICE_USAGE
 BOOKING ──1:1──  BILL
 BOOKING ──1:M──  PAYMENT
 SERVICE ──1:M──  SERVICE_USAGE
-GUEST   ──1:1──  USER_ACCOUNT   (optional, nullable FK)
+GUEST   ──1:1──  USER_ACCOUNT   (optional; UNIQUE guest_id, at most one login per profile)
 BRANCH  ──1:M──  USER_ACCOUNT   (for staff accounts)
 ```
 

@@ -14,6 +14,8 @@ Provides:
                                branch staff share its branch, admin always)
     - assert_room_access():    404/403 guard for one room (branch staff only)
     - require_branch():        branch_id of a manager/receptionist, 403 if missing
+    - require_guest_id():      guest_id of a guest account, 403 if missing
+    - assert_guest_profile_free(): 409 if a guest profile already has a login
     - assert_role_links():     422 unless role ↔ branch_id/guest_id links are valid
 
 Usage in routers:
@@ -173,6 +175,20 @@ def require_branch(user: dict) -> str | None:
     return str(user["branch_id"])
 
 
+def require_guest_id(user: dict) -> str:
+    """
+    The guest_id of a guest-role user as a string, for ownership checks and
+    query filters. A guest account without a guest profile (misconfigured)
+    gets 403 instead of a "None" string reaching SQL.
+    """
+    if not user.get("guest_id"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This account has no guest profile. Contact the front desk.",
+        )
+    return str(user["guest_id"])
+
+
 def _assert_same_branch(user: dict, branch_id, detail: str) -> None:
     if user["role"] in BRANCH_SCOPED_ROLES and require_branch(user) != str(branch_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
@@ -201,7 +217,7 @@ async def assert_booking_access(db, user: dict, booking_id):
     )
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
-    if user["role"] == "guest" and str(row["guest_id"]) != str(user.get("guest_id")):
+    if user["role"] == "guest" and str(row["guest_id"]) != require_guest_id(user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Guests can only access their own bookings.",
@@ -262,3 +278,15 @@ def assert_role_links(role: str, branch_id, guest_id) -> None:
             reject("An admin account cannot be assigned to a branch (admins are global).")
         if guest_id:
             reject("Staff accounts cannot be linked to a guest profile.")
+
+
+async def assert_guest_profile_free(db, guest_id) -> None:
+    """409 if the guest profile is already linked to a login (one account per
+    guest profile; backed by UNIQUE uq_user_account_guest)."""
+    if guest_id and await db.fetchval(
+        "SELECT 1 FROM user_account WHERE guest_id = $1::UUID", guest_id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This guest profile is already linked to another account.",
+        )
