@@ -11,7 +11,7 @@ const TITLES = [
   ['/register', 'Create account'],
   ['/booking', 'Book a room'],
   ['/my-bookings', 'My bookings'],
-  ['/services', 'Service requests'],
+  ['/services', 'Add services'],
   ['/profile', 'Your profile'],
   ['/dashboard/receptionist', 'Today'],
   ['/dashboard/manager', 'Manager dashboard'],

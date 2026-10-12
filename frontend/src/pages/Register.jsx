@@ -3,7 +3,7 @@ import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import useAuth from '@/hooks/useAuth';
 import { homeForRole } from '@/context/AuthContext';
 import { signup } from '@/api/auth';
-import { errorMessage, passwordError } from '@/utils/formatters';
+import { errorMessage, fieldErrors, passwordError } from '@/utils/formatters';
 import Button from '@/components/ui/Button';
 import Logo from '@/components/ui/Logo';
 import { Input } from '@/components/ui/Field';
@@ -62,11 +62,13 @@ export default function Register() {
         nationality: f.nationality.trim() || null,
       });
       await login(f.email.trim(), f.password);
-      toast.success('Welcome to SkyNest! Your account is ready.');
+      toast.success(`Account created. You’re signed in as ${f.email.trim()}.`);
       navigate(next && next.startsWith('/') && !next.startsWith('//') ? next : '/rooms', { replace: true });
     } catch (err) {
       // 409: the email is taken (spec 11 §9.1: server detail + a way forward).
+      const fields = fieldErrors(err);
       if (err.response?.status === 409) setDuplicate(errorMessage(err));
+      else if (Object.keys(fields).length) setErrors(fields);
       else setServerError(errorMessage(err));
       setBusy(false);
     }

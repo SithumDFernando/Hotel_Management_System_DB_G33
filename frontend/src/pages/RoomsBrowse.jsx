@@ -76,6 +76,7 @@ export default function RoomsBrowse() {
     // filtering on it would hide rooms that are free on other dates.
     (signal) => getRooms(datesValid ? { check_in: value.check_in, check_out: value.check_out } : {}, signal),
     [datesValid, value.check_in, value.check_out],
+    { failMessage: "Couldn't load rooms." },
   );
 
   const branchList = branches.data?.branches || [];

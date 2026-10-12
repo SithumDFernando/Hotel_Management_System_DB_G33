@@ -109,7 +109,7 @@ export default function BookingCheckout() {
         payment_option: payment,
       });
       setDone(booking);
-      toast.success(`Booked: ${r.room_type.type_name} ${r.room_number}, ${formatStayRange(booking.check_in_date, booking.check_out_date)}`);
+      toast.success(`Booked: ${r.room_type.type_name} Room ${r.room_number}, ${formatStayRange(booking.check_in_date, booking.check_out_date)}`);
     } catch (err) {
       if (err.response?.status === 409) {
         setConflict(errorMessage(err, 'This room is already booked for those dates.'));

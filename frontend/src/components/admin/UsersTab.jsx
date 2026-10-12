@@ -8,7 +8,7 @@ import { Field, Input, Select } from '@/components/ui/Field';
 import Pagination from '@/components/ui/Pagination';
 import { EmptyState, ErrorState, InlineAlert, Skeleton } from '@/components/ui/States';
 import { useToast } from '@/components/ui/Toast';
-import { errorMessage, passwordError } from '@/utils/formatters';
+import { errorMessage, fieldErrors, passwordError } from '@/utils/formatters';
 
 const PAGE_SIZE = 10;
 const STAFF_ROLES = [
@@ -67,11 +67,13 @@ function CreateDrawer({ open, onClose, branches, onSaved }) {
     setServerError('');
     try {
       await createUser({ email: f.email.trim(), password: f.password, role: f.role, branch_id: needsBranch ? f.branch_id : null });
-      toast.success(`Created: ${f.email.trim()} (${ROLE_LABEL[f.role]})`);
+      toast.success(`Created: staff account for ${f.email.trim()} (${ROLE_LABEL[f.role]})`);
       onSaved();
       setCreated({ email: f.email.trim(), password: f.password });
     } catch (err) {
-      setServerError(errorMessage(err));
+      const fields = fieldErrors(err);
+      if (Object.keys(fields).length) setErrors(fields);
+      else setServerError(errorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -204,7 +206,7 @@ function EditDrawer({ user, branches, onClose, onSaved }) {
 }
 
 export default function UsersTab({ branches }) {
-  const { data, isLoading, error, refetch } = useFetch((s) => listUsers(s), []);
+  const { data, isLoading, error, refetch } = useFetch((s) => listUsers(s), [], { failMessage: "Couldn't load accounts." });
   const [q, setQ] = useState('');
   const [role, setRole] = useState('');
   const [branch, setBranch] = useState('');
@@ -252,7 +254,7 @@ export default function UsersTab({ branches }) {
       ) : (
         <div className="card overflow-hidden">
           <div className="relative overflow-x-auto">
-            <table className="w-full min-w-[640px]">
+            <table className="w-full min-w-[640px]" aria-label="Accounts">
               <thead><tr className="bg-paper-200"><th scope="col" className="th">Account</th><th scope="col" className="th">Role</th><th scope="col" className="th">Branch</th><th scope="col" className="th"><span className="sr-only">Actions</span></th></tr></thead>
               <tbody className="divide-y divide-ink-100">
                 {rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((u) => (

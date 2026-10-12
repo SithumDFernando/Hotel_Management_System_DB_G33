@@ -50,8 +50,8 @@ Spec 11 already defines the target design (ink / paper / tea green + signal red,
 
 ## Phase D: Cross-cutting and sign-off
 
-- [ ] **10. [UI-10](UI-10-copy-errors-accessibility.md)** 🟡 Copy, error messages (`errorMessage()` per spec 11 §9.1), toasts, `ErrorBoundary`, accessibility
-- [ ] **11. [UI-11](UI-11-verification-and-spec-sync.md)** 🟡 Full QA pass (every role, 375px + desktop), anti-slop checklist, spec sync
+- [x] **10. [UI-10](UI-10-copy-errors-accessibility.md)** 🟡 Copy, error messages (`errorMessage()` per spec 11 §9.1), toasts, `ErrorBoundary`, accessibility
+- [x] **11. [UI-11](UI-11-verification-and-spec-sync.md)** 🟡 Full QA pass (every role, 375px + desktop), anti-slop checklist, spec sync
 
 ---
 
@@ -62,14 +62,14 @@ Spec 11 already defines the target design (ink / paper / tea green + signal red,
 3. **Primitives before pages:** most pages only need class swaps once `Button`, `Badge`, `Tabs` and `States` follow the spec.
 4. **UI-10 is last before QA** because copy and error changes touch many files that the page tasks also edit; doing it after avoids merge conflicts.
 
-## Open decisions (need the team's answer)
+## Decisions (all resolved 2026-10-12)
 
 | # | Question | Recommendation |
 |---|---|---|
-| D1 | Spec 09 §1 (Home: "Hero banner with hotel imagery and tagline") contradicts spec 11 §7.1 (no hero overlay, availability search first). Which wins? | Spec 11; update spec 09 in UI-11. |
-| D2 | The logo's green (~`#0F4A33`) is close to but not the same as `tea-900` `#173A2B` / `tea-700` `#24513D`. Recolour the logo or nudge the tokens? | Recolour the logo to the tokens (spec 11 is the source of truth). |
-| D3 | Spec 11 §9.1 says `errorMessage()` lives in `src/api/client.js`; it actually lives in `src/utils/formatters.js`. | Keep it where it is; fix the spec in UI-11. |
-| D4 | Home §7.1 item 4 ("During your stay" services list) needs the service catalogue. `GET /api/services` requires sign-in (any role, including guest), so anonymous visitors can't load it. | Omit the section for now, as spec 11 allows. Revisit if a public catalogue endpoint is added. |
+| D1 | Spec 09 §1 (Home: "Hero banner with hotel imagery and tagline") contradicts spec 11 §7.1 (no hero overlay, availability search first). Which wins? | Spec 11; update spec 09 in UI-11. **Resolved:** spec 11 won; spec 09 §1 now describes the §7.1 structure (UI-11). |
+| D2 | The logo's green (~`#0F4A33`) is close to but not the same as `tea-900` `#173A2B` / `tea-700` `#24513D`. Recolour the logo or nudge the tokens? | Recolour the logo to the tokens (spec 11 is the source of truth). **Resolved:** the logo was recoloured to the tokens (UI-00); spec 11 §6.1 records it. |
+| D3 | Spec 11 §9.1 says `errorMessage()` lives in `src/api/client.js`; it actually lives in `src/utils/formatters.js`. | Keep it where it is; fix the spec in UI-11. **Resolved:** kept in `utils/formatters.js` with `fieldErrors()`; spec 11 §9.1 corrected (UI-11). |
+| D4 | Home §7.1 item 4 ("During your stay" services list) needs the service catalogue. `GET /api/services` requires sign-in (any role, including guest), so anonymous visitors can't load it. | Omit the section for now, as spec 11 allows. Revisit if a public catalogue endpoint is added. **Resolved:** the section is omitted; spec 09 §1 notes why (UI-11). |
 
 ## Progress log
 
@@ -153,3 +153,54 @@ _Add a dated line per finished task: what changed, what was verified, anything d
     - **375px sweep:** all 7 admin tabs, 4 manager tabs and 4 reports: no page-level horizontal scroll.
   - **Open (not a restyle; logged for a separate fix):** Billing summary → "View bill" on a booking that has no bill and isn't Checked-In or Checked-Out (e.g. the cancelled Galle seed booking) opens the modal, which calls `generate_bill` and shows "Booking must be Checked-In or Checked-Out to generate a bill" with a Retry that can't succeed. The old modal did the same. Fix: hide "View bill" for rows without a bill unless the booking is in-house, or have the modal fall back to `GET` for non-billable bookings.
   - **Burn-down: 20** (ErrorBoundary 14, Profile 6, both UI-10). Every Phase C file is at 0.
+- **2026-10-12 · UI-10:**
+  - **`errorMessage(err, fallback | { fallback })`** now follows spec 11 §9.1. A server `detail` is shown only when readable (under 200 characters, with no SQL, asyncpg, constraint or UUID text).
+    - 401 → "Email or password is incorrect." (also matches the API's "Invalid credentials") or "Your session has ended. Sign in again."
+    - 403 → "You don't have access to this record." (keeps the actionable "no guest profile… front desk" detail).
+    - 404 "X not found" → "This x no longer exists. Refresh the list."
+    - 422: a custom sentence is shown as is; a schema list gives "Some fields need attention…".
+    - 429 → the sign-in message.
+    - 503 → the server detail (the ISSUE-15 "database is out of date" message); other 5xx → the server-failure sentence.
+    - No response → "Can't reach the server…".
+  - **`fieldErrors(err)`** maps a FastAPI 422 list to `{ field: message }` with plainer wording ("Use at most 100 characters.", "This field is required."). Wired into Register, GuestPicker, UsersTab, BranchesTab, Profile (both forms), CatalogueManager (one alert naming each field) and BillPaymentModal (amount).
+  - **`useFetch(..., { failMessage })`** puts what failed first ("Couldn't load rooms. The server couldn't complete this…"). It's used by every page that shows a load error; the hand-built prefixes from UI-07/08/09 now use it.
+  - **ErrorBoundary:** "This page couldn't be shown." / "Reload the page. If it keeps happening, tell the system admin." / "Reload page" + "Go to home page". Logs to the console in dev only.
+  - **Toasts** match the UI-10 table: "Booked: Single Room 103, …", "Cancelled: booking SN-…. Room 103 is free for …" (guest and receptionist), "Bill recalculated for … with a LKR 500.00 discount", "Added: 2 × Minibar Restock to Room 102, …", "Account created. You're signed in as …", "Created: staff account for …", "Saved: Laundry now LKR … for new orders", "Saved: personal details for …".
+  - **Profile.jsx** restyled (Inter 20px header, no eyebrow, sentence-case read-only fields). "Current password is incorrect." now shows under its field.
+  - **409 room UUID fixed at the source:** `trg_check_double_booking` reads the room number while taking its row lock, so the 409 reads "Room 103 is already booked for the selected dates." `test_double_booking.py` asserts the exact detail. Spec 04 is updated. Fresh `run_all.sql` build: 253 passed. The trigger was applied to the dev DB in one transaction (drop the trigger, re-run the trigger file).
+  - **Removed unused helpers:** `formatDate`, `formatShortDate` and `initials`, so no page can mix date formats again.
+  - **Copy sweep:** the plan's grep only matches code identifiers (`submit`, `type="submit"`). With those excluded, there are 0 hits, and no visible "Submit".
+  - **Accessibility:**
+    - Every table has an accessible name (`aria-label` or `aria-labelledby`), and every icon-only button has an `aria-label`.
+    - Every input has a label. The exception is the search boxes, which use `aria-label` + a descriptive placeholder.
+    - No action uses `title` alone for a reason, and no text uses `tea-500` or `ink-300` on a light surface (footer `ink-300` text on `ink-900` is about 8:1).
+    - Error toasts are `role="alert"` in a polite region. The `/services` page title is now "Add services".
+  - **Verified in headless Edge, forcing each status:**
+    - 401 (wrong password), 403 (Galle receptionist opening a Colombo booking), 404 (unknown booking id), 409 (double booking → server detail + "Choose other dates or another room.").
+    - 422 (300-character branch name → "Use at most 100 characters." under the field), 429 (11 failed sign-ins).
+    - Network (API blocked), 5xx (backend container stopped, then restarted), ErrorBoundary (forced through the React fiber).
+    - Profile save, and the wrong current password, at 1280 and 375.
+  - **Burn-down: 0.**
+- **2026-10-12 · UI-11:**
+  - **Automated greps (§1):** all six return nothing, apart from documented false positives. Grep 4's `tone="` hits are the current `InlineAlert tone="info"` and `Logo tone="inverse"` props (Badge has no `tone`); grep 5's "Submit" hits are code identifiers only (`onSubmit`, `type="submit"`). The class-precise burn-down is **0**. `npm run build` passes.
+  - **Bundle (pre-redesign `e63bf6c` → now):**
+    - CSS 31.5 → 26.0 kB (gzip 6.4 → 6.0).
+    - Main JS 323.0 → 339.4 kB (+16 kB for the new primitives and helpers); recharts chunk 404.5 → 394.8 kB.
+    - Google Fonts request: 7 files → 4 (Inter 400/500/600/700 + Playfair 500/600/700 → Inter 400/500/600 + Source Serif 4 600).
+  - **Manual pass (headless Edge):** 29 pages × 1280/375 for signed-out, guest, receptionist, Kandy manager and admin. All 58 loads have an `h1` and a route title, with no console errors, failed requests or page-level horizontal scroll (the check compares against the requested width).
+    - Clicked this round: home search → `/rooms` with the live summary, branch and room-type links, signed-out "Book this room" → `/login?next=…`, manager month switch and chart tooltip.
+    - Covered earlier this session: guest book/409/bill/cancel, every receptionist action, and the admin create/edit/toggle/price/deactivate flows.
+    - Error states: shown with the backend stopped and with the API blocked (UI-10).
+  - **Lighthouse Accessibility 12.6 (Edge, signed in where needed): Home 100, Login 100, Today 100, Overview 100.**
+  - **Contrast:** all 17 text/background pairs in use pass AA. The lowest is `signal-700` on `signal-100` at 5.58:1; footer `ink-300` on `ink-900` is 7.67:1.
+  - **Spec 11 §10 tests:**
+    - **Home:** passes (real photos and addresses of Galle Face, Kandy Lake and Galle Fort; the search is the one emphasis; ink/paper/tea only).
+    - **Rooms:** passes, but logged: every card has a primary "Book this room". That was accepted in UI-05 as a list-row action, like Today's rows; revisit if the team wants one emphasis per screen strictly.
+    - **Today:** passes (the eye lands on the Check out / Check in buttons; red only on "Overdue checkout").
+    - **Overview:** passes (strip → chart → top services; red only on Balance due).
+  - **Spec sync:**
+    - **09:** route map; Home (§7.1 structure, D1, public `/api/branches`, D4); ServiceRequest; Receptionist "Today" (summary strip, stacked task tables, RowMenu, 402 copy); Manager Overview (strip, no ring, top services by quantity); Admin "Accounts"; shared components (SummaryStrip/RowMenu/Logo/chartTheme, new BillTable/BillPaymentModal props); navbar labels; sign-out toast; ErrorBoundary copy.
+    - **11:** `tea-300` row; SummaryStrip/RowMenu/Logo in §6; chartTheme as the only chart hex; new §6.1 Brand; §9.1 location + `fieldErrors()` + `failMessage` + 503; §11 marked done.
+    - D1–D4 are recorded as resolved above. No member `todo.md` had open frontend items.
+  - **Still open:** the billing-report "View bill" on a non-billable booking without a bill (logged under UI-09).
+  - **Dev DB test data:** a `qa.rec.…@skynest.lk` receptionist and the deactivated "QA Late Checkout" service remain. Other test edits were reverted.

@@ -5,7 +5,7 @@ import Button from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { ErrorState, InlineAlert, Skeleton } from '@/components/ui/States';
 import { useToast } from '@/components/ui/Toast';
-import { bookingRef, errorMessage, formatCurrency, formatNumericDate } from '@/utils/formatters';
+import { bookingRef, errorMessage, fieldErrors, formatCurrency, formatNumericDate } from '@/utils/formatters';
 
 const METHODS = ['Cash', 'Credit Card', 'Bank Transfer'];
 
@@ -79,7 +79,7 @@ export default function BillPaymentModal({ booking, onClose, onChanged, onChecko
       setState({ bill: updated, payments: fresh });
       setAmount(Number(updated.outstanding_balance) > 0 ? String(Number(updated.outstanding_balance).toFixed(2)) : '');
       onChanged?.();
-      toast.success(`Bill recalculated for ${guestName}: discount ${formatCurrency(updated.discount_amount)}`);
+      toast.success(`Bill recalculated for ${guestName} with a ${formatCurrency(updated.discount_amount)} discount`);
       setShowDiscount(false);
     } catch (err) {
       setDiscountError(errorMessage(err));
@@ -109,7 +109,7 @@ export default function BillPaymentModal({ booking, onClose, onChanged, onChecko
       await load(false);
       onChanged?.();
     } catch (err) {
-      setAmountError(errorMessage(err));
+      setAmountError(fieldErrors(err).amount || errorMessage(err));
     } finally {
       setBusy(false);
     }

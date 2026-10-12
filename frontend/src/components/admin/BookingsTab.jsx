@@ -19,6 +19,7 @@ export default function BookingsTab({ branches }) {
   const { data, isLoading, error, refetch } = useFetch(
     (s) => listBookings({ branch_id: branch, status, from, to, per_page: LIMIT }, s),
     [branch, status, from, to],
+    { failMessage: "Couldn't load bookings." },
   );
 
   const rows = useMemo(

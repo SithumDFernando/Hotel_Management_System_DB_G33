@@ -23,9 +23,9 @@ export default function ServiceRequest() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const booking = useFetch((s) => getBooking(bookingId, s), [bookingId]);
-  const catalogue = useFetch((s) => getServices(s), []);
-  const usage = useFetch((s) => getUsage(bookingId, s), [bookingId]);
+  const booking = useFetch((s) => getBooking(bookingId, s), [bookingId], { failMessage: "Couldn't load this booking." });
+  const catalogue = useFetch((s) => getServices(s), [], { failMessage: "Couldn't load the service catalogue." });
+  const usage = useFetch((s) => getUsage(bookingId, s), [bookingId], { failMessage: "Couldn't load services for this stay." });
 
   const [category, setCategory] = useState('all');
   const [q, setQ] = useState('');
@@ -65,7 +65,7 @@ export default function ServiceRequest() {
     setAdding(service.service_id);
     try {
       await addUsage(bookingId, { service_id: service.service_id, usage_date: todayISO(), quantity });
-      toast.success(`Added: ${quantity} × ${service.service_name}, ${b.guest.full_name}`);
+      toast.success(`Added: ${quantity} × ${service.service_name} to Room ${b.room.room_number}, ${b.guest.full_name}`);
       setQty((p) => ({ ...p, [service.service_id]: '1' }));
       usage.refetch();
     } catch (err) {
@@ -85,7 +85,7 @@ export default function ServiceRequest() {
     return (
       <div className="mx-auto max-w-3xl px-4 py-10">
         {back}
-        <div className="mt-4"><ErrorState message={`Couldn't load this booking. ${booking.error}`} onRetry={booking.refetch} /></div>
+        <div className="mt-4"><ErrorState message={booking.error} onRetry={booking.refetch} /></div>
       </div>
     );
   }
@@ -137,7 +137,7 @@ export default function ServiceRequest() {
 
           <div className="mt-4 space-y-6">
             {catalogue.error ? (
-              <ErrorState message={`Couldn't load the service catalogue. ${catalogue.error}`} onRetry={catalogue.refetch} />
+              <ErrorState message={catalogue.error} onRetry={catalogue.refetch} />
             ) : catalogue.isLoading ? (
               [0, 1, 2].map((i) => <Skeleton key={i} className="h-12 w-full" />)
             ) : filtered.length === 0 ? (
@@ -200,14 +200,14 @@ export default function ServiceRequest() {
           <div className="card">
             <h2 id="stay-heading" className="border-b border-ink-100 px-4 py-3 text-base font-semibold text-ink-900">This stay</h2>
             {usage.error ? (
-              <div className="p-4"><ErrorState message={`Couldn't load services for this stay. ${usage.error}`} onRetry={usage.refetch} /></div>
+              <div className="p-4"><ErrorState message={usage.error} onRetry={usage.refetch} /></div>
             ) : usage.isLoading ? (
               <div className="space-y-2 p-4"><Skeleton className="h-8 w-full" /><Skeleton className="h-8 w-full" /></div>
             ) : usages.length === 0 ? (
               <p className="px-4 py-4 text-sm text-ink-600">No services yet for this stay.</p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full">
+                <table className="w-full" aria-labelledby="stay-heading">
                   <thead>
                     <tr className="bg-paper-200">
                       <th scope="col" className="th">Date</th>

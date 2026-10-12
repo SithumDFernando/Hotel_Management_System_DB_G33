@@ -55,7 +55,7 @@ export default function BillTable({ bill, payments = [], booking, onTakePayment 
           <p className="text-sm text-ink-600">No payments yet.</p>
         ) : (
           <div className="overflow-x-auto rounded-md border border-ink-100">
-            <table className="w-full">
+            <table className="w-full" aria-labelledby="bill-payments">
               <thead>
                 <tr className="bg-paper-200">
                   <th scope="col" className="th">Date</th>

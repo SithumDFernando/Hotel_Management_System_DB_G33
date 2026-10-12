@@ -76,7 +76,7 @@ export default function ReportTable({
       ) : (
         <>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px]">
+            <table className="w-full min-w-[640px]" aria-label={title || 'Report'}>
               <thead className="sticky top-0">
                 <tr className="bg-paper-200">
                   {columns.map((c) => {

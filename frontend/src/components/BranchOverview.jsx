@@ -57,7 +57,7 @@ export default function BranchOverview({ branchId = '', ym }) {
 
   const occ = useFetch((s) => getOccupancy({ branch_id: branchId, date: today }, s), [branchId, today]);
   const unpaid = useFetch((s) => getBillingSummary({ branch_id: branchId, unpaid_only: true }, s), [branchId]);
-  const top = useFetch((s) => getTopServices({ branch_id: branchId, limit: 5 }, s), [branchId]);
+  const top = useFetch((s) => getTopServices({ branch_id: branchId, limit: 5 }, s), [branchId], { failMessage: "Couldn't load top services." });
   const trend = useFetch(
     async (signal) => {
       const months = lastSixMonths(ym);
@@ -73,6 +73,7 @@ export default function BranchOverview({ branchId = '', ym }) {
       }));
     },
     [ym, branchId],
+    { failMessage: "Couldn't load revenue." },
   );
 
   // One row per (room, booking) — collapse to one status per room.
@@ -148,7 +149,7 @@ export default function BranchOverview({ branchId = '', ym }) {
           <p className="mt-0.5 text-2xs text-ink-600">Checked-out stays to {MONTH_NAMES[month - 1]} {year}, {scope}; before tax.</p>
 
           {trend.error ? (
-            <div className="mt-4"><ErrorState message={`Couldn't load revenue. ${trend.error}`} onRetry={trend.refetch} /></div>
+            <div className="mt-4"><ErrorState message={trend.error} onRetry={trend.refetch} /></div>
           ) : trend.isLoading && !trend.data ? (
             <Skeleton className="mt-4 h-72 w-full" />
           ) : !hasRevenue ? (
@@ -188,7 +189,7 @@ export default function BranchOverview({ branchId = '', ym }) {
               <details className="mt-3 text-[13px]">
                 <summary className="w-fit cursor-pointer rounded-sm text-tea-700">Show as table</summary>
                 <div className="mt-2 overflow-x-auto">
-                  <table className="w-full">
+                  <table className="w-full" aria-label="Monthly revenue, last 6 months">
                     <thead>
                       <tr className="bg-paper-200">
                         <th scope="col" className="th">Month</th>
@@ -218,7 +219,7 @@ export default function BranchOverview({ branchId = '', ym }) {
           <h2 id="top-heading" className="text-base font-semibold text-ink-900">Top services by quantity</h2>
           <p className="mt-0.5 text-2xs text-ink-600">All time, {scope}.</p>
           {top.error ? (
-            <div className="mt-4"><ErrorState message={`Couldn't load top services. ${top.error}`} onRetry={top.refetch} /></div>
+            <div className="mt-4"><ErrorState message={top.error} onRetry={top.refetch} /></div>
           ) : top.isLoading && !top.data ? (
             <Skeleton className="mt-4 h-48 w-full" />
           ) : topRows.length === 0 ? (

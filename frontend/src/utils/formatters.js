@@ -42,18 +42,6 @@ export function addDays(iso, days) {
   return toISODate(d);
 }
 
-export function formatDate(value) {
-  if (!value) return '—';
-  const d = String(value).length <= 10 ? parseISODate(value) : new Date(value);
-  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-}
-
-export function formatShortDate(value) {
-  if (!value) return '—';
-  const d = String(value).length <= 10 ? parseISODate(value) : new Date(value);
-  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
-}
-
 // Spec 11 §9 numeric formats: 14/11/2026, and "14/11–16/11" for a stay.
 export function formatNumericDate(value) {
   if (!value) return '—';
@@ -80,18 +68,72 @@ export function calculateNights(checkIn, checkOut) {
   return Math.max(0, Math.round(ms / 86_400_000));
 }
 
-// Pull a human-readable message out of an axios error. FastAPI returns
-// `detail` as a string for HTTPException and as an array for 422 validation.
-export function errorMessage(err, fallback = 'Something went wrong. Please try again.') {
+// Spec 11 §9.1 error messages. Shows the server's `detail` when it is a readable
+// sentence, otherwise the pattern for the status. 402 is handled by the check-out
+// flow (it opens the payment window), and 422 field errors by fieldErrors().
+// options: a string fallback, or { fallback } — used for 400/409 without a readable detail.
+const SERVER_FAILED = "The server couldn't complete this. Try again; if it keeps happening, tell the system admin.";
+
+const isReadable = (detail) =>
+  typeof detail === 'string' && detail.length > 0 && detail.length < 200
+  && !/sql|asyncpg|traceback|constraint|exception|\b[0-9a-f]{8}-[0-9a-f]{4}-/i.test(detail);
+
+export function errorMessage(err, options = {}) {
+  const { fallback } = typeof options === 'string' ? { fallback: options } : options;
+  const status = err?.response?.status;
   const detail = err?.response?.data?.detail;
-  if (typeof detail === 'string') return detail;
-  if (Array.isArray(detail) && detail.length) {
-    return detail
-      .map((d) => `${(d.loc || []).filter((p) => p !== 'body').join('.')}: ${d.msg}`)
-      .join('; ');
+  const readable = isReadable(detail);
+
+  if (!err?.response) {
+    return err?.code === 'ERR_NETWORK' || err?.request
+      ? "Can't reach the server. Check your connection and try again."
+      : SERVER_FAILED;
   }
-  if (err?.code === 'ERR_NETWORK') return 'Cannot reach the server. Check your connection.';
-  return fallback;
+  switch (status) {
+    case 401:
+      return /credential|password|email/i.test(detail || '') ? 'Email or password is incorrect.' : 'Your session has ended. Sign in again.';
+    case 403:
+      // "This account has no guest profile. Contact the front desk." says what to do; keep it.
+      return readable && /profile|front desk/i.test(detail) ? detail : "You don't have access to this record.";
+    case 404: {
+      // "Booking not found" → "This booking no longer exists. Refresh the list."
+      const thing = readable && /^([a-z][a-z ]{0,30}) not found\.?$/i.exec(detail)?.[1];
+      if (thing) return `This ${thing.toLowerCase()} no longer exists. Refresh the list.`;
+      return readable ? detail : 'This record no longer exists. Refresh the list.';
+    }
+    case 429:
+      return 'Too many sign-in attempts. Wait a minute and try again.';
+    case 422:
+      // Custom rules return a sentence; schema validation returns a list (see fieldErrors).
+      return readable ? detail : 'Some fields need attention. Check the highlighted fields.';
+    case 503:
+      // ISSUE-15: "The database is out of date. Ask the system admin to rebuild it."
+      return readable ? detail : SERVER_FAILED;
+    default:
+      if (status >= 500) return SERVER_FAILED;
+      return readable ? detail : (fallback ?? SERVER_FAILED);
+  }
+}
+
+// FastAPI 422 list → { field: 'Message.' } for inline errors under each Field.
+// The field is the last `loc` part (e.g. ["body", "email"] → "email").
+export function fieldErrors(err) {
+  const detail = err?.response?.data?.detail;
+  if (err?.response?.status !== 422 || !Array.isArray(detail)) return {};
+  const out = {};
+  detail.forEach((d) => {
+    const field = [...(d.loc || [])].reverse().find((p) => typeof p === 'string' && p !== 'body');
+    if (!field || out[field]) return;
+    // Plain wording for the common Pydantic messages; others pass through.
+    const msg = String(d.msg || 'Check this value')
+      .replace(/^Value error, /, '')
+      .replace(/^String should have at (most|least) (\d+) characters?$/, 'Use at $1 $2 characters')
+      .replace(/^value is not a valid email address.*$/i, 'Enter an email address like name@example.com')
+      .replace(/^Field required$/, 'This field is required')
+      .replace(/^Input should be a valid (number|integer|date).*$/i, 'Enter a valid $1');
+    out[field] = `${msg.charAt(0).toUpperCase()}${msg.slice(1)}${/[.!?]$/.test(msg) ? '' : '.'}`;
+  });
+  return out;
 }
 
 // Short human-friendly reference derived from the booking UUID.
@@ -105,17 +147,6 @@ export function passwordError(pw) {
 }
 
 export const MAX_STAY_NIGHTS = 30; // mirrors the cap in create_booking (db/procedures/booking.sql)
-
-export function initials(name = '') {
-  return (
-    name
-      .split(/\s+/)
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((p) => p[0].toUpperCase())
-      .join('') || '?'
-  );
-}
 
 export function downloadCSV(filename, columns, rows) {
   const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;

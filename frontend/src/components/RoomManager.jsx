@@ -10,7 +10,7 @@ import { errorMessage, formatCurrency } from '@/utils/formatters';
 // Room inventory with a maintenance toggle (manager/admin). Occupied rooms are locked.
 export default function RoomManager({ branchId }) {
   const toast = useToast();
-  const { data, isLoading, error, refetch } = useFetch((s) => getRooms({ branch_id: branchId }, s), [branchId]);
+  const { data, isLoading, error, refetch } = useFetch((s) => getRooms({ branch_id: branchId }, s), [branchId], { failMessage: "Couldn't load rooms." });
   const [busyId, setBusyId] = useState(null);
 
   const toggle = async (room) => {
@@ -42,7 +42,7 @@ export default function RoomManager({ branchId }) {
   const showBranch = !branchId;
   return (
     <div className="card relative overflow-x-auto">
-      <table className="w-full min-w-[600px]">
+      <table className="w-full min-w-[600px]" aria-label="Rooms">
         <thead>
           <tr className="bg-paper-200">
             {showBranch && <th scope="col" className="th">Branch</th>}

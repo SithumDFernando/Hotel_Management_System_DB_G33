@@ -23,7 +23,7 @@ export default function Home() {
   const navigate = useNavigate();
   const [search, setSearch] = useState({ city: '', check_in: todayISO(), check_out: addDays(todayISO(), 2), guests: '2' });
 
-  const branches = useFetch((s) => getBranches(s), []);
+  const branches = useFetch((s) => getBranches(s), [], { failMessage: "Couldn't load our hotels." });
   const rooms = useFetch((s) => getRooms({}, s), []);
 
   const branchList = branches.data?.branches || [];
@@ -137,7 +137,7 @@ export default function Home() {
             <>
               {/* sm and up: table */}
               <div className="mt-6 hidden overflow-hidden rounded-lg border border-ink-100 bg-paper-50 sm:block">
-                <table className="w-full text-sm">
+                <table className="w-full text-sm" aria-label="Room types">
                   <thead className="bg-paper-200">
                     <tr>
                       <th scope="col" className="th">Room type</th>

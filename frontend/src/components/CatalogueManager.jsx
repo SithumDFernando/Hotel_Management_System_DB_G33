@@ -6,13 +6,13 @@ import { Drawer, Modal } from '@/components/ui/Modal';
 import { Input } from '@/components/ui/Field';
 import { EmptyState, ErrorState, InlineAlert, Skeleton } from '@/components/ui/States';
 import { useToast } from '@/components/ui/Toast';
-import { errorMessage, formatCurrency } from '@/utils/formatters';
+import { errorMessage, fieldErrors, formatCurrency } from '@/utils/formatters';
 
 // Service catalogue admin (admin + manager). The API lists active services only,
 // so a deactivated service disappears from this list.
 export default function CatalogueManager() {
   const toast = useToast();
-  const { data, isLoading, error, refetch } = useFetch((s) => getServices(s), []);
+  const { data, isLoading, error, refetch } = useFetch((s) => getServices(s), [], { failMessage: "Couldn't load the service catalogue." });
   const [edits, setEdits] = useState({}); // service_id -> price string
   const [savingId, setSavingId] = useState(null);
   const [deactivate, setDeactivate] = useState(null);
@@ -30,7 +30,7 @@ export default function CatalogueManager() {
     setSavingId(s.service_id);
     try {
       await updateService(s.service_id, { base_price: price });
-      toast.success(`Saved: ${s.service_name} is ${formatCurrency(price)} for new orders`);
+      toast.success(`Saved: ${s.service_name} now ${formatCurrency(price)} for new orders`);
       setEdits((p) => { const n = { ...p }; delete n[s.service_id]; return n; });
       refetch();
     } catch (err) {
@@ -68,7 +68,10 @@ export default function CatalogueManager() {
       setForm({ service_name: '', category: '', base_price: '' });
       refetch();
     } catch (err) {
-      setFormError(errorMessage(err));
+      // One alert for this short form: name each field the API rejected.
+      const labels = { service_name: 'Service name', category: 'Category', base_price: 'Base price' };
+      const fields = Object.entries(fieldErrors(err)).map(([k, m]) => `${labels[k] || k}: ${m}`);
+      setFormError(fields.length ? fields.join(' ') : errorMessage(err));
     } finally {
       setBusy(false);
     }

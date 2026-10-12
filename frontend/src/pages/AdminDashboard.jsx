@@ -37,7 +37,7 @@ export default function AdminDashboard() {
   const branchId = params.get('branch') || '';
   const ym = params.get('month') || todayISO().slice(0, 7);
 
-  const branches = useFetch((s) => listBranches(s), []);
+  const branches = useFetch((s) => listBranches(s), [], { failMessage: "Couldn't load branches." });
   const branchList = branches.data?.branches || [];
 
   const update = (patch) => {

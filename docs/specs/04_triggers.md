@@ -17,7 +17,7 @@
 
 ```
 IF NEW.status NOT IN ('Cancelled', 'Checked-Out') THEN
-  PERFORM 1 FROM room WHERE room_id = NEW.room_id FOR UPDATE;  -- serialize per room
+  SELECT room_number INTO v_room_number FROM room WHERE room_id = NEW.room_id FOR UPDATE;  -- serialize per room
   IF EXISTS (
     SELECT 1 FROM booking
     WHERE room_id = NEW.room_id
@@ -26,7 +26,7 @@ IF NEW.status NOT IN ('Cancelled', 'Checked-Out') THEN
       AND check_in_date < NEW.check_out_date
       AND check_out_date > NEW.check_in_date
   ) THEN
-    RAISE EXCEPTION 'Room % is already booked for the selected dates.', NEW.room_id;  -- API 409
+    RAISE EXCEPTION 'Room % is already booked for the selected dates.', v_room_number;  -- API 409, e.g. "Room 103 is already…"
   END IF;
 END IF;
 RETURN NEW;

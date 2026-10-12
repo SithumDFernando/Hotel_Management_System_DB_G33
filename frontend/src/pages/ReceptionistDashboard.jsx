@@ -52,7 +52,7 @@ export default function ReceptionistDashboard() {
       listBookings({ status: 'Checked-In' }, signal),
     ]);
     return { booked: booked.bookings, inHouse: inHouse.bookings };
-  }, []);
+  }, [], { failMessage: "Couldn't load today's bookings." });
   const rooms = useFetch((s) => getRooms({ branch_id: user.branch_id, status: 'Available' }, s), [user.branch_id]);
 
   useEffect(() => {
@@ -138,7 +138,7 @@ export default function ReceptionistDashboard() {
     setBusyId(b.booking_id);
     try {
       await cancelBooking(b.booking_id);
-      toast.success(`Cancelled: ${b.guest.full_name}, Room ${b.room.room_number}, ${formatStayRange(b.check_in_date, b.check_out_date)}`);
+      toast.success(`Cancelled: booking ${bookingRef(b.booking_id)} for ${b.guest.full_name}. Room ${b.room.room_number} is free for ${formatStayRange(b.check_in_date, b.check_out_date)}.`);
       setCancelFor(null);
       refresh();
     } catch (err) {
@@ -243,7 +243,7 @@ export default function ReceptionistDashboard() {
       </div>
 
       {bookings.error ? (
-        <div className="mt-4"><ErrorState message={`Couldn't load today's bookings. ${bookings.error}`} onRetry={bookings.refetch} /></div>
+        <div className="mt-4"><ErrorState message={bookings.error} onRetry={bookings.refetch} /></div>
       ) : (
         <div className="mt-6 space-y-8">
           {!loading && nothingToday ? (
@@ -346,7 +346,7 @@ function TaskSection({ id, title, rows, empty, loading, bare, rowActions, blocke
     <>
       <div className="relative hidden overflow-x-auto md:block">
         {/* Fixed columns so the stacked sections line up. */}
-        <table className="w-full min-w-[720px] table-fixed" aria-labelledby={title ? headingId : undefined}>
+        <table className="w-full min-w-[720px] table-fixed" aria-labelledby={title ? headingId : undefined} aria-label={title ? undefined : 'Upcoming arrivals'}>
           <colgroup>
             <col className="w-[24%]" /><col className="w-[12%]" /><col className="w-[16%]" /><col className="w-[22%]" /><col />
           </colgroup>

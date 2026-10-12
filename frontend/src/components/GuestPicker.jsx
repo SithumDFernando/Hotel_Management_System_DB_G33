@@ -1,6 +1,6 @@
 import { useEffect, useId, useState } from 'react';
 import { createGuest, searchGuests } from '@/api/guests';
-import { errorMessage } from '@/utils/formatters';
+import { errorMessage, fieldErrors } from '@/utils/formatters';
 import Button from '@/components/ui/Button';
 import Icon from '@/components/ui/Icon';
 import { Drawer } from '@/components/ui/Modal';
@@ -62,8 +62,10 @@ export function GuestFormDrawer({ open, onClose, onCreated, onFindExisting }) {
       onCreated(guest);
       onClose();
     } catch (err) {
+      const fields = fieldErrors(err);
       setDuplicate(err.response?.status === 409);
-      setServerError(errorMessage(err));
+      if (Object.keys(fields).length) setErrors(fields);
+      else setServerError(errorMessage(err));
     } finally {
       setBusy(false);
     }

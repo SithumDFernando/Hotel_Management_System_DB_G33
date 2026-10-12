@@ -88,7 +88,7 @@ export default function MyBookings() {
   const { user } = useAuth();
   // A guest login with no guest profile can't have bookings (the API answers 403)
   const noProfile = !user.guest_id;
-  const { data, isLoading, error, refetch } = useFetch((s) => listBookings({}, s), [], { enabled: !noProfile });
+  const { data, isLoading, error, refetch } = useFetch((s) => listBookings({}, s), [], { enabled: !noProfile, failMessage: "Couldn't load your bookings." });
   const [tab, setTab] = useState('upcoming');
   const [billFor, setBillFor] = useState(null);
   const [cancelFor, setCancelFor] = useState(null);
@@ -112,7 +112,7 @@ export default function MyBookings() {
     setBusy(true);
     try {
       await cancelBooking(cancelFor.booking_id);
-      toast.success(`Cancelled: ${cancelFor.room.type_name ? `${cancelFor.room.type_name} ` : ''}Room ${cancelFor.room.room_number}, ${formatStayRange(cancelFor.check_in_date, cancelFor.check_out_date)}`);
+      toast.success(`Cancelled: booking ${bookingRef(cancelFor.booking_id)}. Room ${cancelFor.room.room_number} is free for ${formatStayRange(cancelFor.check_in_date, cancelFor.check_out_date)}.`);
       setCancelFor(null);
       refetch();
     } catch (err) {

@@ -5,7 +5,7 @@ import { Drawer } from '@/components/ui/Modal';
 import { Input } from '@/components/ui/Field';
 import { EmptyState, ErrorState, InlineAlert, Skeleton } from '@/components/ui/States';
 import { useToast } from '@/components/ui/Toast';
-import { errorMessage } from '@/utils/formatters';
+import { errorMessage, fieldErrors } from '@/utils/formatters';
 
 const EMPTY = { name: '', city: '', address: '', phone: '', manager_name: '' };
 const FIELDS = [
@@ -54,7 +54,9 @@ function BranchDrawer({ branch, open, onClose, onSaved }) {
       onSaved();
       onClose();
     } catch (err) {
-      setServerError(errorMessage(err));
+      const fields = fieldErrors(err);
+      if (Object.keys(fields).length) setErrors(fields);
+      else setServerError(errorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -96,7 +98,7 @@ export default function BranchesTab({ branches }) {
         <EmptyState title="No branches yet" message="Add a branch to start taking bookings there." action={<Button onClick={() => setDrawer({ open: true, branch: null })}>Add branch</Button>} />
       ) : (
         <div className="card relative overflow-x-auto">
-          <table className="w-full min-w-[760px]">
+          <table className="w-full min-w-[760px]" aria-label="Branches">
             <thead>
               <tr className="bg-paper-200"><th scope="col" className="th">City</th><th scope="col" className="th">Branch</th><th scope="col" className="th">Phone</th><th scope="col" className="th">Manager</th><th scope="col" className="th text-right">Rooms</th><th scope="col" className="th text-right">Active bookings</th><th scope="col" className="th"><span className="sr-only">Actions</span></th></tr>
             </thead>

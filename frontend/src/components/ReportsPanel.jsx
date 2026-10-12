@@ -71,6 +71,7 @@ export default function ReportsPanel({ branchId = '', showBranch = false }) {
   const report = useFetch(
     (s) => Promise.resolve(fetchers[tab](s)).then((rows) => ({ tab, rows })),
     [tab, branchId, from, to, unpaidOnly, revYear, revMonth, limit],
+    { failMessage: "Couldn't load this report." },
   );
   const { error, refetch } = report;
   const fresh = report.data?.tab === tab;
