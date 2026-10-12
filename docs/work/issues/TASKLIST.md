@@ -28,7 +28,7 @@ Source: full-stack audit run on **2026-10-12** (backend API probes, DB-level con
 
 - [x] **4. [ISSUE-07](ISSUE-07-unhandled-500-on-bad-input.md)** 🟠 Typed UUID/date params, schema limits, global asyncpg exception handler, remove leaked DB errors
   - ✅ Covered by `tests/test_input_validation.py` (45 tests; 33 of the DB-backed ones fail on the pre-fix code). Verified on a fresh `run_all.sql` build.
-  - ↪ `payment_option` / `payment_method` are length-limited only; the `Literal` vocabulary is left to ISSUE-08 (task 12), which owns the payment vocabulary.
+  - ↪ `payment_option` / `payment_method` are length-limited only; the `Literal` vocabulary is left to ISSUE-08 (task 12), which owns the payment vocabulary. ✅ Done in task 12.
 
 ## Phase 3: Access control
 
@@ -57,7 +57,9 @@ Source: full-stack audit run on **2026-10-12** (backend API probes, DB-level con
 - [x] **11. [ISSUE-09](ISSUE-09-room-status-trigger-overrides-maintenance.md)** 🟠 Trigger is the single owner of room status; never overrides Maintenance
   - ✅ `trg_sync_room_status` has guarded updates (only `Available → Occupied` on check-in, only `Occupied → Available` when a checked-in guest leaves; `Booked → Cancelled` leaves the room alone). Procedures no longer touch `room`. `PATCH /rooms/{id}/status` returns 409 for `Available`/`Occupied` that contradict the bookings; RoomManager falls back to `Occupied` when clearing mid-stay Maintenance. Covered by `tests/test_room_status.py` (11 tests, 6 fail on the pre-fix code). Full suite: 181 passed + `test_phase4` live run passed, on a fresh `run_all.sql` build.
   - ⏳ Browser check: Manager → Rooms maintenance toggle on an empty room and on an occupied room.
-- [ ] **12. [ISSUE-08](ISSUE-08-missing-booking-business-rules.md)** 🟠 Booking, check-in and service-usage business rules + payment vocabulary
+- [x] **12. [ISSUE-08](ISSUE-08-missing-booking-business-rules.md)** 🟠 Booking, check-in and service-usage business rules + payment vocabulary
+  - ✅ Rules a–g enforced in the DB (`create_booking`, `perform_checkin`, `trg_validate_service_usage`, CHECKs `chk_booking_payment_option` / `chk_payment_method`) plus the `PaymentMethod` Literal. Shared `app/db_errors.raise_error_to_http` maps messages → 400/404/409/422. Decisions: 30-night cap, no advance cap, no early check-in, usage allowed up to today for overdue guests. Covered by `tests/test_booking_rules.py` (17 tests; all 10 negative ones fail on the pre-fix code). Seed-date-dependent check-in tests now use `arrive_today()`. Full suite: 198 passed + `test_phase4` live run passed, on a fresh `run_all.sql` build.
+  - ⏳ Browser check: BookingCheckout 31-night error; Receptionist check-in button disabled for upcoming / ended bookings.
 
 ## Phase 5: Authentication hardening
 

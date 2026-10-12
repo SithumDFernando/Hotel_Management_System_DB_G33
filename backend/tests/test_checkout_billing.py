@@ -18,6 +18,8 @@ from decimal import Decimal
 import asyncpg
 import pytest
 
+from tests.conftest import arrive_today
+
 # Seed data (db/seed/sample_data.sql)
 BK01_COLOMBO_CHECKED_IN = "30000000-0000-0000-0000-000000000001"  # has a bill + services
 BK03_KANDY_BOOKED = "30000000-0000-0000-0000-000000000003"        # no bill
@@ -95,6 +97,7 @@ async def test_checkout_without_bill_is_402_not_400(api, login, db_conn):
     """Room charges are owed even when nobody generated a bill."""
     headers = await login("admin")
     bk = BK03_KANDY_BOOKED
+    await arrive_today(db_conn, bk)
     resp = await api.patch(f"/bookings/{bk}/checkin", headers=headers)
     assert resp.status_code == 200, resp.text
 
@@ -110,6 +113,7 @@ async def test_checkout_creates_bill_when_charges_are_paid(api, login, db_conn):
     """Payments need a bill, so settle, delete the bill, and let checkout rebuild it."""
     headers = await login("admin")
     bk = BK03_KANDY_BOOKED
+    await arrive_today(db_conn, bk)
     assert (await api.patch(f"/bookings/{bk}/checkin", headers=headers)).status_code == 200
     paid = await _settle(api, headers, bk)
     await db_conn.execute("DELETE FROM bill WHERE booking_id = $1::UUID", bk)
@@ -175,6 +179,7 @@ async def test_db_checkout_refreshes_stale_bill(db_conn):
 
 async def test_db_checkout_without_bill_raises_outstanding(db_conn):
     bk = BK03_KANDY_BOOKED
+    await arrive_today(db_conn, bk)
     await db_conn.execute("CALL perform_checkin($1::UUID)", bk)
     with pytest.raises(asyncpg.exceptions.RaiseError, match="Outstanding balance"):
         async with db_conn.transaction():

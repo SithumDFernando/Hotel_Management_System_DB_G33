@@ -143,10 +143,15 @@ export default function ReceptionistDashboard() {
   const actions = (b) => {
     const busy = busyId === b.booking_id;
     if (b.status === 'Booked') {
+      // Same rules as perform_checkin: not before arrival, not once the stay has ended
       const early = b.check_in_date > today;
+      const ended = b.check_out_date <= today;
+      const blockedReason = early
+        ? `Arrives on ${formatDate(b.check_in_date)}`
+        : ended ? 'The stay period has ended' : undefined;
       return (
         <>
-          <Button size="sm" loading={busy} disabled={early} title={early ? 'Check-in opens on the arrival date' : undefined} onClick={() => doCheckIn(b)}>
+          <Button size="sm" loading={busy} disabled={Boolean(blockedReason)} title={blockedReason} onClick={() => doCheckIn(b)}>
             Check in
           </Button>
           <Button size="sm" variant="dangerOutline" onClick={() => setCancelFor(b)}>Cancel</Button>

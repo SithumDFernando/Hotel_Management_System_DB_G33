@@ -12,6 +12,8 @@ Run:  cd backend && pytest tests/test_authz_branch.py -q
 
 import pytest
 
+from tests.conftest import arrive_today
+
 # Seed data (db/seed/sample_data.sql)
 REC_GALLE = "rec.galle@skynest.lk"
 MGR_KANDY = "mgr.kandy@skynest.lk"
@@ -142,12 +144,16 @@ async def test_same_branch_receptionist_create_booking(api, login):
     assert resp.status_code == 201, resp.text
 
 
-async def test_same_branch_receptionist_checkin_and_cancel(api, login):
+async def test_same_branch_receptionist_checkin_and_cancel(api, login, db_conn):
     headers = await login(REC_GALLE)
     resp = await api.patch(f"/bookings/{BK06_GALLE_BOOKED}/cancel", json={}, headers=headers)
     assert resp.status_code == 200, resp.text
 
-    resp = await api.post("/bookings", json=_booking(ROOM_301_GALLE), headers=headers)
+    # Arriving today, since check-in isn't allowed before the arrival date
+    today = (await db_conn.fetchval("SELECT CURRENT_DATE")).isoformat()
+    tomorrow = (await db_conn.fetchval("SELECT CURRENT_DATE + 1")).isoformat()
+    body = {**_booking(ROOM_301_GALLE), "check_in_date": today, "check_out_date": tomorrow}
+    resp = await api.post("/bookings", json=body, headers=headers)
     assert resp.status_code == 201, resp.text
     resp = await api.patch(f"/bookings/{resp.json()['booking_id']}/checkin", headers=headers)
     assert resp.status_code == 200, resp.text
@@ -163,8 +169,9 @@ async def test_same_branch_manager_room_status(api, login):
 
 # ── Admins are global ────────────────────────────────────────────────────────
 
-async def test_admin_acts_on_any_branch(api, login):
+async def test_admin_acts_on_any_branch(api, login, db_conn):
     headers = await login("admin")
+    await arrive_today(db_conn, BK03_KANDY_BOOKED)
     resp = await api.patch(f"/bookings/{BK03_KANDY_BOOKED}/checkin", headers=headers)
     assert resp.status_code == 200, resp.text
     resp = await api.post(f"/billing/{BK01_COLOMBO_CHECKED_IN}/generate", headers=headers)

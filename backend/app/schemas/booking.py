@@ -1,7 +1,9 @@
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, model_validator
 from uuid import UUID
 from datetime import date, datetime
 from typing import Literal
+
+from app.schemas.billing import PaymentMethod
 
 # Mirrors the `booking_status` enum in db/schema/01_tables.sql
 BookingStatus = Literal["Booked", "Checked-In", "Checked-Out", "Cancelled"]
@@ -12,7 +14,7 @@ class BookingCreate(BaseModel):
     room_id: UUID
     check_in_date: date
     check_out_date: date
-    payment_option: str = Field(min_length=1, max_length=50)
+    payment_option: PaymentMethod
 
     @model_validator(mode="after")
     def checkout_after_checkin(self):

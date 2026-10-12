@@ -280,7 +280,9 @@ Calls `create_booking()` stored procedure (SERIALIZABLE).
 }
 ```
 
-**Errors:** `403` room belongs to another branch (manager/receptionist) or guest booking for someone else · `404 Guest not found` / `404 Room not found` · `409 Room is not available for selected dates (double-booking)` · `422` malformed IDs/dates, `payment_option` longer than 50
+Business rules (enforced in `create_booking()`): check-in today or later; at most **30 nights**; the room must not be under Maintenance; `payment_option` is one of `Credit Card`, `Cash`, `Bank Transfer`.
+
+**Errors:** `400 Check-in date cannot be in the past` · `400 Stays longer than 30 nights must be arranged with the front desk` · `403` room belongs to another branch (manager/receptionist) or guest booking for someone else · `404 Guest not found` / `404 Room not found` · `409 Room ... is already booked for the selected dates.` / `409 Room is not available for the selected dates.` (double booking) · `409 Room is under maintenance and cannot be booked` · `422` malformed IDs/dates, `payment_option` not one of the three values
 
 ### GET `/api/bookings`
 > Receptionist (own branch), Manager (own branch), Admin (all), Guest (own bookings)
@@ -332,7 +334,7 @@ Calls `cancel_booking()` stored procedure (locks the booking, so a cancel racing
 ### PATCH `/api/bookings/:booking_id/checkin`
 > Receptionist, Manager, Admin
 
-Calls `perform_checkin()` stored procedure, which locks the booking row, so of several simultaneous check-ins exactly one succeeds.
+Calls `perform_checkin()` stored procedure, which locks the booking row, so of several simultaneous check-ins exactly one succeeds. Check-in is only allowed from the arrival date (`check_in_date`) until the day before `check_out_date`; there is no early check-in.
 
 **Response (200):**
 ```json
@@ -343,7 +345,7 @@ Calls `perform_checkin()` stored procedure, which locks the booking row, so of s
 }
 ```
 
-**Errors:** `400 Only Booked bookings can be checked in` · `403` booking of another branch · `404 Booking not found`
+**Errors:** `400 Only Booked bookings can be checked in` · `400 Check-in is not allowed before 2026-10-15` · `400 This booking's stay period has already ended` · `403` booking of another branch · `404 Booking not found` · `409 Room is under maintenance`
 
 ### PATCH `/api/bookings/:booking_id/checkout`
 > Receptionist, Manager, Admin
@@ -447,7 +449,9 @@ Records chargeable service order. Trigger checks that booking is 'Checked-In' an
 }
 ```
 
-**Errors:** `403` booking of another branch · `404` booking or active service not found · `422 Unprocessable Entity (Booking is not Checked-In)` · `422` `quantity` outside 1–1000
+`usage_date` must fall inside the stay: from `check_in_date` to `check_out_date` inclusive, or up to today for a guest still in house after `check_out_date`.
+
+**Errors:** `403` booking of another branch · `404` booking or active service not found · `422 Unprocessable Entity (Booking is not Checked-In)` · `422 Service date 2001-01-01 is outside the stay (2026-10-12 to 2026-10-15)` · `422` `quantity` outside 1–1000
 
 ### GET `/api/services/:booking_id/usage`
 > Receptionist (own branch), Manager (own branch), Admin, owning Guest
@@ -540,7 +544,9 @@ Calls `record_payment()` stored procedure, which returns the new `payment_id`; t
 }
 ```
 
-**Errors:** `400 Amount exceeds outstanding balance or <= 0` · `403` booking of another branch · `404 Booking not found`
+`payment_method` is one of `Credit Card`, `Cash`, `Bank Transfer`.
+
+**Errors:** `400 Amount exceeds outstanding balance or <= 0` · `403` booking of another branch · `404 Booking not found` · `422` `payment_method` not one of the three values
 
 ### GET `/api/payments/:booking_id`
 > Receptionist, Manager, Admin, owning Guest

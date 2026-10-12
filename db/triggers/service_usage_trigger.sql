@@ -9,6 +9,12 @@
 --   Also snapshots the service's current base_price into service_usage.unit_price
 --   at INSERT time to preserve billing immutability (the same pattern used for
 --   booking.rate_at_booking).
+--
+--   The usage date must fall inside the stay (ISSUE-08): from check_in_date
+--   to check_out_date inclusive (late checkout / breakfast on the last day).
+--   A guest still in house after check_out_date (overdue checkout) can also
+--   be charged up to today, so the upper bound is GREATEST(check_out_date,
+--   CURRENT_DATE).
 
 -- =============================================================================
 
@@ -20,10 +26,13 @@ AS $$
 DECLARE
     v_booking_status VARCHAR(20);
     v_unit_price     NUMERIC(10,2);
+    v_ci             DATE;
+    v_last_day       DATE;
 BEGIN
     -- Step 1: Validate booking is currently Checked-In
-    SELECT status INTO v_booking_status
-    FROM   booking WHERE booking_id = NEW.booking_id;
+    SELECT status, check_in_date, GREATEST(check_out_date, CURRENT_DATE)
+      INTO v_booking_status, v_ci, v_last_day
+      FROM booking WHERE booking_id = NEW.booking_id;
 
     IF v_booking_status <> 'Checked-In' THEN
         RAISE EXCEPTION
@@ -38,6 +47,12 @@ BEGIN
 
     -- Default usage_date to today if not provided
     NEW.usage_date := COALESCE(NEW.usage_date, CURRENT_DATE);
+
+    -- Charges must fall inside the stay (see header for the upper bound)
+    IF NEW.usage_date < v_ci OR NEW.usage_date > v_last_day THEN
+        RAISE EXCEPTION 'Service date % is outside the stay (% to %)',
+            NEW.usage_date, v_ci, v_last_day;
+    END IF;
 
     -- Step 3: Snapshot the service price if not explicitly provided
     IF NEW.unit_price IS NULL OR NEW.unit_price = 0 THEN

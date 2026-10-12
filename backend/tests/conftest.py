@@ -81,6 +81,22 @@ async def api(db_conn):
         app.dependency_overrides.pop(get_db, None)
 
 
+async def arrive_today(conn, booking_id, nights=3):
+    """
+    Move a seed booking's stay to start today. perform_checkin refuses early
+    check-in and stays that have ended (ISSUE-08), so tests that check in a
+    seed booking (fixed dates) call this first to stay valid on any date.
+    """
+    await conn.execute(
+        """
+        UPDATE booking SET check_in_date = CURRENT_DATE,
+                           check_out_date = CURRENT_DATE + $2::INT
+         WHERE booking_id = $1::UUID
+        """,
+        booking_id, nights,
+    )
+
+
 def _login_with(client):
     async def _login(role: str) -> dict:
         resp = await client.post(

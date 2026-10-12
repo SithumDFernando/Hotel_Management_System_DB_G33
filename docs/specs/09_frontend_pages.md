@@ -81,7 +81,7 @@
 **Features:**
 - Room details display (type, rate, amenities, branch)
 - Guest selection (receptionist picks from list) or auto-filled (guest user)
-- Date pickers: check-in, check-out
+- Date pickers: check-in, check-out (check-in not in the past, at most 30 nights, same rules as `create_booking`)
 - Live cost calculator: `rate × nights` preview
 - Payment method selector
 - Booking confirmation summary → submit
@@ -126,7 +126,7 @@
 | Current Guests | Bookings with status `Checked-In` | `GET /bookings?status=Checked-In` |
 | Today's Departures | Checked-In bookings with `check_out_date <= today` (filtered client-side — the API has no `check_out` filter) | `GET /bookings?status=Checked-In` |
 | Upcoming | Booked stays arriving after today | `GET /bookings?status=Booked` |
-| Quick Actions | Check-in / Check-out / Cancel per booking; a 402 on check-out opens the payment window | `PATCH /bookings/:id/checkin`, `/checkout`, `/cancel` |
+| Quick Actions | Check-in / Check-out / Cancel per booking. Check-in is disabled before the arrival date ("Arrives on …") and once the stay has ended. A 402 on check-out opens the payment window | `PATCH /bookings/:id/checkin`, `/checkout`, `/cancel` |
 | Bill & Payment window | Recalculates the bill on open for in-house guests (`POST /billing/:bid/generate`, optional discount; a Checked-Out booking shows its final bill), shows charges + history, records payments | `POST /billing/:bid/generate`, `GET /payments/:bid`, `POST /payments` |
 | New Booking | Link to `/rooms?mode=booking` | — |
 | Guest Registration | Side drawer (`GuestFormDrawer`) | `POST /guests` |

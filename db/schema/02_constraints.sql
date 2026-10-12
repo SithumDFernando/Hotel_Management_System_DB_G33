@@ -127,6 +127,16 @@ ALTER TABLE booking
     ADD CONSTRAINT chk_booking_dates
         CHECK (check_out_date > check_in_date);
 
+-- Fixed payment vocabulary, so reports can group by it (same list in the
+-- API's PaymentMethod Literal and the frontend's payment options)
+ALTER TABLE booking
+    ADD CONSTRAINT chk_booking_payment_option
+        CHECK (payment_option IN ('Credit Card', 'Cash', 'Bank Transfer'));
+
+ALTER TABLE payment
+    ADD CONSTRAINT chk_payment_method
+        CHECK (payment_method IN ('Credit Card', 'Cash', 'Bank Transfer'));
+
 -- Each role has exactly the links it needs: branch staff belong to a branch,
 -- guests to a guest profile, admins to neither (they are global)
 ALTER TABLE user_account

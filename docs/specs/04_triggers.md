@@ -115,9 +115,15 @@ IF (SELECT is_active FROM service WHERE service_id = NEW.service_id) = FALSE THE
   RAISE EXCEPTION 'Service % is inactive', NEW.service_id;
 END IF;
 
--- 3. Snapshot the unit_price from service catalogue
-NEW.unit_price := (SELECT base_price FROM service WHERE service_id = NEW.service_id);
+-- 3. Usage date must fall inside the stay (ISSUE-08)
 NEW.usage_date := COALESCE(NEW.usage_date, CURRENT_DATE);
+IF NEW.usage_date < check_in_date
+   OR NEW.usage_date > GREATEST(check_out_date, CURRENT_DATE) THEN
+  RAISE EXCEPTION 'Service date % is outside the stay (% to %)', ...;
+END IF;
+
+-- 4. Snapshot the unit_price from service catalogue
+NEW.unit_price := (SELECT base_price FROM service WHERE service_id = NEW.service_id);
 
 RETURN NEW;
 ```
@@ -126,6 +132,7 @@ RETURN NEW;
 - **Auto-snapshots** `unit_price` from the service catalogue — the API layer doesn't need to pass it.
 - Defaults `usage_date` to today if not provided.
 - Prevents adding services to bookings that aren't currently checked in.
+- The check-out day itself is inside the stay (late checkout, breakfast). A guest still in house after `check_out_date` (overdue checkout) can be charged up to today, which is why the upper bound is `GREATEST(check_out_date, CURRENT_DATE)`. The staff UI always charges today's date.
 
 ---
 

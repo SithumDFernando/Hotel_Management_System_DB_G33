@@ -89,6 +89,7 @@ export function errorMessage(err, fallback = 'Something went wrong. Please try a
 export const bookingRef = (id) => `SN-${String(id || '').slice(0, 8).toUpperCase()}`;
 
 export const TAX_RATE = 0.15; // mirrors fn_calculate_tax default (db/functions)
+export const MAX_STAY_NIGHTS = 30; // mirrors the cap in create_booking (db/procedures/booking.sql)
 
 export function initials(name = '') {
   return (

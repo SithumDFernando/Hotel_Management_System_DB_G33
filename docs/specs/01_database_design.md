@@ -142,7 +142,7 @@
 | `check_out_date` | DATE | NOT NULL |
 | `rate_at_booking` | NUMERIC(10,2) | NOT NULL |
 | `status` | booking_status | NOT NULL, DEFAULT 'Booked' |
-| `payment_option` | VARCHAR(50) | NOT NULL |
+| `payment_option` | VARCHAR(50) | NOT NULL, CHECK IN ('Credit Card', 'Cash', 'Bank Transfer') |
 | `actual_checkin_time` | TIMESTAMP | NULL |
 | `actual_checkout_time` | TIMESTAMP | NULL |
 
@@ -207,7 +207,7 @@
 | `payment_id` | UUID | PK, DEFAULT gen_random_uuid() |
 | `booking_id` | UUID | NOT NULL, FK → booking |
 | `amount` | NUMERIC(10,2) | NOT NULL, CHECK (amount > 0) |
-| `payment_method` | VARCHAR(50) | NOT NULL |
+| `payment_method` | VARCHAR(50) | NOT NULL, CHECK IN ('Credit Card', 'Cash', 'Bank Transfer') |
 | `paid_at` | TIMESTAMP | NOT NULL, DEFAULT NOW() |
 | `notes` | VARCHAR(255) | |
 

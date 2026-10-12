@@ -15,7 +15,7 @@ import { ErrorState, InlineAlert, Skeleton } from '@/components/ui/States';
 import { useToast } from '@/components/ui/Toast';
 import { roomImage } from '@/lib/media';
 import {
-  TAX_RATE, addDays, bookingRef, calculateNights, errorMessage, formatCurrency, formatDate, todayISO,
+  MAX_STAY_NIGHTS, TAX_RATE, addDays, bookingRef, calculateNights, errorMessage, formatCurrency, formatDate, todayISO,
 } from '@/utils/formatters';
 
 const PAYMENT_OPTIONS = [
@@ -68,7 +68,9 @@ export default function BookingCheckout() {
       ? 'Check-in cannot be in the past.'
       : nights < 1
         ? 'Check-out must be after check-in.'
-        : '';
+        : nights > MAX_STAY_NIGHTS
+          ? `Stays longer than ${MAX_STAY_NIGHTS} nights must be arranged with the front desk.`
+          : '';
 
   const r = room.data;
   const subtotal = r ? r.daily_rate * nights : 0;

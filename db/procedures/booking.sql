@@ -48,6 +48,13 @@
 --   The double_booking_trigger fires BEFORE INSERT on booking and raises
 --   an exception if the room is already booked for the requested dates.
 --
+-- Business rules (ISSUE-08), checked here so every caller goes through them:
+--   - check-in can't be in the past (today is fine)
+--   - at most 30 nights per booking (longer stays go through the front desk)
+--   - a room under Maintenance can't be booked
+--   - payment_option is one of 'Credit Card' / 'Cash' / 'Bank Transfer'
+--     (CHECK chk_booking_payment_option in 02_constraints.sql)
+--
 -- Called by:
 --   POST /api/bookings endpoint in backend/app/routers/bookings.py.
 -- =============================================================================
@@ -65,19 +72,34 @@ AS $$
 DECLARE
     v_branch_id    UUID;
     v_room_type_id UUID;
+    v_room_status  room_status;
     v_rate         NUMERIC(10,2);
+    c_max_nights   CONSTANT INT := 30;
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM guest WHERE guest_id = p_guest_id) THEN
         RAISE EXCEPTION 'Guest not found';
     END IF;
 
-    -- Look up room's branch and type
-    SELECT branch_id, room_type_id
-      INTO v_branch_id, v_room_type_id
+    -- Look up room's branch, type and status
+    SELECT branch_id, room_type_id, status
+      INTO v_branch_id, v_room_type_id, v_room_status
       FROM room WHERE room_id = p_room_id;
 
     IF NOT FOUND THEN
         RAISE EXCEPTION 'Room not found';
+    END IF;
+
+    IF p_check_in_date < CURRENT_DATE THEN
+        RAISE EXCEPTION 'Check-in date cannot be in the past';
+    END IF;
+
+    IF p_check_out_date - p_check_in_date > c_max_nights THEN
+        RAISE EXCEPTION 'Stays longer than % nights must be arranged with the front desk',
+            c_max_nights;
+    END IF;
+
+    IF v_room_status = 'Maintenance' THEN
+        RAISE EXCEPTION 'Room is under maintenance and cannot be booked';
     END IF;
 
     -- Get the current daily rate and SNAPSHOT it

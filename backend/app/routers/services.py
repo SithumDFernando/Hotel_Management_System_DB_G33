@@ -53,6 +53,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
 from app.db import get_db
+from app.db_errors import raise_error_to_http
 from app.dependencies import assert_booking_access, require_role
 
 router = APIRouter()
@@ -316,7 +317,8 @@ async def add_service_usage(
 
     Raises:
         404 — booking or active service not found.
-        422 — trigger rejected the insert (booking not Checked-In).
+        422 — trigger rejected the insert (booking not Checked-In, or the
+              usage date is outside the stay).
         403 — booking belongs to another branch.
         400 — any other business rule raised by the trigger.
     """
@@ -365,7 +367,9 @@ async def add_service_usage(
                     f"(current status: '{booking_row['status']}')."
                 ),
             )
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=exc.message)
+        raise raise_error_to_http(exc, (
+            ("outside the stay", status.HTTP_422_UNPROCESSABLE_ENTITY),
+        ))
 
     line_total = round(float(row["unit_price"]) * row["quantity"], 2)
 

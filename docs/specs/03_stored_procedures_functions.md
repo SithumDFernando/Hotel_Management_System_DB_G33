@@ -104,28 +104,33 @@ RETURNS: Outstanding balance amount
 ### `create_booking(p_guest_id, p_room_id, p_check_in, p_check_out, p_payment_option) → UUID`
 
 ```
-ISOLATION:  SERIALIZABLE
-LOCKING:    SELECT ... FOR UPDATE on the target room's bookings
-
 LOGIC:
   1. Validate guest exists
-  2. Validate room exists, get branch_id and room_type_id
-  3. Lock: SELECT 1 FROM booking
-       WHERE room_id = p_room_id
-         AND status NOT IN ('Cancelled', 'Checked-Out')
-         AND check_in_date < p_check_out
-         AND check_out_date > p_check_in
-       FOR UPDATE
-     → If any rows: RAISE 'Room not available for selected dates'
+  2. Validate room exists, get branch_id, room_type_id and status
+  3. Business rules (ISSUE-08):
+       p_check_in < CURRENT_DATE            → RAISE 'Check-in date cannot be in the past'
+       p_check_out - p_check_in > 30        → RAISE 'Stays longer than 30 nights must be
+                                               arranged with the front desk'
+       room status = 'Maintenance'          → RAISE 'Room is under maintenance and cannot
+                                               be booked'
   4. Snapshot rate: rate := fn_get_current_rate(branch_id, room_type_id)
-  5. INSERT INTO booking (...) VALUES (...) RETURNING booking_id
-  6. RETURN booking_id
+  5. INSERT INTO booking (...) VALUES (...) RETURNING booking_id INTO OUT p_booking_id
+     → trg_check_double_booking locks the room row and checks overlaps;
+       excl_booking_room_overlap is the guarantee (ISSUE-05)
+
+CONSTANTS:
+  - Max stay: 30 nights (c_max_nights in booking.sql; MAX_STAY_NIGHTS in the
+    frontend). Agreed business value; change both together.
+  - No limit on how far ahead a booking can be made.
 
 ERRORS:
-  - 'Guest not found'
-  - 'Room not found'
-  - 'Room not available for selected dates'
-  - 'Check-out date must be after check-in date'
+  - 'Guest not found' / 'Room not found'                     → 404
+  - 'Check-in date cannot be in the past'                    → 400
+  - 'Stays longer than 30 nights must be arranged ...'       → 400
+  - 'Room is under maintenance and cannot be booked'         → 409
+  - 'Room % is already booked for the selected dates.'       → 409
+  - payment_option outside the list: CHECK chk_booking_payment_option
+  - check-out not after check-in: CHECK chk_booking_dates
 ```
 
 ---
@@ -136,6 +141,9 @@ ERRORS:
 LOGIC:
   1. SELECT status FROM booking WHERE booking_id = p_booking_id FOR UPDATE
   2. Validate status = 'Booked' → else RAISE 'Only Booked bookings can be checked in'
+     CURRENT_DATE < check_in_date      → RAISE 'Check-in is not allowed before %'   (no early check-in)
+     CURRENT_DATE >= check_out_date    → RAISE 'This booking''s stay period has already ended'
+     room status = 'Maintenance'       → RAISE 'Room is under maintenance'          (API 409)
   3. UPDATE booking SET status = 'Checked-In', actual_checkin_time = NOW()
   4. Room -> 'Occupied' is done by trg_room_status (the procedure does not
      update the room table; see 04_triggers.md)
@@ -143,6 +151,9 @@ LOGIC:
 ERRORS:
   - 'Booking not found'
   - 'Only Booked bookings can be checked in'
+  - 'Check-in is not allowed before YYYY-MM-DD'
+  - 'This booking''s stay period has already ended'
+  - 'Room is under maintenance'
 
 CONCURRENCY:
   - The FOR UPDATE in step 1 makes a concurrent second check-in wait, then
