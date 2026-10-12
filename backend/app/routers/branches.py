@@ -11,24 +11,12 @@ Endpoints:
 """
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel
 
 from app.db import get_db
+from app.schemas.branch import PublicBranch, PublicBranchList
 
 router = APIRouter()
 
-
-class PublicBranch(BaseModel):
-    branch_id: str
-    name: str
-    city: str
-    address: str
-    phone: str
-
-
-class PublicBranchList(BaseModel):
-    branches: list[PublicBranch]
-    total: int
 
 
 @router.get("", response_model=PublicBranchList)

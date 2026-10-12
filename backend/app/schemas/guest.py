@@ -117,3 +117,22 @@ class GuestOut(GuestBase):
 
     class Config:
         from_attributes = True  # Enables mapping from asyncpg Record / ORM objects
+
+
+# Booking history embedded in GET /guests/{guest_id}
+class BookingSummary(BaseModel):
+    booking_id: UUID
+    room_id: UUID
+    room_number: str
+    check_in_date: date
+    check_out_date: date
+    rate_at_booking: float
+    status: str
+    payment_option: str
+    actual_checkin_time: Optional[str] = None
+    actual_checkout_time: Optional[str] = None
+
+
+class GuestDetailOut(GuestOut):
+    """Full guest profile including their booking history."""
+    bookings: list[BookingSummary] = []

@@ -36,7 +36,7 @@ Database table used:
 Dependencies:
     - app.db            (get_db)
     - app.dependencies  (get_current_user, require_role)
-    - app.schemas.guest (GuestCreate, GuestUpdate, GuestOut)
+    - app.schemas.guest (GuestCreate, GuestUpdate, GuestOut, GuestDetailOut, BookingSummary)
 """
 
 from datetime import date
@@ -45,35 +45,12 @@ from uuid import UUID
 
 import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel
 
 from app.db import get_db
 from app.dependencies import get_current_user, require_role
-from app.schemas.guest import GuestCreate, GuestOut, GuestUpdate
+from app.schemas.guest import BookingSummary, GuestCreate, GuestDetailOut, GuestOut, GuestUpdate
 
 router = APIRouter()
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Response model for booking history embedded in GET /guests/{guest_id}
-# ─────────────────────────────────────────────────────────────────────────────
-
-class BookingSummary(BaseModel):
-    booking_id: UUID
-    room_id: UUID
-    room_number: str
-    check_in_date: date
-    check_out_date: date
-    rate_at_booking: float
-    status: str
-    payment_option: str
-    actual_checkin_time: Optional[str] = None
-    actual_checkout_time: Optional[str] = None
-
-
-class GuestDetailOut(GuestOut):
-    """Full guest profile including their booking history."""
-    bookings: list[BookingSummary] = []
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -6,7 +6,7 @@ backend/app/routers/rooms.py
 This router is a complete, working reference implementation that demonstrates
 every pattern your teammates need to build their own routers:
 
-    1. How to define Pydantic request/response models.
+    1. How to use Pydantic request/response models (defined in app/schemas/room.py).
     2. How to get a DB connection via Depends(get_db).
     3. How to execute SQL queries with await db.fetch(...).
     4. How to use require_role() for protected endpoints.
@@ -23,57 +23,20 @@ from datetime import date
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel
 
 from app.db import get_db
 from app.dependencies import require_role
-from app.schemas.room import RoomStatus
+from app.schemas.room import (
+    AmenityInfo,
+    BranchInfo,
+    RoomListResponse,
+    RoomOut,
+    RoomStatus,
+    RoomTypeInfo,
+    StatusUpdateRequest,
+)
 
 router = APIRouter()
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Pydantic Models (Response Schemas)
-# ─────────────────────────────────────────────────────────────────────────────
-# These define the shape of JSON responses. FastAPI uses them to:
-# - Validate outgoing data
-# - Generate the OpenAPI/Swagger documentation automatically
-
-class BranchInfo(BaseModel):
-    branch_id: str
-    name: str
-    city: str
-
-
-class RoomTypeInfo(BaseModel):
-    room_type_id: str
-    type_name: str
-    capacity: int
-
-
-class AmenityInfo(BaseModel):
-    amenity_name: str
-    amenity_type: str
-    count: int
-
-
-class RoomOut(BaseModel):
-    room_id: str
-    room_number: str
-    branch: BranchInfo
-    room_type: RoomTypeInfo
-    daily_rate: float
-    status: str
-    amenities: list[AmenityInfo] = []
-
-
-class RoomListResponse(BaseModel):
-    rooms: list[RoomOut]
-    total: int
-
-
-class StatusUpdateRequest(BaseModel):
-    status: RoomStatus
 
 
 # ─────────────────────────────────────────────────────────────────────────────

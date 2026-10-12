@@ -8,94 +8,18 @@ Purpose:
     
 """
 
-from typing import Annotated, Literal, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, EmailStr, Field
 
 from app.auth import hash_password
 from app.db import get_db
 from app.dependencies import require_role
+from app.schemas.branch import BranchCreate, BranchListResponse, BranchOut, BranchUpdate
+from app.schemas.user import UserCreate, UserListResponse, UserOut, UserPatch
 
 router = APIRouter()
 
-
-# =============================================================================
-# Pydantic Request / Response Models
-# =============================================================================
-
-# -- Branch -------------------------------------------------------------------
-
-# Lengths mirror the branch table in db/schema/01_tables.sql
-BranchName = Annotated[str, Field(min_length=1, max_length=100)]
-BranchCity = Annotated[str, Field(min_length=1, max_length=50)]
-BranchAddress = Annotated[str, Field(min_length=1, max_length=255)]
-BranchPhone = Annotated[str, Field(min_length=1, max_length=20)]
-ManagerName = Annotated[str, Field(min_length=1, max_length=100)]
-
-
-class BranchCreate(BaseModel):
-    name: BranchName
-    city: BranchCity
-    address: BranchAddress
-    phone: BranchPhone
-    manager_name: ManagerName
-
-
-class BranchUpdate(BaseModel):
-    name: Optional[BranchName] = None
-    city: Optional[BranchCity] = None
-    address: Optional[BranchAddress] = None
-    phone: Optional[BranchPhone] = None
-    manager_name: Optional[ManagerName] = None
-
-
-class BranchOut(BaseModel):
-    branch_id: str
-    name: str
-    city: str
-    address: str
-    phone: str
-    manager_name: str
-    total_rooms: int
-    active_bookings: int
-
-
-class BranchListResponse(BaseModel):
-    branches: list[BranchOut]
-    total: int
-
-
-# -- User Account -------------------------------------------------------------
-
-class UserCreate(BaseModel):
-    email: EmailStr = Field(max_length=100)
-    password: str
-    role: str                        # 'admin' | 'manager' | 'receptionist' | 'guest'
-    branch_id: Optional[UUID] = None
-    guest_id: Optional[UUID] = None
-
-
-class UserPatch(BaseModel):
-    role: Optional[str] = None
-    # "" clears the branch assignment
-    branch_id: UUID | Literal[""] | None = None
-
-
-class UserOut(BaseModel):
-    account_id: str
-    email: str
-    role: str
-    branch_id: Optional[str] = None
-    branch_name: Optional[str] = None
-    guest_id: Optional[str] = None
-    guest_name: Optional[str] = None
-
-
-class UserListResponse(BaseModel):
-    users: list[UserOut]
-    total: int
 
 
 # =============================================================================

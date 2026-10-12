@@ -13,59 +13,22 @@ Endpoints:
     GET  /api/auth/me        — Protected. Returns current user info.
 """
 
-from datetime import date
-from uuid import UUID
-
 import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, EmailStr, Field
 
 from app.auth import verify_password, hash_password, create_access_token
 from app.db import get_db
 from app.dependencies import get_current_user, get_optional_user, require_role
+from app.schemas.auth import (
+    LoginRequest,
+    LoginResponse,
+    MeResponse,
+    RegisterRequest,
+    SignupRequest,
+)
 
 router = APIRouter()
 
-
-# ── Request / Response Schemas ────────────────────────────────────────────────
-
-class LoginRequest(BaseModel):
-    email: str
-    password: str
-
-
-class LoginResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-    role: str
-    branch_id: str | None = None
-    account_id: str
-
-
-class RegisterRequest(BaseModel):
-    email: str
-    password: str
-    role: str = "guest"           # default for self-registration
-    branch_id: UUID | None = None  # required for receptionist/manager
-    guest_id: UUID | None = None   # required for guest role
-
-
-class SignupRequest(BaseModel):
-    full_name: str = Field(min_length=2, max_length=150)
-    nic_passport: str = Field(min_length=4, max_length=20)
-    email: EmailStr
-    phone: str = Field(min_length=7, max_length=20)
-    password: str
-    date_of_birth: date | None = None
-    nationality: str | None = Field(default=None, max_length=50)
-
-
-class MeResponse(BaseModel):
-    account_id: str
-    email: str
-    role: str
-    branch_id: str | None = None
-    guest_id: str | None = None
 
 
 # ── POST /api/auth/login ─────────────────────────────────────────────────────
