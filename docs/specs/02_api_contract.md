@@ -12,19 +12,6 @@
 - Dates are `YYYY-MM-DD`, timestamps are ISO 8601.
 - Pagination: `?page=1&per_page=20` (default 20, max 100).
 - Error responses: `{ "detail": "message" }` with appropriate HTTP status.
-- A guest token whose account has no guest profile gets `403 This account has no guest profile. Contact the front desk.` on every guest-scoped endpoint.
-- Branch scoping: managers and receptionists may only act on bookings and rooms of their own branch; guests only on their own bookings; admins on everything (see `08_auth_and_roles.md`). Every endpoint that takes a `booking_id` (path or body) or acts on a room checks existence first (`404`), then access (`403 Not authorised for bookings of another branch.` / `403 Guests can only access their own bookings.`).
-- `422` validation errors (malformed UUID or date, unknown enum value, string longer than its DB column, number out of range) use FastAPI's list form: `{ "detail": [{ "loc": [...], "msg": "...", "type": "..." }] }`.
-- Request limits mirror the DB columns (`VARCHAR(n)`, `NUMERIC(10,2)` → max `99999999.99` with 2 decimal places).
-- Database errors never expose Postgres text. Unmapped DB errors return `500 { "detail": "Internal server error" }` and are logged server-side; constraint errors map to:
-
-  | DB error | Status | `detail` |
-  |---|---|---|
-  | unique violation | 409 | A record with these details already exists. |
-  | exclusion violation | 409 | Room is not available for the selected dates. |
-  | foreign-key violation | 404 | A referenced record does not exist. |
-  | check / not-null violation | 422 | The request violates a data rule. / A required field is missing. |
-  | value too long / numeric overflow / other data error | 422 | A value is too long. / A numeric value is out of range. / Invalid input. |
 
 ---
 
@@ -56,31 +43,8 @@
 
 ---
 
-### POST `/api/auth/signup`
-> Public — guest self-registration. Creates the guest profile and login account in one transaction; role is always `guest`.
-
-**Request:**
-```json
-{
-  "full_name": "John Silva",
-  "nic_passport": "200012345678",
-  "email": "john@mail.com",
-  "phone": "+94771234567",
-  "password": "min8chars",
-  "date_of_birth": "2000-05-15",
-  "nationality": "Sri Lankan"
-}
-```
-
-**Response (201):** `{ "account_id": "uuid-...", "guest_id": "uuid-..." }`
-
-**Errors:** `409` email already registered / NIC or passport already exists; `422` validation (invalid email, password < 8 chars).
-
----
-
 ### POST `/api/auth/register`
-> Admin only — creates accounts with an explicit role. Anonymous or non-admin callers receive `403`
-> (guests use `/api/auth/signup`).
+> Admin only — creates staff accounts; OR public for guest self-registration
 
 **Request:**
 ```json
@@ -94,26 +58,6 @@
 ```
 
 **Response (201):** `{ "account_id": "uuid-..." }`
-
-**Errors:** `403` caller not admin · `400 Invalid role` · `409` email exists, or `This guest profile is already linked to another account.` · `404` referenced branch/guest doesn't exist · `422` invalid role ↔ link combination (same rules as `POST /api/admin/users`)
-
----
-
-## 1b. Branches (public) — `/api/branches`
-
-### GET `/api/branches`
-> Public — read-only directory for the Home / Rooms pages (the admin-only `/api/admin/branches` keeps stats and CRUD).
-
-**Response (200):**
-```json
-{
-  "branches": [
-    { "branch_id": "uuid-...", "name": "SkyNest Colombo", "city": "Colombo",
-      "address": "42 Galle Face Terrace, Colombo 03", "phone": "+94 11 234 5678" }
-  ],
-  "total": 3
-}
-```
 
 ---
 
@@ -146,27 +90,10 @@
 }
 ```
 
-`check_in` / `check_out` are `YYYY-MM-DD` dates; when both are given, rooms with an overlapping `Booked` or `Checked-In` booking are excluded.
-
-**Errors:**
-- `400` only one of `check_in` / `check_out` given, or `check_out <= check_in`
-- `422` malformed date, or `status` not one of `Available`, `Occupied`, `Maintenance`
-
 ### GET `/api/rooms/:room_id`
 > Public
 
 **Response (200):** Single room object (same shape as above).
-
-### PATCH `/api/rooms/:room_id/status`
-> Manager, Admin
-
-**Request:** `{ "status": "Maintenance" }` (`Available` | `Occupied` | `Maintenance`)
-
-**Response (200):** `{ "room_id": "uuid-...", "status": "Maintenance" }`
-
-`Maintenance` is set and cleared only here; check-in/checkout never change it. `Available` and `Occupied` must agree with the bookings (the room trigger keeps them in sync otherwise).
-
-**Errors:** `403` manager of another branch · `404 Room not found` · `409 A guest is checked in to this room, so it can't be Available.` · `409 No guest is checked in to this room, so it can't be Occupied.` · `422` unknown status value
 
 ---
 
@@ -235,7 +162,7 @@
 }
 ```
 
-**Errors:** `409 NIC/Passport or email already exists` · `422` field too long/short (`full_name` 2–150, `nic_passport` 4–20, `email` valid and ≤ 100, `phone` 7–20, `nationality` ≤ 50, `gender` ≤ 10, company fields ≤ 150 / reg. no. ≤ 50)
+**Errors:** `409 NIC/Passport or email already exists`
 
 ### GET `/api/guests/:guest_id`
 > Receptionist, Manager, Admin, or the guest themselves
@@ -280,7 +207,7 @@ Calls `create_booking()` stored procedure (SERIALIZABLE).
 }
 ```
 
-**Errors:** `403` room belongs to another branch (manager/receptionist) or guest booking for someone else · `404 Guest not found` / `404 Room not found` · `409 Room is not available for selected dates (double-booking)` · `422` malformed IDs/dates, `payment_option` longer than 50
+**Errors:** `409 Room is not available for selected dates (double-booking)`
 
 ### GET `/api/bookings`
 > Receptionist (own branch), Manager (own branch), Admin (all), Guest (own bookings)
@@ -294,7 +221,7 @@ Calls `create_booking()` stored procedure (SERIALIZABLE).
     {
       "booking_id": "uuid-...",
       "guest": { "guest_id": "uuid-...", "full_name": "John Silva" },
-      "room": { "room_id": "uuid-...", "room_number": "101", "branch_name": "Colombo", "type_name": "Suite" },
+      "room": { "room_id": "uuid-...", "room_number": "101", "branch_name": "Colombo" },
       "check_in_date": "2026-02-01",
       "check_out_date": "2026-02-05",
       "rate_at_booking": 15000.00,
@@ -305,25 +232,13 @@ Calls `create_booking()` stored procedure (SERIALIZABLE).
 }
 ```
 
-`from` / `to` are `YYYY-MM-DD` dates (`from` matches `check_out_date >= from`, `to` matches `check_in_date <= to`).
-
-**Errors:**
-- `400` `to` is before `from`
-- `422` malformed date, or `status` not one of `Booked`, `Checked-In`, `Checked-Out`, `Cancelled`
-
 ### GET `/api/bookings/:booking_id`
-> Receptionist (own branch), Manager (own branch), Admin, or owning Guest
-
-**Errors:** `403` other branch / other guest · `404 Booking not found`
+> Receptionist, Manager, Admin, or owning Guest
 
 ### PATCH `/api/bookings/:booking_id/cancel`
 > Receptionist, Manager, Admin, Guest (own booking, if still 'Booked')
 
-Calls `cancel_booking()` stored procedure (locks the booking, so a cancel racing a check-in can't cancel a guest who was just checked in). No request body.
-
 **Response (200):** `{ "status": "Cancelled" }`
-
-**Errors:** `400 Only Booked bookings can be cancelled (current status: Checked-In)` · `403` other branch / other guest · `404 Booking not found`
 
 ---
 
@@ -332,7 +247,7 @@ Calls `cancel_booking()` stored procedure (locks the booking, so a cancel racing
 ### PATCH `/api/bookings/:booking_id/checkin`
 > Receptionist, Manager, Admin
 
-Calls `perform_checkin()` stored procedure, which locks the booking row, so of several simultaneous check-ins exactly one succeeds.
+Calls `perform_checkin()` stored procedure.
 
 **Response (200):**
 ```json
@@ -343,12 +258,12 @@ Calls `perform_checkin()` stored procedure, which locks the booking row, so of s
 }
 ```
 
-**Errors:** `400 Only Booked bookings can be checked in` · `403` booking of another branch · `404 Booking not found`
+**Errors:** `400 Booking is not in 'Booked' status`
 
 ### PATCH `/api/bookings/:booking_id/checkout`
 > Receptionist, Manager, Admin
 
-Calls `perform_checkout()` stored procedure, which first recalculates the bill with `generate_bill(booking, NULL)` (creating it if none exists and keeping any existing discount), so services added since the last generate are billed. Fails with 402 if anything is still unpaid; the whole call rolls back, including the bill refresh. The `bill` block is always present and shows the recalculated totals.
+Calls `perform_checkout()` stored procedure. Fails if bill has outstanding balance.
 
 **Response (200):**
 ```json
@@ -365,7 +280,7 @@ Calls `perform_checkout()` stored procedure, which first recalculates the bill w
 }
 ```
 
-**Errors:** `400 Only Checked-In bookings can be checked out` · `402 Outstanding balance of LKR 17250.00 — pay before checkout` (also when no bill was ever generated, since room charges are owed) · `403` booking of another branch · `404 Booking not found`
+**Errors:** `402 Outstanding balance of LKR 15,000.00 — payment required before checkout`
 
 ---
 
@@ -447,12 +362,10 @@ Records chargeable service order. Trigger checks that booking is 'Checked-In' an
 }
 ```
 
-**Errors:** `403` booking of another branch · `404` booking or active service not found · `422 Unprocessable Entity (Booking is not Checked-In)` · `422` `quantity` outside 1–1000
+**Errors:** `422 Unprocessable Entity (Booking is not Checked-In or service inactive)`
 
 ### GET `/api/services/:booking_id/usage`
-> Receptionist (own branch), Manager (own branch), Admin, owning Guest
-
-**Errors:** `403` other branch / other guest · `404 Booking not found`
+> Receptionist, Manager, Admin, owning Guest
 
 **Response (200):** Itemized usage summary:
 ```json
@@ -481,9 +394,7 @@ Records chargeable service order. Trigger checks that booking is 'Checked-In' an
 ### POST `/api/billing/:booking_id/generate`
 > Receptionist, Manager, Admin
 
-Calls `generate_bill()` stored procedure (with optional `?discount=0.00` query parameter, 0–99999999.99, 2 decimal places).
-
-**Errors:** `403` booking of another branch · `404 Booking not found` · `400` booking not Checked-In/Checked-Out, discount larger than the subtotal, or `Bill total exceeds the maximum supported amount` · `422` invalid `discount`
+Calls `generate_bill()` stored procedure (with optional `?discount=0.00` query parameter).
 
 **Response (200):** `BillOut` object:
 ```json
@@ -507,8 +418,6 @@ Calls `generate_bill()` stored procedure (with optional `?discount=0.00` query p
 
 **Response (200):** `BillOut` object or `404 Bill not generated yet`.
 
-**Errors:** `403` other branch / other guest · `404 Booking not found`
-
 ---
 
 ## 8. Payments — `/api/payments`
@@ -516,7 +425,7 @@ Calls `generate_bill()` stored procedure (with optional `?discount=0.00` query p
 ### POST `/api/payments`
 > Receptionist, Manager, Admin
 
-Calls `record_payment()` stored procedure, which returns the new `payment_id`; the response is that payment (not "the newest payment for the booking"), so concurrent payments each get their own back.
+Calls `record_payment()` stored procedure.
 
 **Request:**
 ```json
@@ -540,14 +449,12 @@ Calls `record_payment()` stored procedure, which returns the new `payment_id`; t
 }
 ```
 
-**Errors:** `400 Amount exceeds outstanding balance or <= 0` · `403` booking of another branch · `404 Booking not found`
+**Errors:** `400 Amount exceeds outstanding balance or <= 0`
 
 ### GET `/api/payments/:booking_id`
 > Receptionist, Manager, Admin, owning Guest
 
 **Response (200):** Array of `PaymentOut` records ordered by `paid_at DESC`.
-
-**Errors:** `403` other branch / other guest · `404 Booking not found`
 
 ---
 
@@ -556,11 +463,7 @@ Calls `record_payment()` stored procedure, which returns the new `payment_id`; t
 > All report endpoints: Manager (own branch), Admin (all branches)
 
 ### GET `/api/reports/occupancy`
-**Params:** `?branch_id=uuid&date=2026-02-01` or `?from_date=2026-02-01&to_date=2026-02-28` (`YYYY-MM-DD`)
-
-**Errors:**
-- `400` `to_date <= from_date`
-- `422` malformed date
+**Params:** `?branch_id=uuid&date=2026-02-01` or `?from=2026-02-01&to=2026-02-28`
 
 ### GET `/api/reports/billing-summary`
 **Params:** `?branch_id=uuid&unpaid_only=true`
@@ -572,9 +475,7 @@ Calls `record_payment()` stored procedure, which returns the new `payment_id`; t
 **Params:** `?year=2026&month=2&branch_id=uuid`
 
 ### GET `/api/reports/top-services`
-**Params:** `?limit=10&branch_id=uuid` (`limit` 1–100)
-
-Managers always get their own branch, ranked within it (`v_top_services_by_branch`); `branch_id` is ignored for them. Admins get all branches combined (`v_top_services`), or one branch with `branch_id`.
+**Params:** `?limit=10`
 
 > Detailed report views and schema columns are specified in `05_views_and_reports.md`.
 
@@ -599,16 +500,6 @@ Lists all staff and manager accounts with their roles and assigned branches.
 ### POST `/api/admin/users`
 Creates a new user account with hashed password, assigned role, and branch.
 
-**Role ↔ link rules** (validated on the resulting account; `422` with a string `detail` otherwise):
-
-| `role` | `branch_id` | `guest_id` |
-|---|---|---|
-| `admin` | must be empty | must be empty |
-| `manager` / `receptionist` | **required** | must be empty |
-| `guest` | must be empty | **required** |
-
-**Errors:** `400` invalid role · `404` branch/guest not found · `409` email exists, or `This guest profile is already linked to another account.` (one login per guest profile) · `422` invalid role ↔ link combination (e.g. `A manager account must be assigned to a branch.`)
-
 ### PATCH `/api/admin/users/:account_id`
 Updates a user account's role and/or branch assignment:
 ```json
@@ -617,10 +508,6 @@ Updates a user account's role and/or branch assignment:
   "branch_id": "uuid-..."
 }
 ```
-
-`branch_id: ""` clears the branch. The **resulting** role/branch/guest combination must follow the rules above, so clearing a receptionist's branch, or promoting a manager to admin without `"branch_id": ""`, is `422`. Guest accounts can't be turned into staff (they keep their `guest_id`).
-
-**Errors:** `400` invalid role / no fields · `404` account or branch not found · `409 You cannot remove your own admin role.` · `422` invalid role ↔ link combination
 
 > **Note on Deletion:** User deletion (`DELETE /api/admin/users/:account_id`) is omitted intentionally to preserve referential integrity, booking audits, and financial transaction histories.
 

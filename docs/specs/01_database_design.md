@@ -117,8 +117,8 @@
 | Column | Type | Constraints |
 |--------|------|-------------|
 | `account_id` | UUID | PK, DEFAULT gen_random_uuid() |
-| `guest_id` | UUID | NULL, UNIQUE, FK → guest (ON DELETE RESTRICT) |
-| `branch_id` | UUID | NULL, FK → branch (ON DELETE RESTRICT) |
+| `guest_id` | UUID | NULL, FK → guest |
+| `branch_id` | UUID | NULL, FK → branch |
 | `email` | VARCHAR(100) | NOT NULL, UNIQUE |
 | `password_hash` | VARCHAR(255) | NOT NULL |
 | `role` | user_role | NOT NULL |
@@ -126,8 +126,6 @@
 > - `guest_id` is set only when `role = 'guest'`
 > - `branch_id` is set for `receptionist` and `manager` (scopes them to a branch)
 > - `admin` has both NULL
-> - Enforced by CHECK `chk_user_account_role_links`: `manager`/`receptionist` → `branch_id NOT NULL, guest_id NULL`; `guest` → `guest_id NOT NULL, branch_id NULL`; `admin` → both NULL.
-> - The FKs are `RESTRICT`, not `SET NULL`: nulling a link would break the CHECK, so a branch with staff (or a guest profile with a login) can't be deleted.
 
 ---
 
@@ -147,7 +145,6 @@
 | `actual_checkout_time` | TIMESTAMP | NULL |
 
 > CHECK: `check_out_date > check_in_date`
-> EXCLUDE `excl_booking_room_overlap`: no two **active** (`Booked` / `Checked-In`) bookings for the same room may overlap: `EXCLUDE USING gist (room_id WITH =, daterange(check_in_date, check_out_date, '[)') WITH &&) WHERE (status IN ('Booked','Checked-In'))`. The `'[)'` bound lets one guest check out on the day the next checks in. Needs the `btree_gist` extension (trusted, created in `02_constraints.sql`). This is the guarantee against double booking under concurrent requests; `trg_check_double_booking` gives the friendly error message. The API maps a violation to `409 Room is not available for the selected dates.`
 > `rate_at_booking` is snapshotted from `room_rate.daily_rate` at booking creation time so billing is immutable even if rates change.
 
 ---
@@ -227,7 +224,7 @@ BOOKING ──1:M──  SERVICE_USAGE
 BOOKING ──1:1──  BILL
 BOOKING ──1:M──  PAYMENT
 SERVICE ──1:M──  SERVICE_USAGE
-GUEST   ──1:1──  USER_ACCOUNT   (optional; UNIQUE guest_id, at most one login per profile)
+GUEST   ──1:1──  USER_ACCOUNT   (optional, nullable FK)
 BRANCH  ──1:M──  USER_ACCOUNT   (for staff accounts)
 ```
 

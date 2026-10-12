@@ -18,9 +18,6 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-# NUMERIC(10,2) upper bound for money columns
-MAX_PRICE = Decimal("99999999.99")
-
 
 # ---------------------------------------------------------------------------
 # Service catalogue schemas
@@ -37,15 +34,14 @@ class ServiceCreate(BaseModel):
     """Payload for POST /api/services."""
     service_name: str   = Field(..., min_length=1, max_length=100)
     category:     str   = Field(..., min_length=1, max_length=50)
-    base_price:   Decimal = Field(..., gt=0, le=MAX_PRICE, decimal_places=2,
-                                  description="Price per unit in the hotel's currency")
+    base_price:   Decimal = Field(..., gt=0, description="Price per unit in the hotel's currency")
 
 
 class ServiceUpdate(BaseModel):
     """Payload for PATCH /api/services/{service_id} — all fields optional."""
     service_name: Optional[str]     = Field(None, min_length=1, max_length=100)
     category:     Optional[str]     = Field(None, min_length=1, max_length=50)
-    base_price:   Optional[Decimal] = Field(None, gt=0, le=MAX_PRICE, decimal_places=2)
+    base_price:   Optional[Decimal] = Field(None, gt=0)
     is_active:    Optional[bool]    = None
 
 
@@ -75,7 +71,7 @@ class ServiceUsageCreate(BaseModel):
     """Payload for POST /api/services/{booking_id}/usage."""
     service_id: UUID
     usage_date: date
-    quantity:   int = Field(..., ge=1, le=1000, description="1 to 1000 units")
+    quantity:   int = Field(..., ge=1, description="Must be at least 1")
 
 
 class ServiceUsageOut(BaseModel):

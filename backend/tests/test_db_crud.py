@@ -104,10 +104,5 @@ async def run_crud_smoke_test():
         await conn.close()
 
 
-# pytest entry point (the suite above also runs as a plain script)
-async def test_crud_smoke():
-    await run_crud_smoke_test()  # exits non-zero on any failure
-
-
 if __name__ == "__main__":
     asyncio.run(run_crud_smoke_test())

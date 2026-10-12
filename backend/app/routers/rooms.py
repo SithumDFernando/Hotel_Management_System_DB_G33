@@ -6,7 +6,7 @@ backend/app/routers/rooms.py
 This router is a complete, working reference implementation that demonstrates
 every pattern your teammates need to build their own routers:
 
-    1. How to use Pydantic request/response models (defined in app/schemas/room.py).
+    1. How to define Pydantic request/response models.
     2. How to get a DB connection via Depends(get_db).
     3. How to execute SQL queries with await db.fetch(...).
     4. How to use require_role() for protected endpoints.
@@ -19,24 +19,59 @@ Endpoints:
     PATCH /api/rooms/{room_id}/status — Admin/Manager. Change room status.
 """
 
-from datetime import date
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 
 from app.db import get_db
-from app.dependencies import assert_room_access, require_role
-from app.schemas.room import (
-    AmenityInfo,
-    BranchInfo,
-    RoomListResponse,
-    RoomOut,
-    RoomStatus,
-    RoomTypeInfo,
-    StatusUpdateRequest,
-)
+from app.dependencies import require_role
 
 router = APIRouter()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Pydantic Models (Response Schemas)
+# ─────────────────────────────────────────────────────────────────────────────
+# These define the shape of JSON responses. FastAPI uses them to:
+# - Validate outgoing data
+# - Generate the OpenAPI/Swagger documentation automatically
+
+class BranchInfo(BaseModel):
+    branch_id: str
+    name: str
+    city: str
+
+
+class RoomTypeInfo(BaseModel):
+    room_type_id: str
+    type_name: str
+    capacity: int
+
+
+class AmenityInfo(BaseModel):
+    amenity_name: str
+    amenity_type: str
+    count: int
+
+
+class RoomOut(BaseModel):
+    room_id: str
+    room_number: str
+    branch: BranchInfo
+    room_type: RoomTypeInfo
+    daily_rate: float
+    status: str
+    amenities: list[AmenityInfo] = []
+
+
+class RoomListResponse(BaseModel):
+    rooms: list[RoomOut]
+    total: int
+
+
+class StatusUpdateRequest(BaseModel):
+    status: str  # "Available", "Occupied", or "Maintenance"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -46,28 +81,17 @@ router = APIRouter()
 @router.get("", response_model=RoomListResponse)
 async def list_rooms(
     db=Depends(get_db),
-    branch_id: UUID | None = Query(None, description="Filter by branch UUID"),
+    branch_id: str | None = Query(None, description="Filter by branch UUID"),
     room_type: str | None = Query(None, description="Filter by room type name"),
-    room_status: RoomStatus | None = Query(None, alias="status", description="Filter by status"),
-    check_in: date | None = Query(None, description="Availability check: start date YYYY-MM-DD"),
-    check_out: date | None = Query(None, description="Availability check: end date YYYY-MM-DD"),
+    room_status: str | None = Query(None, alias="status", description="Filter by status"),
+    check_in: str | None = Query(None, description="Availability check: start date YYYY-MM-DD"),
+    check_out: str | None = Query(None, description="Availability check: end date YYYY-MM-DD"),
 ):
     """
     List all rooms with optional filters.
     If check_in + check_out are provided, excludes rooms with overlapping
     active bookings (anti-join) — effectively an availability search.
     """
-    if (check_in is None) != (check_out is None):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="check_in and check_out must be provided together",
-        )
-    if check_in and check_out and check_out <= check_in:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="check_out must be after check_in",
-        )
-
     # Build the query dynamically based on provided filters
     conditions = []
     params = []
@@ -172,7 +196,7 @@ async def list_rooms(
 # ─────────────────────────────────────────────────────────────────────────────
 
 @router.get("/{room_id}", response_model=RoomOut)
-async def get_room(room_id: UUID, db=Depends(get_db)):
+async def get_room(room_id: str, db=Depends(get_db)):
     """Get full details for a single room including amenities."""
     row = await db.fetchrow(
         """
@@ -239,47 +263,34 @@ async def get_room(room_id: UUID, db=Depends(get_db)):
 
 @router.patch("/{room_id}/status")
 async def update_room_status(
-    room_id: UUID,
+    room_id: str,
     body: StatusUpdateRequest,
     db=Depends(get_db),
     user=Depends(require_role("admin", "manager")),
 ):
     """
     Manually update a room's status (e.g. mark as Maintenance).
-    Only admin and manager roles can do this; managers only for rooms in
-    their own branch.
-
-    Available/Occupied must agree with the bookings (trg_room_status keeps
-    them in sync otherwise): 'Available' is refused while a guest is checked
-    in, 'Occupied' without one (409). 'Maintenance' is always allowed.
+    Only admin and manager roles can do this.
     """
-    await assert_room_access(db, user, room_id)
-    async with db.transaction():
-        # Lock the room so a check-in/checkout can't change the answer below
-        await db.execute(
-            "SELECT 1 FROM room WHERE room_id = $1::UUID FOR UPDATE", room_id
-        )
-        guest_in = await db.fetchval(
-            """
-            SELECT EXISTS (SELECT 1 FROM booking
-                            WHERE room_id = $1::UUID AND status = 'Checked-In')
-            """,
-            room_id,
-        )
-        if body.status == "Available" and guest_in:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="A guest is checked in to this room, so it can't be Available.",
-            )
-        if body.status == "Occupied" and not guest_in:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="No guest is checked in to this room, so it can't be Occupied.",
-            )
-        await db.execute(
-            "UPDATE room SET status = $1::room_status WHERE room_id = $2::UUID",
-            body.status,
-            room_id,
+    # Validate the status value
+    valid_statuses = {"Available", "Occupied", "Maintenance"}
+    if body.status not in valid_statuses:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid status. Must be one of: {', '.join(valid_statuses)}",
         )
 
-    return {"room_id": str(room_id), "status": body.status}
+    result = await db.execute(
+        "UPDATE room SET status = $1::room_status WHERE room_id = $2::UUID",
+        body.status,
+        room_id,
+    )
+
+    # asyncpg returns "UPDATE N" — check if any row was actually updated
+    if result == "UPDATE 0":
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Room {room_id} not found",
+        )
+
+    return {"room_id": room_id, "status": body.status}

@@ -67,18 +67,10 @@ DECLARE
     v_room_type_id UUID;
     v_rate         NUMERIC(10,2);
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM guest WHERE guest_id = p_guest_id) THEN
-        RAISE EXCEPTION 'Guest not found';
-    END IF;
-
     -- Look up room's branch and type
     SELECT branch_id, room_type_id
       INTO v_branch_id, v_room_type_id
       FROM room WHERE room_id = p_room_id;
-
-    IF NOT FOUND THEN
-        RAISE EXCEPTION 'Room not found';
-    END IF;
 
     -- Get the current daily rate and SNAPSHOT it
     v_rate := fn_get_current_rate(v_branch_id, v_room_type_id);
@@ -93,35 +85,5 @@ BEGIN
         v_rate, p_payment_option, 'Booked'
     )
     RETURNING booking_id INTO p_booking_id;
-END;
-$$;
-
-
--- cancel_booking(booking)   (call with: CALL cancel_booking(...))
-
--- Cancels a 'Booked' booking. The booking row is locked first, so a cancel
--- racing a check-in (or another cancel) sees the other's result and raises
--- instead of overwriting it. Room status is left to trg_room_status.
-
-CREATE OR REPLACE PROCEDURE cancel_booking(p_booking_id UUID)
-LANGUAGE plpgsql
-AS $$
-DECLARE
-    v_status booking_status;
-BEGIN
-    SELECT status INTO v_status
-      FROM booking
-     WHERE booking_id = p_booking_id
-       FOR UPDATE;
-
-    IF NOT FOUND THEN
-        RAISE EXCEPTION 'Booking not found';
-    END IF;
-
-    IF v_status <> 'Booked' THEN
-        RAISE EXCEPTION 'Only Booked bookings can be cancelled (current status: %)', v_status;
-    END IF;
-
-    UPDATE booking SET status = 'Cancelled' WHERE booking_id = p_booking_id;
 END;
 $$;

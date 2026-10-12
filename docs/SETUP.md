@@ -27,45 +27,9 @@ git checkout dev
 
 ---
 
-## Run with Docker (Recommended)
+## Quick Automated Setup (Script Option)
 
-Only needs **[Docker Desktop](https://www.docker.com/products/docker-desktop/)** — no local PostgreSQL, Python or Node install. One command starts the whole stack with the schema and seed data already loaded:
-
-```bash
-cp .env.example .env        # optional — every value has a working default
-docker compose up --build
-```
-
-| Service      | URL                                                      | Login                                       |
-| :----------- | :------------------------------------------------------- | :------------------------------------------ |
-| **App**      | [http://localhost:8080](http://localhost:8080)           | Test accounts in the [README](../README.md#test-accounts--credentials) |
-| **API docs** | [http://localhost:8000/docs](http://localhost:8000/docs) | —                                           |
-| **pgAdmin**  | [http://localhost:5050](http://localhost:5050)           | No login. Open **SkyNest (Docker)** and enter DB password `skynest_dev_pass` once |
-| **Postgres** | `localhost:5432` · db `skynest` · user `skynest_user`    | Password `skynest_dev_pass`                 |
-
-**Common commands**
-
-```bash
-docker compose up -d --build              # start in the background
-docker compose logs -f backend            # follow backend logs
-docker compose down                       # stop (data is kept)
-docker compose down -v && docker compose up --build   # reset DB: re-runs db/run_all.sql + seed
-docker compose exec backend python tests/test_business_logic.py   # run a test inside the stack
-```
-
-**Notes**
-- The database is built by [`db/docker/init.sh`](../db/docker/init.sh) **only when its volume is empty**. After changing SQL files, reset with `docker compose down -v`.
-- **Port already in use?** A native PostgreSQL install usually holds 5432. Set `DB_PORT=5433` (or `FRONTEND_PORT`, `BACKEND_PORT`, `PGADMIN_PORT`) in the root `.env`, then run `docker compose up` again.
-- Code changes need a rebuild: `docker compose up -d --build`. For hot reload while coding, run the backend/frontend natively (sections 3–4) and keep only the database in Docker: `docker compose up -d db pgadmin`. Then point `backend/.env` at `localhost:${DB_PORT}`.
-
----
-
-## Quick Automated Setup (Script Options)
-
-SkyNest provides automated setup scripts for both **Docker** and **Native Localhost** workflows:
-
-### A. Docker Setup (Root Scripts — Recommended)
-Automates `.env` creation, validates Docker daemon availability, and provides an interactive menu to build/start containers, view logs, stop services, or reset the database:
+If you have the prerequisites installed, run the automated script from the project root to automatically generate `.env` files, set up Python `.venv`, install backend/frontend dependencies, and optionally configure the database:
 
 ```cmd
 # Windows (Command Prompt or double-click setup.bat):
@@ -76,22 +40,6 @@ setup.bat
 
 # macOS / Linux / Git Bash:
 chmod +x setup.sh && ./setup.sh
-```
-
-*(Copies of these Docker scripts are also archived in [`scripts/docker/`](../scripts/docker/))*
-
-### B. Native Setup (No Docker)
-If you prefer running PostgreSQL, Python `.venv`, and Node.js natively on your host machine without Docker containers, run the native setup scripts:
-
-```cmd
-# Windows (Command Prompt):
-scripts\native\setup.bat
-
-# Windows (PowerShell):
-.\scripts\native\setup.ps1
-
-# macOS / Linux / Git Bash:
-chmod +x scripts/native/setup.sh && ./scripts/native/setup.sh
 ```
 
 *(Or follow the manual step-by-step instructions below)*

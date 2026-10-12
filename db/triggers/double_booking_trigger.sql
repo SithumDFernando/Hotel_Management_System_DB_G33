@@ -46,11 +46,8 @@
 --     so that a room can be rebooked after checkout or cancellation.
 --   - This trigger fires from the create_booking() stored procedure
 --     (db/procedures/booking.sql) as well as direct INSERTs.
---   - Concurrency: the function locks the room row (FOR UPDATE) first, so
---     concurrent bookings for the same room run one after another and the
---     second one sees the first and gets the friendly message below. The
---     exclusion constraint excl_booking_room_overlap (02_constraints.sql) is
---     the guarantee behind it (API: ExclusionViolationError -> 409).
+--   - For high-concurrency environments, pair this with a FOR UPDATE lock on
+--     the room row to prevent race conditions under simultaneous requests.
 -- =============================================================================
 
 CREATE OR REPLACE FUNCTION trg_check_double_booking()
@@ -59,10 +56,6 @@ LANGUAGE plpgsql
 AS $$
 BEGIN
     IF NEW.status NOT IN ('Cancelled', 'Checked-Out') THEN
-        -- Serialize concurrent bookings for the same room: a second
-        -- transaction waits here until the first commits, then sees its row
-        PERFORM 1 FROM room WHERE room_id = NEW.room_id FOR UPDATE;
-
         IF EXISTS (
             SELECT 1
             FROM booking

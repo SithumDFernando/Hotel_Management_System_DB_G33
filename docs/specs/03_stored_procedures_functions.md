@@ -29,7 +29,6 @@ calculate_bill()
   └── fn_calculate_tax()
 
 check_out()
-  ├── generate_bill()            ← recalculates the bill first (ISSUE-04)
   └── fn_get_outstanding_balance()
 
 record_payment()
@@ -137,38 +136,12 @@ LOGIC:
   1. SELECT status FROM booking WHERE booking_id = p_booking_id FOR UPDATE
   2. Validate status = 'Booked' → else RAISE 'Only Booked bookings can be checked in'
   3. UPDATE booking SET status = 'Checked-In', actual_checkin_time = NOW()
-  4. Room -> 'Occupied' is done by trg_room_status (the procedure does not
-     update the room table; see 04_triggers.md)
+  4. UPDATE room SET status = 'Occupied' WHERE room_id = (booking's room_id)
+     → (can also be handled by room_status_trigger)
 
 ERRORS:
   - 'Booking not found'
   - 'Only Booked bookings can be checked in'
-
-CONCURRENCY:
-  - The FOR UPDATE in step 1 makes a concurrent second check-in wait, then
-    see 'Checked-In' and raise, so exactly one of N simultaneous check-ins wins.
-```
-
----
-
-### `cancel_booking(p_booking_id UUID) → VOID`
-
-```
-LOGIC:
-  1. SELECT status FROM booking WHERE booking_id = p_booking_id FOR UPDATE
-  2. Validate status = 'Booked'
-       → else RAISE 'Only Booked bookings can be cancelled (current status: %)'
-  3. UPDATE booking SET status = 'Cancelled'
-     → room status is handled by trg_room_status
-
-ERRORS:
-  - 'Booking not found'
-  - 'Only Booked bookings can be cancelled (current status: X)'
-
-NOTES:
-  - Replaces the router's SELECT-then-UPDATE: a cancel racing a check-in
-    waits for it and then raises, instead of cancelling a checked-in guest.
-  - Authorization (branch / own booking) stays in the router.
 ```
 
 ---
@@ -179,22 +152,17 @@ NOTES:
 LOGIC:
   1. SELECT status FROM booking WHERE booking_id = p_booking_id FOR UPDATE
   2. Validate status = 'Checked-In'
-  3. CALL generate_bill(p_booking_id, NULL)
-     → the stored bill is only as fresh as the last generate, so recalculate
-       it here: creates it if missing, bills services added since, keeps the
-       existing discount (NULL)
-  4. balance := fn_get_outstanding_balance(p_booking_id)
-  5. IF balance > 0 THEN RAISE 'Outstanding balance of LKR % — pay before checkout'
-     → rolls back the whole CALL, including the bill refresh (API → 402)
-  6. UPDATE booking SET status = 'Checked-Out', actual_checkout_time = NOW()
-  7. Room -> 'Available' is done by trg_room_status (a Maintenance flag set
-     during the stay is kept)
+  3. balance := fn_get_outstanding_balance(p_booking_id)
+  4. IF balance > 0 THEN RAISE 'Outstanding balance of LKR % — pay before checkout'
+  5. UPDATE booking SET status = 'Checked-Out', actual_checkout_time = NOW()
+  6. UPDATE room SET status = 'Available' WHERE room_id = (booking's room_id)
+     → (can also be handled by room_status_trigger)
 
 ERRORS:
   - 'Booking not found'
   - 'Only Checked-In bookings can be checked out'
-  - 'Outstanding balance of LKR X — pay before checkout'
-  (No 'Bill not yet generated' path: step 3 always creates the bill.)
+  - 'Outstanding balance of LKR X — payment required before checkout'
+  - 'Bill not yet generated for this booking'
 ```
 
 ---
@@ -225,27 +193,24 @@ NOTES:
 ERRORS:
   - 'Booking not found'
   - 'Booking must be Checked-In or Checked-Out to generate a bill'
-  - 'Discount must be between 0 and the bill subtotal'
-  - 'Bill total exceeds the maximum supported amount'  (total ≥ 100,000,000; bill columns are NUMERIC(10,2))
 ```
 
 ---
 
-### `record_payment(p_booking_id UUID, p_amount NUMERIC, p_method VARCHAR, p_notes VARCHAR, OUT p_payment_id UUID)`
-
-Call with all five arguments; the last `NULL` is the OUT placeholder:
-`CALL record_payment(id, amount, 'Cash', notes_or_NULL, NULL)` → one row `{p_payment_id}`.
+### `record_payment(p_booking_id UUID, p_amount NUMERIC, p_method VARCHAR, p_notes VARCHAR DEFAULT NULL) → UUID`
 
 ```
 LOGIC:
-  1. SELECT total_amount FROM bill WHERE booking_id = p_booking_id FOR UPDATE
-     → serializes concurrent payments on one bill
-  2. balance := fn_get_outstanding_balance(p_booking_id)
-  3. IF p_amount > balance THEN RAISE 'Amount exceeds outstanding balance'
-  4. INSERT INTO payment (booking_id, amount, payment_method, notes)
-     VALUES (...) RETURNING payment_id INTO p_payment_id
-  5. UPDATE bill SET amount_paid / outstanding_balance / balance_flag
-     recalculated from SUM(payment.amount)
+  1. balance := fn_get_outstanding_balance(p_booking_id)
+  2. IF p_amount > balance THEN RAISE 'Amount exceeds outstanding balance'
+  3. INSERT INTO payment (booking_id, amount, payment_method, notes)
+     VALUES (...) RETURNING payment_id
+  4. UPDATE bill SET
+       amount_paid = amount_paid + p_amount,
+       outstanding_balance = outstanding_balance - p_amount,
+       balance_flag = (outstanding_balance - p_amount > 0)
+     WHERE booking_id = p_booking_id
+  5. RETURN payment_id
 
 NOTES:
   - Supports partial payments (multiple calls).
@@ -273,7 +238,7 @@ db/
 │   ├── fn_calculate_tax.sql
 │   └── fn_get_outstanding_balance.sql
 ├── procedures/
-│   ├── booking.sql                     # create_booking(), cancel_booking()
+│   ├── booking.sql                     # create_booking()
 │   ├── checkin_checkout.sql            # check_in(), check_out()
 │   ├── billing.sql                     # calculate_bill()
 │   └── payments.sql                    # record_payment()

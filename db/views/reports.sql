@@ -174,35 +174,3 @@ JOIN service s ON su.service_id = s.service_id
 GROUP BY s.service_id, s.service_name, s.category
 ORDER BY usage_rank ASC;
 
-
--- ─────────────────────────────────────────────────────────────────────────────
--- 6. v_top_services_by_branch
--- ─────────────────────────────────────────────────────────────────────────────
--- Same columns as v_top_services plus branch_id, with the rank computed
--- within each branch (the branch of the booking's room). Lets managers see
--- only their own branch's service popularity.
-
--- Used by: GET /api/reports/top-services when a branch filter applies
---          (always for managers; for admins when ?branch_id= is given).
---
--- ─────────────────────────────────────────────────────────────────────────────
-
-DROP VIEW IF EXISTS v_top_services_by_branch CASCADE;
-
-CREATE OR REPLACE VIEW v_top_services_by_branch AS
-SELECT
-    r.branch_id,
-    RANK() OVER (PARTITION BY r.branch_id ORDER BY SUM(su.quantity) DESC)::INTEGER AS usage_rank,
-    s.service_id,
-    s.service_name,
-    s.category,
-    COUNT(DISTINCT su.booking_id)::INTEGER AS total_bookings_ordered,
-    SUM(su.quantity)::INTEGER AS total_quantity,
-    SUM(su.quantity * su.unit_price)::NUMERIC(10,2) AS total_revenue,
-    ROUND(AVG(su.quantity), 2)::NUMERIC(10,2) AS avg_quantity_per_booking
-FROM service_usage su
-JOIN service s ON su.service_id = s.service_id
-JOIN booking bk ON bk.booking_id = su.booking_id
-JOIN room r ON r.room_id = bk.room_id
-GROUP BY r.branch_id, s.service_id, s.service_name, s.category
-ORDER BY r.branch_id, usage_rank ASC;

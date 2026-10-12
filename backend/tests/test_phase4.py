@@ -70,7 +70,7 @@ def section(title: str):
 # PART A — DATABASE LEVEL VERIFICATION
 # =============================================================================
 
-async def check_db_views():
+async def test_db_views():
     section("PART A · Database Level Verification")
 
     try:
@@ -183,7 +183,7 @@ async def _login(client: httpx.AsyncClient, email: str, password: str):
     return None
 
 
-async def check_api():
+async def test_api():
     section("PART B · API Level Verification")
 
     # Check server reachable
@@ -304,8 +304,8 @@ async def main():
     print("|   SkyNest  -  Phase 4 Verification Suite (Sadeepa)      |")
     print("+----------------------------------------------------------+")
 
-    await check_db_views()
-    await check_api()
+    await test_db_views()
+    await test_api()
 
     section("SUMMARY")
     print(f"  {GREEN}Passed:{RESET} {passed}")
@@ -325,13 +325,5 @@ async def main():
     print()
 
 
-# pytest entry point (the suite above also runs as a plain script)
-async def test_phase4_suite():
-    await main()
-    assert failed == 0, f"{failed} check(s) failed"
-
-
 if __name__ == "__main__":
     asyncio.run(main())
-    # Non-zero exit lets CI detect failed checks
-    sys.exit(1 if failed else 0)

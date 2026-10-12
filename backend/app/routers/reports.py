@@ -4,45 +4,137 @@ backend/app/routers/reports.py
 
 """
 
-from datetime import date as Date
 from decimal import Decimal
 from typing import Optional
-from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel
 
 from app.db import get_db
-from app.dependencies import require_branch, require_role
-from app.schemas.report import (
-    BillingSummaryResponse,
-    BillingSummaryRow,
-    MonthlyRevenueResponse,
-    MonthlyRevenueRow,
-    OccupancyResponse,
-    OccupancyRow,
-    ServiceUsageResponse,
-    ServiceUsageRow,
-    TopServiceRow,
-    TopServicesResponse,
-)
+from app.dependencies import require_role
 
 router = APIRouter()
+
+
+# =============================================================================
+# Pydantic Response Models
+# =============================================================================
+
+class OccupancyRow(BaseModel):
+    room_id: str
+    branch_id: str
+    branch_name: str
+    room_number: str
+    room_type: str
+    capacity: int
+    room_status: str
+    booking_id: Optional[str] = None
+    guest_id: Optional[str] = None
+    guest_name: Optional[str] = None
+    check_in_date: Optional[str] = None
+    check_out_date: Optional[str] = None
+    booking_status: Optional[str] = None
+
+
+class OccupancyResponse(BaseModel):
+    report: list[OccupancyRow]
+    total: int
+
+
+class BillingSummaryRow(BaseModel):
+    guest_id: str
+    guest_name: str
+    nic_passport: str
+    email: str
+    phone: str
+    guest_type: str
+    booking_id: str
+    room_number: str
+    branch_id: str
+    branch_name: str
+    check_in_date: Optional[str] = None
+    check_out_date: Optional[str] = None
+    bill_id: Optional[str] = None
+    room_charges: float
+    service_charges: float
+    discount_amount: float
+    tax_amount: float
+    total_amount: float
+    amount_paid: float
+    outstanding_balance: float
+    balance_flag: bool
+
+
+class BillingSummaryResponse(BaseModel):
+    report: list[BillingSummaryRow]
+    total: int
+
+
+class ServiceUsageRow(BaseModel):
+    branch_id: str
+    branch_name: str
+    room_number: str
+    guest_id: str
+    guest_name: str
+    service_id: str
+    service_name: str
+    category: str
+    total_quantity_used: int
+    total_revenue_generated: float
+
+
+class ServiceUsageResponse(BaseModel):
+    report: list[ServiceUsageRow]
+    total: int
+
+
+class MonthlyRevenueRow(BaseModel):
+    branch_id: str
+    branch_name: str
+    year: int
+    month: int
+    total_room_revenue: float
+    total_service_revenue: float
+    total_tax_collected: float
+    total_gross_revenue: float
+    total_collected: float
+    total_outstanding: float
+
+
+class MonthlyRevenueResponse(BaseModel):
+    report: list[MonthlyRevenueRow]
+    total: int
+
+
+class TopServiceRow(BaseModel):
+    usage_rank: int
+    service_id: str
+    service_name: str
+    category: str
+    total_bookings_ordered: int
+    total_quantity: int
+    total_revenue: float
+    avg_quantity_per_booking: float
+
+
+class TopServicesResponse(BaseModel):
+    report: list[TopServiceRow]
+    total: int
 
 
 # =============================================================================
 # Helper: apply branch scoping for managers
 # =============================================================================
 
-def _resolve_branch(user: dict, branch_id_param: Optional[UUID]) -> Optional[str]:
+def _resolve_branch(user: dict, branch_id_param: Optional[str]) -> Optional[str]:
     """
     If the logged-in user is a manager, ignore any branch_id query param and
-    force the filter to their own branch (403 if they have none, so this
-    never returns None for a manager). Admins may pass any branch_id or
+    force the filter to their own branch. Admins may pass any branch_id or
     omit it to see all branches.
     """
     if user["role"] == "manager":
-        return require_branch(user)
-    return str(branch_id_param) if branch_id_param else None
+        return str(user["branch_id"]) if user["branch_id"] else None
+    return branch_id_param
 
 
 # =============================================================================
@@ -56,22 +148,16 @@ def _resolve_branch(user: dict, branch_id_param: Optional[UUID]) -> Optional[str
 async def get_occupancy_report(
     db=Depends(get_db),
     user=Depends(require_role("manager", "admin")),
-    branch_id: Optional[UUID] = Query(None, description="Filter by branch UUID"),
-    on_date: Optional[Date] = Query(None, alias="date", description="Point-in-time date YYYY-MM-DD"),
-    from_date: Optional[Date] = Query(None, description="Range start date YYYY-MM-DD"),
-    to_date: Optional[Date] = Query(None, description="Range end date YYYY-MM-DD"),
+    branch_id: Optional[str] = Query(None, description="Filter by branch UUID"),
+    date: Optional[str] = Query(None, description="Point-in-time date YYYY-MM-DD"),
+    from_date: Optional[str] = Query(None, description="Range start date YYYY-MM-DD"),
+    to_date: Optional[str] = Query(None, description="Range end date YYYY-MM-DD"),
 ):
     """
     Room occupancy report from v_room_occupancy.
     - Managers are automatically scoped to their own branch.
     - Supports a single date filter or a date range (from_date / to_date).
     """
-    if from_date and to_date and to_date <= from_date:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="to_date must be after from_date",
-        )
-
     effective_branch = _resolve_branch(user, branch_id)
 
     conditions = []
@@ -84,13 +170,13 @@ async def get_occupancy_report(
         params.append(effective_branch)
 
     # Point-in-time: rooms where this date falls within the booking window
-    if on_date:
+    if date:
         idx += 1
         conditions.append(
             f"(check_in_date IS NULL OR "
             f"(check_in_date <= ${idx}::DATE AND check_out_date > ${idx}::DATE))"
         )
-        params.append(on_date)
+        params.append(date)
         
     elif from_date and to_date:
         idx += 1
@@ -147,7 +233,7 @@ async def get_occupancy_report(
 async def get_billing_summary(
     db=Depends(get_db),
     user=Depends(require_role("manager", "admin")),
-    branch_id: Optional[UUID] = Query(None, description="Filter by branch UUID"),
+    branch_id: Optional[str] = Query(None, description="Filter by branch UUID"),
     unpaid_only: Optional[bool] = Query(None, description="If true, return only records with outstanding balance"),
 ):
     """
@@ -219,7 +305,7 @@ async def get_billing_summary(
 async def get_service_usage(
     db=Depends(get_db),
     user=Depends(require_role("manager", "admin")),
-    branch_id: Optional[UUID] = Query(None, description="Filter by branch UUID"),
+    branch_id: Optional[str] = Query(None, description="Filter by branch UUID"),
 ):
     """
     Service usage breakdown from v_service_usage_breakdown.
@@ -278,7 +364,7 @@ async def get_monthly_revenue(
     user=Depends(require_role("manager", "admin")),
     year: int = Query(..., description="Year (e.g. 2026)", ge=2000, le=2100),
     month: Optional[int] = Query(None, description="Month number 1-12", ge=1, le=12),
-    branch_id: Optional[UUID] = Query(None, description="Filter by branch UUID"),
+    branch_id: Optional[str] = Query(None, description="Filter by branch UUID"),
 ):
     """
     Monthly revenue breakdown from v_monthly_revenue.
@@ -335,45 +421,29 @@ async def get_monthly_revenue(
 
 # =============================================================================
 # GET /api/reports/top-services
-#   Query params: branch_id?, limit? (default 10)
-#   Queries: v_top_services (all branches) or v_top_services_by_branch
-#   Managers: auto-filter to their branch_id.
+#   Query params: limit? (default 10)
+#   Queries: SELECT * FROM v_top_services LIMIT :limit
 #   Access: manager, admin.
 
-# Database views used: v_top_services, v_top_services_by_branch
+# Database view used: v_top_services
 # =============================================================================
 
 @router.get("/top-services", response_model=TopServicesResponse)
 async def get_top_services(
     db=Depends(get_db),
     user=Depends(require_role("manager", "admin")),
-    branch_id: Optional[UUID] = Query(None, description="Filter by branch UUID (admin only)"),
     limit: int = Query(10, description="Maximum number of services to return", ge=1, le=100),
 ):
     """
-    Top services ranked by usage (RANK() OVER total_quantity DESC).
-    - Managers are automatically scoped to their own branch, ranked within it.
-    - Admins see all branches combined, or one branch via ?branch_id=.
+    Top services ranked by usage from v_top_services.
     Returns services in rank order (most used first).
+    The view uses RANK() OVER (ORDER BY total_quantity DESC).
+    Access: manager, admin.
     """
-    effective_branch = _resolve_branch(user, branch_id)
-
-    if effective_branch:
-        rows = await db.fetch(
-            """
-            SELECT * FROM v_top_services_by_branch
-            WHERE branch_id = $1::UUID
-            ORDER BY usage_rank, service_name
-            LIMIT $2
-            """,
-            effective_branch,
-            limit,
-        )
-    else:
-        rows = await db.fetch(
-            "SELECT * FROM v_top_services ORDER BY usage_rank, service_name LIMIT $1",
-            limit,
-        )
+    rows = await db.fetch(
+        "SELECT * FROM v_top_services LIMIT $1",
+        limit,
+    )
 
     report = [
         TopServiceRow(

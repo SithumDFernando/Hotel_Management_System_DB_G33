@@ -19,16 +19,14 @@ LANGUAGE plpgsql
 AS $$
 DECLARE
     v_status      booking_status;
-    -- Unconstrained NUMERIC so an oversized bill reaches the explicit check
-    -- below instead of failing with a numeric-overflow error
-    v_room        NUMERIC;
-    v_svc         NUMERIC;
-    v_discount    NUMERIC;
-    v_subtotal    NUMERIC;
-    v_tax         NUMERIC;
-    v_total       NUMERIC;
-    v_paid        NUMERIC;
-    v_outstanding NUMERIC;
+    v_room        NUMERIC(10,2);
+    v_svc         NUMERIC(10,2);
+    v_discount    NUMERIC(10,2);
+    v_subtotal    NUMERIC(10,2);
+    v_tax         NUMERIC(10,2);
+    v_total       NUMERIC(10,2);
+    v_paid        NUMERIC(10,2);
+    v_outstanding NUMERIC(10,2);
 BEGIN
     -- Lock the booking row so two concurrent calls cannot interleave
     SELECT b.status INTO v_status
@@ -60,11 +58,6 @@ BEGIN
     v_subtotal := v_room + v_svc - v_discount;
     v_tax      := fn_calculate_tax(v_subtotal);
     v_total    := v_subtotal + v_tax;
-
-    -- bill columns are NUMERIC(10,2)
-    IF v_total >= 100000000 THEN
-        RAISE EXCEPTION 'Bill total exceeds the maximum supported amount';
-    END IF;
 
     v_paid := COALESCE(
         (SELECT SUM(p.amount) FROM payment p WHERE p.booking_id = p_booking_id),

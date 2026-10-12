@@ -8,18 +8,84 @@ Purpose:
     
 """
 
-from uuid import UUID
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, EmailStr
 
 from app.auth import hash_password
 from app.db import get_db
-from app.dependencies import assert_guest_profile_free, assert_role_links, require_role
-from app.schemas.branch import BranchCreate, BranchListResponse, BranchOut, BranchUpdate
-from app.schemas.user import UserCreate, UserListResponse, UserOut, UserPatch
+from app.dependencies import require_role
 
 router = APIRouter()
 
+
+# =============================================================================
+# Pydantic Request / Response Models
+# =============================================================================
+
+# -- Branch -------------------------------------------------------------------
+
+class BranchCreate(BaseModel):
+    name: str
+    city: str
+    address: str
+    phone: str
+    manager_name: str
+
+
+class BranchUpdate(BaseModel):
+    name: Optional[str] = None
+    city: Optional[str] = None
+    address: Optional[str] = None
+    phone: Optional[str] = None
+    manager_name: Optional[str] = None
+
+
+class BranchOut(BaseModel):
+    branch_id: str
+    name: str
+    city: str
+    address: str
+    phone: str
+    manager_name: str
+    total_rooms: int
+    active_bookings: int
+
+
+class BranchListResponse(BaseModel):
+    branches: list[BranchOut]
+    total: int
+
+
+# -- User Account -------------------------------------------------------------
+
+class UserCreate(BaseModel):
+    email: EmailStr
+    password: str
+    role: str                        # 'admin' | 'manager' | 'receptionist' | 'guest'
+    branch_id: Optional[str] = None
+    guest_id: Optional[str] = None
+
+
+class UserPatch(BaseModel):
+    role: Optional[str] = None
+    branch_id: Optional[str] = None
+
+
+class UserOut(BaseModel):
+    account_id: str
+    email: str
+    role: str
+    branch_id: Optional[str] = None
+    branch_name: Optional[str] = None
+    guest_id: Optional[str] = None
+    guest_name: Optional[str] = None
+
+
+class UserListResponse(BaseModel):
+    users: list[UserOut]
+    total: int
 
 
 # =============================================================================
@@ -116,7 +182,7 @@ async def create_branch(
 
 @router.put("/branches/{branch_id}")
 async def update_branch(
-    branch_id: UUID,
+    branch_id: str,
     body: BranchUpdate,
     db=Depends(get_db),
     _user=Depends(require_role("admin")),
@@ -177,7 +243,7 @@ async def update_branch(
         branch_id,
     )
 
-    return {"branch_id": str(branch_id), "updated_fields": changed}
+    return {"branch_id": branch_id, "updated_fields": changed}
 
 
 # =============================================================================
@@ -252,7 +318,6 @@ async def create_user(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid role '{body.role}'. Must be one of: {', '.join(sorted(VALID_ROLES))}",
         )
-    assert_role_links(body.role, body.branch_id, body.guest_id)
 
     # Email must be unique across all accounts
     existing = await db.fetchrow(
@@ -288,7 +353,6 @@ async def create_user(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Guest {body.guest_id} not found.",
             )
-        await assert_guest_profile_free(db, body.guest_id)
 
     # Hash the plaintext password before persisting
     hashed = hash_password(body.password)
@@ -299,8 +363,8 @@ async def create_user(
         VALUES ($1, $2, $3, $4, $5::user_role)
         RETURNING account_id
         """,
-        body.guest_id,
-        body.branch_id,
+        body.guest_id or None,
+        body.branch_id or None,
         body.email,
         hashed,
         body.role,
@@ -313,7 +377,7 @@ async def create_user(
 
 @router.patch("/users/{account_id}")
 async def patch_user(
-    account_id: UUID,
+    account_id: str,
     body: UserPatch,
     db=Depends(get_db),
     _user=Depends(require_role("admin")),
@@ -322,12 +386,10 @@ async def patch_user(
     Update a user's role and/or branch assignment.
     Only supplied (non-None) fields are changed.
     Pass branch_id as an empty string to clear the branch assignment.
-    The resulting (role, branch_id, guest_id) must be valid (422), and an
-    admin cannot remove their own admin role (409).
     Access: admin only.
     """
     existing = await db.fetchrow(
-        "SELECT account_id, role, branch_id, guest_id FROM user_account WHERE account_id = $1::UUID",
+        "SELECT account_id, role, branch_id FROM user_account WHERE account_id = $1::UUID",
         account_id,
     )
     if existing is None:
@@ -351,7 +413,7 @@ async def patch_user(
 
     if body.branch_id is not None:
         # Empty string means "clear the branch assignment"
-        if body.branch_id == "":
+        if body.branch_id.strip() == "":
             new_branch_id = None
             changed.append("branch_id")
         else:
@@ -373,15 +435,6 @@ async def patch_user(
             detail="No fields provided for update.",
         )
 
-    # Admins can't demote themselves; since only admins reach this endpoint,
-    # this also guarantees the last admin can never be removed.
-    if str(account_id) == str(_user["account_id"]) and new_role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="You cannot remove your own admin role.",
-        )
-    assert_role_links(new_role, new_branch_id, existing["guest_id"])
-
     await db.execute(
         """
         UPDATE user_account
@@ -393,7 +446,7 @@ async def patch_user(
         account_id,
     )
 
-    return {"account_id": str(account_id), "updated_fields": changed}
+    return {"account_id": account_id, "updated_fields": changed}
 
 
 

@@ -15,7 +15,6 @@
   - [x] Configure Foreign Key relationships with appropriate `ON DELETE` rules
   - [x] Configure CHECK constraints (positive prices, valid date intervals, capacity checks)
   - [x] Configure composite UNIQUE constraints (`branch_id + room_number`, `branch_id + room_type_id`)
-  - [x] Exclusion constraint `excl_booking_room_overlap` (`btree_gist`) against overlapping active bookings (ISSUE-05)
 - [x] **Performance Indexes** (`db/schema/03_indexes.sql`)
   - [x] Create B-Tree indexes on all foreign key columns
   - [x] Create B-Tree indexes on high-frequency lookup fields (`guest.email`, `guest.nic_passport`, `booking.status`)

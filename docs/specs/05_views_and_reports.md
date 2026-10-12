@@ -193,18 +193,11 @@ GROUP BY service_name, category
 ORDER BY total_quantity DESC
 ```
 
-### View: `v_top_services_by_branch`
-
-**Purpose:** Same columns as `v_top_services` plus `branch_id`; the rank is computed **within each branch** (the branch of the booking's room). Used by `GET /reports/top-services` whenever a branch filter applies (always for managers, for admins when `?branch_id=` is given).
-
+**Extended: branch-level breakdown** (parameterized in API):
 ```
-service_usage
-  JOIN service USING (service_id)
-  JOIN booking USING (booking_id)
-  JOIN room USING (room_id)
-GROUP BY branch_id, service_id, service_name, category
-RANK() OVER (PARTITION BY branch_id ORDER BY SUM(quantity) DESC)
--- API filter: WHERE branch_id = :branch_id
+-- Add: JOIN booking USING (booking_id) JOIN room USING (room_id)
+-- GROUP BY also branch_id
+-- Filter: WHERE branch_id = :branch_id
 ```
 
 **Sample output:**
