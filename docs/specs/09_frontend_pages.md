@@ -151,7 +151,7 @@ KPI cards: arrivals, in-house, departures due, rooms available (`GET /rooms?stat
 | Billing Summary | Guests with outstanding balances | `GET /reports/billing-summary` |
 | Service Analytics | Top services, usage trends | `GET /reports/top-services`, `GET /reports/service-usage` |
 
-Tabs (URL `?tab=`): **Overview** (KPIs, 6-month stacked revenue chart, top services), **Reports** (all five reports via `ReportsPanel`), **Rooms** (maintenance toggle, `PATCH /rooms/:id/status`), **Service catalogue** (create / reprice / deactivate, `/services`).
+Tabs (URL `?tab=`): **Overview** (KPIs, 6-month stacked revenue chart, top services), **Reports** (all five reports via `ReportsPanel`), **Rooms** (maintenance toggle, `PATCH /rooms/:id/status`; clearing Maintenance on a room with a checked-in guest gets a 409 for `Available`, so the toggle sets it back to `Occupied`), **Service catalogue** (create / reprice / deactivate, `/services`).
 
 **Components used:** `Navbar`, `ReportTable`, `ReportsPanel`, `BranchOverview`, `RoomManager`, `CatalogueManager`
 

@@ -3,8 +3,10 @@
 -- =============================================================================
 -- Purpose:
 --   Stored procedures for performing guest check-in and check-out operations.
---   Each procedure transitions the booking status AND the room status in a
---   single atomic transaction, keeping both tables consistent.
+--   Each procedure transitions the booking status in one atomic call. The
+--   room status follows from trg_room_status (room_status_trigger.sql),
+--   which fires in the same transaction and is the only owner of
+--   Available <-> Occupied (ISSUE-09).
 --
 -- Procedures to implement:
 --
@@ -17,9 +19,7 @@
 --             SET status = 'Checked-In',
 --                 actual_checkin_time = NOW()
 --             WHERE booking_id = p_booking_id
---        c. Update room status (alternatively handled by room_status_trigger):
---             SET status = 'Occupied'
---             WHERE room_id = (SELECT room_id FROM booking WHERE booking_id = p_booking_id)
+--        c. Room -> 'Occupied' is done by trg_room_status.
 --
 --   2. perform_checkout(p_booking_id UUID)
 --      -----------------------------------------
@@ -34,14 +34,11 @@
 --             SET status = 'Checked-Out',
 --                 actual_checkout_time = NOW()
 --             WHERE booking_id = p_booking_id
---        e. Update room status:
---             SET status = 'Available'
---             WHERE room_id = (SELECT room_id FROM booking WHERE booking_id = p_booking_id)
+--        e. Room -> 'Available' is done by trg_room_status.
 --
 -- Notes:
---   - If room_status_trigger is implemented, steps (c) above may be handled
---     automatically by the trigger on booking status change. Decide on one
---     approach and document it clearly in both files to avoid duplication.
+--   - Neither procedure updates the room table; that keeps a Maintenance
+--     flag from being overwritten by a check-in or checkout.
 --   - Both procedures should COMMIT atomically — no partial updates.
 --
 -- Called by:
@@ -54,10 +51,9 @@ LANGUAGE plpgsql
 AS $$
 DECLARE
     v_status  booking_status;
-    v_room_id UUID;
 BEGIN
     -- A concurrent second check-in waits here, then sees 'Checked-In'
-    SELECT status, room_id INTO v_status, v_room_id
+    SELECT status INTO v_status
       FROM booking
      WHERE booking_id = p_booking_id
        FOR UPDATE;
@@ -74,10 +70,7 @@ BEGIN
     SET status = 'Checked-In', 
         actual_checkin_time = NOW()
     WHERE booking_id = p_booking_id;
-
-    UPDATE room 
-    SET status = 'Occupied' 
-    WHERE room_id = v_room_id;
+    -- Room status: trg_room_status (room_status_trigger.sql) owns it
 END;
 $$;
 
@@ -86,10 +79,9 @@ LANGUAGE plpgsql
 AS $$
 DECLARE
     v_status  booking_status;
-    v_room_id UUID;
     v_balance NUMERIC;
 BEGIN
-    SELECT status, room_id INTO v_status, v_room_id
+    SELECT status INTO v_status
       FROM booking
      WHERE booking_id = p_booking_id
        FOR UPDATE;
@@ -115,9 +107,6 @@ BEGIN
     SET status = 'Checked-Out',
         actual_checkout_time = NOW()
     WHERE booking_id = p_booking_id;
-
-    UPDATE room
-    SET status = 'Available'
-    WHERE room_id = v_room_id;
+    -- Room status: trg_room_status (room_status_trigger.sql) owns it
 END;
 $$;

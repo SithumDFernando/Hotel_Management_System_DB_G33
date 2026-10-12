@@ -26,16 +26,17 @@
   - [x] Lock the booking row (`FOR UPDATE`) in `perform_checkin` so concurrent check-ins can't both succeed (ISSUE-12)
   - [x] `cancel_booking(p_booking_id UUID)` procedure in `db/procedures/booking.sql` (locks the booking, only `Booked`) (ISSUE-12)
   - [x] Validate booking status is `'Booked'`, raise exception if invalid
-  - [x] Update `booking.status = 'Checked-In'`, `actual_checkin_time = NOW()`, `room.status = 'Occupied'`
+  - [x] Update `booking.status = 'Checked-In'`, `actual_checkin_time = NOW()`, `room.status = 'Occupied'` (room part now done by `trg_room_status`, ISSUE-09)
   - [x] Implement `perform_checkout(p_booking_id UUID)`
   - [x] Validate booking status is `'Checked-In'`, raise exception if invalid
-  - [x] Update `booking.status = 'Checked-Out'`, `actual_checkout_time = NOW()`, `room.status = 'Available'`
+  - [x] Update `booking.status = 'Checked-Out'`, `actual_checkout_time = NOW()`, `room.status = 'Available'` (room part now done by `trg_room_status`, ISSUE-09)
   - [x] Recalculate the bill with `generate_bill(p_booking_id, NULL)` before the balance check, so late services are billed (ISSUE-04)
 - [x] **Room Status Sync Trigger** (`db/triggers/room_status_trigger.sql`)
   - [x] Implement `trg_sync_room_status()` trigger function
   - [x] Handle transition to `'Checked-In'` (set room status `'Occupied'`)
   - [x] Handle transition to `'Checked-Out'` or `'Cancelled'` (set room status `'Available'`)
   - [x] Define `AFTER UPDATE OF status ON booking FOR EACH ROW` trigger
+  - [x] Trigger is the single owner of Available ↔ Occupied; guarded updates never override `Maintenance`; `Booked → Cancelled` leaves the room alone (ISSUE-09)
 
 ---
 
@@ -66,7 +67,7 @@
 - [ ] **Database Level Verification**
   - [x] Test double-booking trigger with overlapping date ranges in psql (ensure exception is raised): covered by `backend/tests/test_double_booking.py`, incl. two concurrent sessions
   - [ ] Test booking creation and verify `rate_at_booking` is locked
-  - [ ] Verify check-in and check-out procedures update both `booking` and `room` statuses
+  - [x] Verify check-in and check-out procedures update both `booking` and `room` statuses: covered by `backend/tests/test_room_status.py` (room via the trigger)
 - [ ] **API Level Verification**
   - [ ] Verify endpoints in FastAPI Swagger UI (`http://localhost:8000/docs`)
   - [ ] Verify 409 Conflict returned when booking already reserved room

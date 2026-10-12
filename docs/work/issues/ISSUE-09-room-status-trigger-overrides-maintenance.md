@@ -91,6 +91,28 @@ Update `docs/specs/04_triggers.md`:
 
 ## Acceptance criteria
 
-- [ ] All table rows pass.
-- [ ] `grep -n "UPDATE room" db/procedures` returns nothing.
-- [ ] Specs updated.
+- [x] All table rows pass.
+- [x] `grep -n "UPDATE room" db/procedures` returns nothing.
+- [x] Specs updated.
+
+## Resolution (2026-10-12)
+
+- `trg_sync_room_status` rewritten as planned:
+  - Check-in moves the room `Available → Occupied`.
+  - Leaving after check-in (`Checked-In → Checked-Out/Cancelled`) moves it `Occupied → Available`, unless another booking is still Checked-In.
+  - `Booked → Cancelled` leaves the room alone.
+  - Every `UPDATE room` is guarded by the status it expects, so booking events never overwrite `Maintenance`.
+  - The header now states this policy instead of the old "decide on one approach" note.
+- `perform_checkin` / `perform_checkout` no longer update the room. The unused `v_room_id` is gone, and the comments point to `trg_room_status`. `grep -n "UPDATE room" db/procedures` finds nothing.
+- Optional manual-status rule: **done**. `PATCH /rooms/{id}/status` locks the room row, then returns 409 when asked for `Available` while a booking is Checked-In, or `Occupied` without one. `Maintenance` is always allowed.
+  - Edge case: a room set to Maintenance mid-stay can't be cleared to `Available`. So `RoomManager.jsx` retries with `Occupied` when "Mark available" gets that 409, and says so in the toast.
+- The seed has no room whose status disagrees with its bookings (checked with a query on a fresh build).
+- Check-in while the room is `Maintenance` now leaves the room as `Maintenance` (the guarded update is skipped). ISSUE-08 will block that check-in outright.
+- Tests: `tests/test_room_status.py` (11 tests).
+  - The issue's five table rows, driven through the real procedures (`cancel_booking`, `perform_checkin`, `perform_checkout` with a settled bill).
+  - `Checked-In → Cancelled` frees the room.
+  - With the trigger disabled, the procedures leave the room unchanged, which proves they don't write to it.
+  - Four API tests for the manual rule.
+  - 6 fail on the pre-fix code (Maintenance overwritten on cancel and on checkout, the procedures still writing the room, and the API accepting `Available`/`Occupied` that contradict the bookings). The other 5 are normal transitions that already worked.
+- Specs: `04_triggers.md` §2 (logic, policy table, transition table), `03_stored_procedures_functions.md` (`check_in`/`check_out` room steps), `02_api_contract.md` (room status 409s), `09_frontend_pages.md` (Rooms tab toggle).
+- ⏳ Browser check pending: Manager → Rooms, set Maintenance and clear it on an empty room and on room 101 (guest checked in → back to Occupied).

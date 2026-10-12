@@ -164,7 +164,9 @@
 
 **Response (200):** `{ "room_id": "uuid-...", "status": "Maintenance" }`
 
-**Errors:** `403` manager of another branch · `404 Room not found` · `422` unknown status value
+`Maintenance` is set and cleared only here; check-in/checkout never change it. `Available` and `Occupied` must agree with the bookings (the room trigger keeps them in sync otherwise).
+
+**Errors:** `403` manager of another branch · `404 Room not found` · `409 A guest is checked in to this room, so it can't be Available.` · `409 No guest is checked in to this room, so it can't be Occupied.` · `422` unknown status value
 
 ---
 

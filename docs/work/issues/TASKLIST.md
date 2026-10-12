@@ -54,7 +54,9 @@ Source: full-stack audit run on **2026-10-12** (backend API probes, DB-level con
 - [x] **10. [ISSUE-12](ISSUE-12-concurrency-in-status-transitions.md)** 🟠 `FOR UPDATE` in check-in/checkout, `cancel_booking` procedure, `record_payment` returns its ID
   - ✅ `perform_checkin` locks the booking. New `cancel_booking` procedure (router no longer does SELECT-then-UPDATE). `record_payment` has `OUT p_payment_id` and the API returns that payment. CALL + read-back wrapped in transactions. Unused cancel `reason` removed (decision in the issue file). Covered by `tests/test_status_concurrency.py` (6 tests; the 2 deterministic held-transaction tests fail on every pre-fix run) on new shared `pool` / `pool_api` fixtures. 20/20 repeated runs green. Full suite: 170 passed + `test_phase4` live run passed, on a fresh `run_all.sql` build.
   - ⏳ Browser check: cancel from the Receptionist dashboard and My Bookings (the request no longer sends a body).
-- [ ] **11. [ISSUE-09](ISSUE-09-room-status-trigger-overrides-maintenance.md)** 🟠 Trigger is the single owner of room status; never overrides Maintenance
+- [x] **11. [ISSUE-09](ISSUE-09-room-status-trigger-overrides-maintenance.md)** 🟠 Trigger is the single owner of room status; never overrides Maintenance
+  - ✅ `trg_sync_room_status` has guarded updates (only `Available → Occupied` on check-in, only `Occupied → Available` when a checked-in guest leaves; `Booked → Cancelled` leaves the room alone). Procedures no longer touch `room`. `PATCH /rooms/{id}/status` returns 409 for `Available`/`Occupied` that contradict the bookings; RoomManager falls back to `Occupied` when clearing mid-stay Maintenance. Covered by `tests/test_room_status.py` (11 tests, 6 fail on the pre-fix code). Full suite: 181 passed + `test_phase4` live run passed, on a fresh `run_all.sql` build.
+  - ⏳ Browser check: Manager → Rooms maintenance toggle on an empty room and on an occupied room.
 - [ ] **12. [ISSUE-08](ISSUE-08-missing-booking-business-rules.md)** 🟠 Booking, check-in and service-usage business rules + payment vocabulary
 
 ## Phase 5: Authentication hardening

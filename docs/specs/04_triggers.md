@@ -52,37 +52,44 @@ RETURN NEW;
 ### Logic
 
 ```
--- Condition: only fire when booking status actually changes
-IF OLD.status IS DISTINCT FROM NEW.status THEN
+IF OLD.status IS NOT DISTINCT FROM NEW.status THEN RETURN NEW; END IF;
 
-  CASE NEW.status
-    WHEN 'Checked-In' THEN
-      UPDATE room SET status = 'Occupied' WHERE room_id = NEW.room_id;
+IF NEW.status = 'Checked-In' THEN
+  -- Guest arrives: Available -> Occupied (never overrides Maintenance)
+  UPDATE room SET status = 'Occupied'
+   WHERE room_id = NEW.room_id AND status = 'Available';
 
-    WHEN 'Checked-Out' THEN
-      UPDATE room SET status = 'Available' WHERE room_id = NEW.room_id;
-
-    WHEN 'Cancelled' THEN
-      -- Only set Available if no other active booking exists for this room today
-      IF NOT EXISTS (
-        SELECT 1 FROM booking
-        WHERE room_id = NEW.room_id
-          AND booking_id != NEW.booking_id
-          AND status IN ('Booked', 'Checked-In')
-          AND check_in_date <= CURRENT_DATE
-          AND check_out_date > CURRENT_DATE
-      ) THEN
-        UPDATE room SET status = 'Available' WHERE room_id = NEW.room_id;
-      END IF;
-
-  END CASE;
+ELSIF OLD.status = 'Checked-In' AND NEW.status IN ('Checked-Out', 'Cancelled') THEN
+  -- Guest leaves: Occupied -> Available, unless another booking is still in
+  UPDATE room SET status = 'Available'
+   WHERE room_id = NEW.room_id AND status = 'Occupied'
+     AND NOT EXISTS (SELECT 1 FROM booking
+                      WHERE room_id = NEW.room_id
+                        AND booking_id <> NEW.booking_id
+                        AND status = 'Checked-In');
 END IF;
+-- Booked -> Cancelled: the room was never occupied by this booking -> no change
+RETURN NEW;
 ```
 
+### Room status policy
+| Room status | Who changes it |
+|---|---|
+| `Available` ↔ `Occupied` | **Only this trigger**, from booking events. `perform_checkin` / `perform_checkout` / `cancel_booking` do not touch the `room` table. |
+| `Maintenance` | **Only manually**, via `PATCH /rooms/{id}/status`. No booking event sets or clears it. |
+
+| Start room | Booking transition | Room after |
+|---|---|---|
+| Maintenance | Booked → Cancelled | Maintenance |
+| Available | Booked → Cancelled | Available |
+| Available | Booked → Checked-In | Occupied |
+| Occupied | Checked-In → Checked-Out | Available |
+| Maintenance (set mid-stay) | Checked-In → Checked-Out | Maintenance |
+
 ### Notes
-- Keeps `room.status` in sync with booking lifecycle.
-- Cancellation has extra logic: only frees the room if no other active booking occupies it.
-- The procedures (`check_in`, `check_out`) can delegate room status updates entirely to this trigger to avoid duplication.
+- Every `UPDATE room` is guarded by the status it expects, so a booking event never overwrites `Maintenance`.
+- The manual endpoint enforces the same consistency: `Available` is refused while a booking is `Checked-In`, and `Occupied` without one (409). See `02_api_contract.md`.
+- Runs `AFTER UPDATE OF status` in the same transaction as the booking change.
 
 ---
 
@@ -156,6 +163,6 @@ END IF;
 | # | Trigger Name | Table | Timing | Purpose |
 |---|-------------|-------|--------|---------|
 | 1 | `trg_prevent_double_booking` | booking | BEFORE INSERT/UPDATE | Prevents overlapping reservations |
-| 2 | `trg_update_room_status` | booking | AFTER UPDATE (status) | Syncs room.status with booking lifecycle |
+| 2 | `trg_update_room_status` | booking | AFTER UPDATE (status) | Sole owner of room Available ↔ Occupied; never overrides Maintenance |
 | 3 | `trg_validate_service_usage` | service_usage | BEFORE INSERT | Validates booking status, snapshots price |
 | 4 | `trg_validate_payment` | payment | BEFORE INSERT | Validates bill exists, amount ≤ balance |

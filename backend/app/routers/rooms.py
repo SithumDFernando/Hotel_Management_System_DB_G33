@@ -248,12 +248,38 @@ async def update_room_status(
     Manually update a room's status (e.g. mark as Maintenance).
     Only admin and manager roles can do this; managers only for rooms in
     their own branch.
+
+    Available/Occupied must agree with the bookings (trg_room_status keeps
+    them in sync otherwise): 'Available' is refused while a guest is checked
+    in, 'Occupied' without one (409). 'Maintenance' is always allowed.
     """
     await assert_room_access(db, user, room_id)
-    await db.execute(
-        "UPDATE room SET status = $1::room_status WHERE room_id = $2::UUID",
-        body.status,
-        room_id,
-    )
+    async with db.transaction():
+        # Lock the room so a check-in/checkout can't change the answer below
+        await db.execute(
+            "SELECT 1 FROM room WHERE room_id = $1::UUID FOR UPDATE", room_id
+        )
+        guest_in = await db.fetchval(
+            """
+            SELECT EXISTS (SELECT 1 FROM booking
+                            WHERE room_id = $1::UUID AND status = 'Checked-In')
+            """,
+            room_id,
+        )
+        if body.status == "Available" and guest_in:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="A guest is checked in to this room, so it can't be Available.",
+            )
+        if body.status == "Occupied" and not guest_in:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="No guest is checked in to this room, so it can't be Occupied.",
+            )
+        await db.execute(
+            "UPDATE room SET status = $1::room_status WHERE room_id = $2::UUID",
+            body.status,
+            room_id,
+        )
 
     return {"room_id": str(room_id), "status": body.status}

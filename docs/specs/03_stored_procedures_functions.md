@@ -137,8 +137,8 @@ LOGIC:
   1. SELECT status FROM booking WHERE booking_id = p_booking_id FOR UPDATE
   2. Validate status = 'Booked' → else RAISE 'Only Booked bookings can be checked in'
   3. UPDATE booking SET status = 'Checked-In', actual_checkin_time = NOW()
-  4. UPDATE room SET status = 'Occupied' WHERE room_id = (booking's room_id)
-     → (can also be handled by room_status_trigger)
+  4. Room -> 'Occupied' is done by trg_room_status (the procedure does not
+     update the room table; see 04_triggers.md)
 
 ERRORS:
   - 'Booking not found'
@@ -187,8 +187,8 @@ LOGIC:
   5. IF balance > 0 THEN RAISE 'Outstanding balance of LKR % — pay before checkout'
      → rolls back the whole CALL, including the bill refresh (API → 402)
   6. UPDATE booking SET status = 'Checked-Out', actual_checkout_time = NOW()
-  7. UPDATE room SET status = 'Available' WHERE room_id = (booking's room_id)
-     → (can also be handled by room_status_trigger)
+  7. Room -> 'Available' is done by trg_room_status (a Maintenance flag set
+     during the stay is kept)
 
 ERRORS:
   - 'Booking not found'
