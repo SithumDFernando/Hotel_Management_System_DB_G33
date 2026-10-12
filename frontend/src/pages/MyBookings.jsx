@@ -7,12 +7,11 @@ import useFetch from '@/hooks/useFetch';
 import BillTable from '@/components/BillTable';
 import BookingSummary from '@/components/BookingSummary';
 import Button from '@/components/ui/Button';
-import Icon from '@/components/ui/Icon';
 import { Modal } from '@/components/ui/Modal';
 import { EmptyState, ErrorState, InlineAlert, Skeleton } from '@/components/ui/States';
 import Tabs from '@/components/ui/Tabs';
 import { useToast } from '@/components/ui/Toast';
-import { bookingRef, errorMessage, formatCurrency, formatDate } from '@/utils/formatters';
+import { bookingRef, errorMessage, formatCurrency, formatNumericDate, formatStayRange } from '@/utils/formatters';
 
 const GROUPS = {
   upcoming: (b) => b.status === 'Booked' || b.status === 'Checked-In',
@@ -49,8 +48,8 @@ function BillModal({ booking, onClose }) {
       open
       onClose={onClose}
       size="lg"
-      title={`Bill · ${bookingRef(booking.booking_id)}`}
-      subtitle={`${booking.room.type_name || ''} Room ${booking.room.room_number} · ${booking.room.branch_name} · ${formatDate(booking.check_in_date)} – ${formatDate(booking.check_out_date)}`}
+      title={`Bill · ${booking.room.type_name ? `${booking.room.type_name} ` : ''}Room ${booking.room.room_number}, ${formatStayRange(booking.check_in_date, booking.check_out_date)}`}
+      subtitle={`${booking.room.branch_name} · Booking ${bookingRef(booking.booking_id)}`}
     >
       {state.loading ? (
         <div className="space-y-3"><Skeleton className="h-40 w-full" /><Skeleton className="h-24 w-full" /></div>
@@ -62,17 +61,17 @@ function BillModal({ booking, onClose }) {
             <BillTable bill={state.bill} payments={state.payments} />
           ) : (
             <InlineAlert tone="info">
-              Your bill hasn’t been generated yet. It is prepared by the front desk at check-out and will include your room charges, services and tax.
+              No bill yet. The front desk prepares it at check-out, with room charges, services and tax.
             </InlineAlert>
           )}
           {state.usage?.usages.length > 0 && (
             <section aria-label="Services used">
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-navy-600">Services used</h3>
-              <ul className="divide-y divide-navy-100 overflow-hidden rounded-xl border border-navy-100 text-sm">
+              <h3 className="mb-2 text-sm font-semibold text-ink-900">Services used</h3>
+              <ul className="divide-y divide-ink-100 overflow-hidden rounded-md border border-ink-100 text-sm">
                 {state.usage.usages.map((u) => (
                   <li key={u.usage_id} className="flex items-center justify-between px-4 py-2.5">
-                    <span>{u.service_name} <span className="text-navy-400">× {u.quantity} · {formatDate(u.usage_date)}</span></span>
-                    <span className="font-semibold tabular-nums">{formatCurrency(u.line_total)}</span>
+                    <span>{u.service_name} <span className="text-ink-600">× {u.quantity} · {formatNumericDate(u.usage_date)}</span></span>
+                    <span className="font-medium tabular">{formatCurrency(u.line_total)}</span>
                   </li>
                 ))}
               </ul>
@@ -101,8 +100,8 @@ export default function MyBookings() {
     [bookings],
   );
   const tabs = [
-    { key: 'upcoming', label: 'Upcoming & active', count: grouped.upcoming.length },
-    { key: 'past', label: 'Past stays', count: grouped.past.length },
+    { key: 'upcoming', label: 'Upcoming', count: grouped.upcoming.length },
+    { key: 'past', label: 'Past', count: grouped.past.length },
     { key: 'cancelled', label: 'Cancelled', count: grouped.cancelled.length },
   ];
   const shown = [...grouped[tab]].sort((a, b) =>
@@ -113,7 +112,7 @@ export default function MyBookings() {
     setBusy(true);
     try {
       await cancelBooking(cancelFor.booking_id);
-      toast.success(`Booking ${bookingRef(cancelFor.booking_id)} cancelled`);
+      toast.success(`Cancelled: ${cancelFor.room.type_name ? `${cancelFor.room.type_name} ` : ''}Room ${cancelFor.room.room_number}, ${formatStayRange(cancelFor.check_in_date, cancelFor.check_out_date)}`);
       setCancelFor(null);
       refetch();
     } catch (err) {
@@ -126,40 +125,39 @@ export default function MyBookings() {
   return (
     <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6">
       <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="eyebrow">Your stays</p>
-          <h1 className="mt-1 text-4xl font-semibold">My bookings</h1>
-        </div>
-        <Button to="/rooms">Book a stay <Icon name="arrowRight" /></Button>
+        <h1 className="font-display text-[32px] font-semibold leading-tight text-ink-900">My bookings</h1>
+        <Button variant="secondary" to="/rooms">Book a room</Button>
       </header>
 
-      <Tabs tabs={tabs} value={tab} onChange={setTab} className="mb-5 w-fit max-w-full" />
+      <Tabs tabs={tabs} value={tab} onChange={setTab} idBase="my-bookings" className="mb-5" />
 
       {noProfile ? (
         <EmptyState
-          icon="user"
           title="No guest profile linked"
-          message="Your account isn't linked to a guest profile yet, so there are no bookings to show. Please contact the front desk."
+          message="Your account isn’t linked to a guest profile yet, so there are no bookings to show. Contact the front desk to set it up."
         />
       ) : error ? (
         <ErrorState message={error} onRetry={refetch} />
       ) : isLoading ? (
-        <div className="space-y-4">{[...Array(2)].map((_, i) => <Skeleton key={i} className="h-40 w-full rounded-2xl" />)}</div>
+        <div className="space-y-4">{[...Array(2)].map((_, i) => <Skeleton key={i} className="h-32 w-full rounded-lg" />)}</div>
       ) : shown.length === 0 ? (
         <EmptyState
-          icon="calendar"
           title={tab === 'upcoming' ? 'No upcoming stays' : tab === 'past' ? 'No past stays yet' : 'No cancelled bookings'}
-          message={tab === 'upcoming' ? 'Find a room and plan your next getaway.' : undefined}
-          action={tab === 'upcoming' ? <Button to="/rooms">Browse rooms</Button> : null}
+          message={
+            tab === 'upcoming'
+              ? 'Check availability to book a room.'
+              : tab === 'past'
+                ? 'Stays appear here after check-out.'
+                : 'Bookings you cancel appear here.'
+          }
+          action={tab === 'upcoming' ? <Button to="/rooms">Check availability</Button> : null}
         />
       ) : (
-        <div className="space-y-4">
+        <div role="tabpanel" id={`my-bookings-panel-${tab}`} aria-labelledby={`my-bookings-tab-${tab}`} className="space-y-4">
           {shown.map((b) => (
             <BookingSummary key={b.booking_id} booking={b}>
               {b.status !== 'Cancelled' && (
-                <Button variant="secondary" size="sm" onClick={() => setBillFor(b)}>
-                  <Icon name="receipt" className="h-3.5 w-3.5" /> Bill &amp; services
-                </Button>
+                <Button variant="secondary" size="sm" onClick={() => setBillFor(b)}>View bill</Button>
               )}
               {b.status === 'Booked' && (
                 <Button variant="secondary" size="sm" onClick={() => setCancelFor(b)}>Cancel booking</Button>
@@ -179,14 +177,14 @@ export default function MyBookings() {
         footer={
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setCancelFor(null)}>Keep booking</Button>
-            <Button variant="danger" loading={busy} onClick={confirmCancel}>Yes, cancel</Button>
+            <Button variant="danger" loading={busy} onClick={confirmCancel}>Cancel booking</Button>
           </div>
         }
       >
         {cancelFor && (
-          <p className="text-sm text-navy-600">
-            {cancelFor.room.type_name} Room {cancelFor.room.room_number} at {cancelFor.room.branch_name},{' '}
-            {formatDate(cancelFor.check_in_date)} – {formatDate(cancelFor.check_out_date)}. This can’t be undone.
+          <p className="text-sm text-ink-900">
+            Room {cancelFor.room.room_number} at {cancelFor.room.branch_name} becomes available for{' '}
+            {formatStayRange(cancelFor.check_in_date, cancelFor.check_out_date)}. This can’t be undone.
           </p>
         )}
       </Modal>

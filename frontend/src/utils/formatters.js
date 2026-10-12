@@ -54,6 +54,19 @@ export function formatShortDate(value) {
   return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
 }
 
+// Spec 11 §9 numeric formats: 14/11/2026, and "14/11–16/11" for a stay.
+export function formatNumericDate(value) {
+  if (!value) return '—';
+  const d = String(value).length <= 10 ? parseISODate(value) : new Date(value);
+  return d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+export function formatStayRange(checkIn, checkOut) {
+  if (!checkIn || !checkOut) return '';
+  const dm = (iso) => parseISODate(iso).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' });
+  return `${dm(checkIn)}–${dm(checkOut)}`;
+}
+
 export function formatDateTime(value) {
   if (!value) return '—';
   return new Date(value).toLocaleString('en-GB', {
@@ -88,7 +101,6 @@ export function errorMessage(err, fallback = 'Something went wrong. Please try a
 // Short human-friendly reference derived from the booking UUID.
 export const bookingRef = (id) => `SN-${String(id || '').slice(0, 8).toUpperCase()}`;
 
-export const TAX_RATE = 0.15; // mirrors fn_calculate_tax default (db/functions)
 // Mirrors validate_new_password in backend/app/auth.py (bcrypt reads 72 bytes)
 export function passwordError(pw) {
   if (pw.length < 8) return 'Use at least 8 characters';
