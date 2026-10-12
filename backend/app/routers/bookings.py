@@ -2,6 +2,8 @@
 backend/app/routers/bookings.py
 """
 
+from datetime import date
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from typing import Optional
 import asyncpg
@@ -60,11 +62,17 @@ async def list_bookings(
     branch_id: str | None = Query(None, description="Filter by branch UUID"),
     guest_id: str | None = Query(None, description="Filter by guest UUID"),
     room_id: str | None = Query(None, description="Filter by room UUID"),
-    from_date: str | None = Query(None, alias="from", description="Check-out >= this date"),
-    to_date: str | None = Query(None, alias="to", description="Check-in <= this date"),
+    from_date: date | None = Query(None, alias="from", description="Check-out >= this date"),
+    to_date: date | None = Query(None, alias="to", description="Check-in <= this date"),
     page: int = Query(1, ge=1, description="Page number"),
     per_page: int = Query(20, ge=1, le=100, description="Items per page")
 ):
+    if from_date and to_date and to_date < from_date:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="'to' must not be before 'from'",
+        )
+
     conditions = []
     params = []
     param_idx = 0

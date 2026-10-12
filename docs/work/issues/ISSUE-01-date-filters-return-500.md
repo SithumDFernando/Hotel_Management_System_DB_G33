@@ -84,6 +84,6 @@ In `backend/tests/test_frontend_support_api.py` (or a new `test_regressions.py`)
 
 ## Acceptance criteria
 
-- [ ] Every request in the table above returns 200 with valid input and 4xx with invalid input. None return 500.
+- [x] Every request in the table above returns 200 with valid input and 4xx with invalid input. None return 500.
 - [ ] Room date search, the manager's Branch Overview and the admin Bookings filters work in the browser.
-- [ ] `docs/specs/02_api_contract.md` documents the 400/422 responses.
+- [x] `docs/specs/02_api_contract.md` documents the 400/422 responses.

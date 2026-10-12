@@ -131,6 +131,12 @@
 }
 ```
 
+`check_in` / `check_out` are `YYYY-MM-DD` dates; when both are given, rooms with an overlapping `Booked` or `Checked-In` booking are excluded.
+
+**Errors:**
+- `400` only one of `check_in` / `check_out` given, or `check_out <= check_in`
+- `422` malformed date
+
 ### GET `/api/rooms/:room_id`
 > Public
 
@@ -272,6 +278,12 @@ Calls `create_booking()` stored procedure (SERIALIZABLE).
   ]
 }
 ```
+
+`from` / `to` are `YYYY-MM-DD` dates (`from` matches `check_out_date >= from`, `to` matches `check_in_date <= to`).
+
+**Errors:**
+- `400` `to` is before `from`
+- `422` malformed date
 
 ### GET `/api/bookings/:booking_id`
 > Receptionist, Manager, Admin, or owning Guest
@@ -504,7 +516,11 @@ Calls `record_payment()` stored procedure.
 > All report endpoints: Manager (own branch), Admin (all branches)
 
 ### GET `/api/reports/occupancy`
-**Params:** `?branch_id=uuid&date=2026-02-01` or `?from=2026-02-01&to=2026-02-28`
+**Params:** `?branch_id=uuid&date=2026-02-01` or `?from_date=2026-02-01&to_date=2026-02-28` (`YYYY-MM-DD`)
+
+**Errors:**
+- `400` `to_date <= from_date`
+- `422` malformed date
 
 ### GET `/api/reports/billing-summary`
 **Params:** `?branch_id=uuid&unpaid_only=true`

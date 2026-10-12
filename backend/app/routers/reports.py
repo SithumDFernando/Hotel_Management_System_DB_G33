@@ -4,10 +4,11 @@ backend/app/routers/reports.py
 
 """
 
+from datetime import date as Date
 from decimal import Decimal
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
 from app.db import get_db
@@ -149,15 +150,21 @@ async def get_occupancy_report(
     db=Depends(get_db),
     user=Depends(require_role("manager", "admin")),
     branch_id: Optional[str] = Query(None, description="Filter by branch UUID"),
-    date: Optional[str] = Query(None, description="Point-in-time date YYYY-MM-DD"),
-    from_date: Optional[str] = Query(None, description="Range start date YYYY-MM-DD"),
-    to_date: Optional[str] = Query(None, description="Range end date YYYY-MM-DD"),
+    on_date: Optional[Date] = Query(None, alias="date", description="Point-in-time date YYYY-MM-DD"),
+    from_date: Optional[Date] = Query(None, description="Range start date YYYY-MM-DD"),
+    to_date: Optional[Date] = Query(None, description="Range end date YYYY-MM-DD"),
 ):
     """
     Room occupancy report from v_room_occupancy.
     - Managers are automatically scoped to their own branch.
     - Supports a single date filter or a date range (from_date / to_date).
     """
+    if from_date and to_date and to_date <= from_date:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="to_date must be after from_date",
+        )
+
     effective_branch = _resolve_branch(user, branch_id)
 
     conditions = []
@@ -170,13 +177,13 @@ async def get_occupancy_report(
         params.append(effective_branch)
 
     # Point-in-time: rooms where this date falls within the booking window
-    if date:
+    if on_date:
         idx += 1
         conditions.append(
             f"(check_in_date IS NULL OR "
             f"(check_in_date <= ${idx}::DATE AND check_out_date > ${idx}::DATE))"
         )
-        params.append(date)
+        params.append(on_date)
         
     elif from_date and to_date:
         idx += 1

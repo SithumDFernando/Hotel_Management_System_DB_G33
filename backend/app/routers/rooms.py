@@ -19,6 +19,7 @@ Endpoints:
     PATCH /api/rooms/{room_id}/status — Admin/Manager. Change room status.
 """
 
+from datetime import date
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -84,14 +85,25 @@ async def list_rooms(
     branch_id: str | None = Query(None, description="Filter by branch UUID"),
     room_type: str | None = Query(None, description="Filter by room type name"),
     room_status: str | None = Query(None, alias="status", description="Filter by status"),
-    check_in: str | None = Query(None, description="Availability check: start date YYYY-MM-DD"),
-    check_out: str | None = Query(None, description="Availability check: end date YYYY-MM-DD"),
+    check_in: date | None = Query(None, description="Availability check: start date YYYY-MM-DD"),
+    check_out: date | None = Query(None, description="Availability check: end date YYYY-MM-DD"),
 ):
     """
     List all rooms with optional filters.
     If check_in + check_out are provided, excludes rooms with overlapping
     active bookings (anti-join) — effectively an availability search.
     """
+    if (check_in is None) != (check_out is None):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="check_in and check_out must be provided together",
+        )
+    if check_in and check_out and check_out <= check_in:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="check_out must be after check_in",
+        )
+
     # Build the query dynamically based on provided filters
     conditions = []
     params = []
