@@ -79,12 +79,15 @@ class BookingCheckInResponse(BaseModel):
 class BillSummary(BaseModel):
     total_amount: float
     amount_paid: float
+    outstanding_balance: float
+    balance_flag: bool
 
 class BookingCheckOutResponse(BaseModel):
     booking_id: UUID
     status: str
     actual_checkout_time: datetime | None = None
-    bill: BillSummary | None = None
+    # perform_checkout always refreshes (or creates) the bill first
+    bill: BillSummary
 
 class BookingCancelResponse(BaseModel):
     status: str

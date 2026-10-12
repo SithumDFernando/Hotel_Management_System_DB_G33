@@ -90,6 +90,21 @@ DB-level (in `test_business_logic.py`) and API-level:
 
 ## Acceptance criteria
 
-- [ ] Checkout is impossible while any charge on the booking is unpaid, regardless of when the bill was last generated.
-- [ ] The existing discount survives the recalculation at checkout.
-- [ ] The bill modal shows current totals for in-house guests.
+- [x] Checkout is impossible while any charge on the booking is unpaid, regardless of when the bill was last generated.
+- [x] The existing discount survives the recalculation at checkout.
+- [x] The bill modal shows current totals for in-house guests. ⏳ Code verified (it already regenerated on open); browser check pending.
+
+## Resolution (2026-10-12)
+
+- `perform_checkout` (`db/procedures/checkin_checkout.sql`) now:
+  - locks the booking row (`FOR UPDATE`);
+  - calls `generate_bill(p_booking_id, NULL)` before the balance check. This creates the bill if it's missing, bills services added since the last generate, and keeps the existing discount.
+  - still raises `Outstanding balance of LKR % — pay before checkout`. The "Bill not yet generated" path at checkout is gone.
+  - The room `UPDATE` stays for now; ISSUE-09 hands it to the trigger.
+- The 402 rolls back the whole `CALL`, including the bill refresh. So after a 402 the *stored* bill is still stale, but the 402 message carries the true balance, and the bill modal regenerates on open. (The "Tests to add" note above that "the bill now includes the service charge" after the 402 only holds once the modal or `/generate` runs. The test checks that.)
+- Frontend: `BillPaymentModal.jsx` already regenerated the bill on open for every booking that isn't Checked-Out (plan step 3 was already done). `ReceptionistDashboard.jsx` now opens the payment window on 402 only. It used to also match any message containing "bill", which covered the old "Bill not yet generated" 400.
+- Router: the checkout response's `bill` block is always present and now includes `outstanding_balance` and `balance_flag`, matching `02_api_contract.md`.
+- Tests: `tests/test_checkout_billing.py` (7 tests, API + direct `CALL`). They're in a new pytest file rather than the script-style `test_business_logic.py`. 6 fail on the pre-fix code: checkout returned 200 with the stale 79,350 total, or 400 "Bill not yet generated". The discount-only test passes pre-fix too; it guards the fix against dropping the discount.
+- `conftest.py`: the `api` fixture now runs each request in its own savepoint. Before, a failed request (e.g. the 402) left the test transaction aborted, so a test couldn't continue.
+- Specs: `02_api_contract.md` (checkout), `03_stored_procedures_functions.md` (`check_out`), `09_frontend_pages.md` (bill window).
+- ⏳ Browser check pending: Receptionist → Current Guests → add a service after paying → Check out opens the payment window with the new balance.

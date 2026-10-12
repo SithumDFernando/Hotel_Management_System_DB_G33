@@ -152,17 +152,22 @@ ERRORS:
 LOGIC:
   1. SELECT status FROM booking WHERE booking_id = p_booking_id FOR UPDATE
   2. Validate status = 'Checked-In'
-  3. balance := fn_get_outstanding_balance(p_booking_id)
-  4. IF balance > 0 THEN RAISE 'Outstanding balance of LKR % — pay before checkout'
-  5. UPDATE booking SET status = 'Checked-Out', actual_checkout_time = NOW()
-  6. UPDATE room SET status = 'Available' WHERE room_id = (booking's room_id)
+  3. CALL generate_bill(p_booking_id, NULL)
+     → the stored bill is only as fresh as the last generate, so recalculate
+       it here: creates it if missing, bills services added since, keeps the
+       existing discount (NULL)
+  4. balance := fn_get_outstanding_balance(p_booking_id)
+  5. IF balance > 0 THEN RAISE 'Outstanding balance of LKR % — pay before checkout'
+     → rolls back the whole CALL, including the bill refresh (API → 402)
+  6. UPDATE booking SET status = 'Checked-Out', actual_checkout_time = NOW()
+  7. UPDATE room SET status = 'Available' WHERE room_id = (booking's room_id)
      → (can also be handled by room_status_trigger)
 
 ERRORS:
   - 'Booking not found'
   - 'Only Checked-In bookings can be checked out'
-  - 'Outstanding balance of LKR X — payment required before checkout'
-  - 'Bill not yet generated for this booking'
+  - 'Outstanding balance of LKR X — pay before checkout'
+  (No 'Bill not yet generated' path: step 3 always creates the bill.)
 ```
 
 ---

@@ -10,6 +10,9 @@ Shared pytest setup.
 - `api` fixture: an httpx client wired to the FastAPI app in-process, with
   get_db overridden to one real connection inside a transaction that is
   rolled back after the test, so tests can insert data without leaving any.
+  Each request runs in its own savepoint, so a request that fails in the DB
+  (e.g. a 402 checkout) is undone on its own and the test can carry on, much
+  like an autocommitted statement in production.
 """
 
 import sys
@@ -64,7 +67,8 @@ async def db_conn():
 @pytest.fixture
 async def api(db_conn):
     async def _override_get_db():
-        yield db_conn
+        async with db_conn.transaction():
+            yield db_conn
 
     app.dependency_overrides[get_db] = _override_get_db
     try:

@@ -251,23 +251,25 @@ async def checkout_booking(
             "SELECT booking_id, status, actual_checkout_time FROM booking WHERE booking_id = $1::UUID",
             booking_id
         )
+        # perform_checkout has just recalculated this bill
         bill_row = await db.fetchrow(
-            "SELECT total_amount, amount_paid FROM bill WHERE booking_id = $1::UUID",
+            """
+            SELECT total_amount, amount_paid, outstanding_balance, balance_flag
+              FROM bill WHERE booking_id = $1::UUID
+            """,
             booking_id
         )
-        
-        bill_summary = None
-        if bill_row:
-            bill_summary = BillSummary(
-                total_amount=float(bill_row["total_amount"]),
-                amount_paid=float(bill_row["amount_paid"])
-            )
-            
+
         return BookingCheckOutResponse(
             booking_id=row["booking_id"],
             status=row["status"],
             actual_checkout_time=row["actual_checkout_time"],
-            bill=bill_summary
+            bill=BillSummary(
+                total_amount=float(bill_row["total_amount"]),
+                amount_paid=float(bill_row["amount_paid"]),
+                outstanding_balance=float(bill_row["outstanding_balance"]),
+                balance_flag=bill_row["balance_flag"],
+            )
         )
     except asyncpg.exceptions.RaiseError as e:
         msg = str(e)

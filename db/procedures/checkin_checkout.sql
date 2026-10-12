@@ -23,16 +23,19 @@
 --   2. perform_checkout(p_booking_id UUID)
 --      -----------------------------------------
 --      Steps:
---        a. Validate: booking.status must be 'Checked-In'. Raise exception otherwise.
---        b. Update booking:
+--        a. Lock the booking row; validate status = 'Checked-In'.
+--        b. CALL generate_bill(p_booking_id, NULL): creates the bill if missing,
+--           or recalculates it so every service added since the last
+--           generate is billed. NULL keeps the existing discount.
+--        c. Raise 'Outstanding balance ...' if anything is still unpaid. The
+--           whole CALL rolls back, including the bill refresh (API -> 402).
+--        d. Update booking:
 --             SET status = 'Checked-Out',
 --                 actual_checkout_time = NOW()
 --             WHERE booking_id = p_booking_id
---        c. Update room status:
+--        e. Update room status:
 --             SET status = 'Available'
 --             WHERE room_id = (SELECT room_id FROM booking WHERE booking_id = p_booking_id)
---        d. (Optional) Auto-generate the bill if not already present:
---             CALL generate_bill(p_booking_id);
 --
 -- Notes:
 --   - If room_status_trigger is implemented, steps (c) above may be handled
@@ -78,33 +81,39 @@ CREATE OR REPLACE PROCEDURE perform_checkout(p_booking_id UUID)
 LANGUAGE plpgsql
 AS $$
 DECLARE
-    v_status VARCHAR;
+    v_status  booking_status;
     v_room_id UUID;
     v_balance NUMERIC;
 BEGIN
     SELECT status, room_id INTO v_status, v_room_id
-    FROM booking WHERE booking_id = p_booking_id;
-    
-    IF v_status IS NULL THEN
+      FROM booking
+     WHERE booking_id = p_booking_id
+       FOR UPDATE;
+
+    IF NOT FOUND THEN
         RAISE EXCEPTION 'Booking not found';
     END IF;
 
-    IF v_status != 'Checked-In' THEN
+    IF v_status <> 'Checked-In' THEN
         RAISE EXCEPTION 'Only Checked-In bookings can be checked out';
     END IF;
+
+    -- The stored bill is only as fresh as the last generate_bill call, so
+    -- bring it up to date first (creates it if missing, keeps the discount)
+    CALL generate_bill(p_booking_id, NULL);
 
     v_balance := fn_get_outstanding_balance(p_booking_id);
     IF v_balance > 0 THEN
         RAISE EXCEPTION 'Outstanding balance of LKR % — pay before checkout', v_balance;
     END IF;
 
-    UPDATE booking 
-    SET status = 'Checked-Out', 
+    UPDATE booking
+    SET status = 'Checked-Out',
         actual_checkout_time = NOW()
     WHERE booking_id = p_booking_id;
 
-    UPDATE room 
-    SET status = 'Available' 
+    UPDATE room
+    SET status = 'Available'
     WHERE room_id = v_room_id;
 END;
 $$;

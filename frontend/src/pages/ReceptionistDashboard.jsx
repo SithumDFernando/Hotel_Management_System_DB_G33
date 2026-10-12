@@ -113,8 +113,8 @@ export default function ReceptionistDashboard() {
     } catch (err) {
       const status = err.response?.status;
       const msg = errorMessage(err);
-      // Unpaid / ungenerated bill: take the receptionist straight to settlement.
-      if (status === 402 || /bill/i.test(msg)) {
+      // Unpaid charges (checkout recalculates the bill first): go straight to settlement.
+      if (status === 402) {
         toast.error(msg);
         setCheckoutFor(null);
         setBillFor(b);

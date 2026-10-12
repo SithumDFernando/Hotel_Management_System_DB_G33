@@ -344,7 +344,7 @@ Calls `perform_checkin()` stored procedure.
 ### PATCH `/api/bookings/:booking_id/checkout`
 > Receptionist, Manager, Admin
 
-Calls `perform_checkout()` stored procedure. Fails if bill has outstanding balance.
+Calls `perform_checkout()` stored procedure, which first recalculates the bill with `generate_bill(booking, NULL)` (creating it if none exists and keeping any existing discount), so services added since the last generate are billed. Fails with 402 if anything is still unpaid; the whole call rolls back, including the bill refresh. The `bill` block is always present and shows the recalculated totals.
 
 **Response (200):**
 ```json
@@ -361,7 +361,7 @@ Calls `perform_checkout()` stored procedure. Fails if bill has outstanding balan
 }
 ```
 
-**Errors:** `402 Outstanding balance of LKR 15,000.00 — payment required before checkout` · `403` booking of another branch · `404 Booking not found`
+**Errors:** `400 Only Checked-In bookings can be checked out` · `402 Outstanding balance of LKR 17250.00 — pay before checkout` (also when no bill was ever generated, since room charges are owed) · `403` booking of another branch · `404 Booking not found`
 
 ---
 
