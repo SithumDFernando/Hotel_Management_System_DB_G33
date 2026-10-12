@@ -49,7 +49,8 @@ Source: full-stack audit run on **2026-10-12** (backend API probes, DB-level con
   - ✅ `perform_checkout` locks the booking and calls `generate_bill(id, NULL)` before the balance check. A missing bill is created, the discount is kept, and the 402 also covers "no bill yet". The checkout response's `bill` now has `outstanding_balance` / `balance_flag`. Covered by `tests/test_checkout_billing.py` (7 tests, 6 fail on the pre-fix code). Full suite: 155 passed + `test_phase4` live run passed, on a fresh `run_all.sql` build.
   - ✅ `api` test fixture now runs each request in a savepoint, so a test can continue after a failed request.
   - ⏳ Browser check: add a service after paying, then check out → payment window opens with the new balance.
-- [ ] **9. [ISSUE-05](ISSUE-05-double-booking-race-condition.md)** 🔴 Exclusion constraint + room lock against double booking
+- [x] **9. [ISSUE-05](ISSUE-05-double-booking-race-condition.md)** 🔴 Exclusion constraint + room lock against double booking
+  - ✅ `excl_booking_room_overlap` (GiST, `btree_gist`, `'[)'`, active statuses only) + `FOR UPDATE` on the room row in `trg_check_double_booking`. The 409 mapping already existed (ISSUE-07 handler). Covered by `tests/test_double_booking.py` (9 tests incl. two-session and 10-request burst; 3 fail on the pre-fix code/schema; 5 repeat runs with no flakes). Full suite: 164 passed + `test_phase4` live run passed, on a fresh `run_all.sql` build.
 - [ ] **10. [ISSUE-12](ISSUE-12-concurrency-in-status-transitions.md)** 🟠 `FOR UPDATE` in check-in/checkout, `cancel_booking` procedure, `record_payment` returns its ID
 - [ ] **11. [ISSUE-09](ISSUE-09-room-status-trigger-overrides-maintenance.md)** 🟠 Trigger is the single owner of room status; never overrides Maintenance
 - [ ] **12. [ISSUE-08](ISSUE-08-missing-booking-business-rules.md)** 🟠 Booking, check-in and service-usage business rules + payment vocabulary

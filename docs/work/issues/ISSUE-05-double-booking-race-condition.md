@@ -86,6 +86,21 @@ If ISSUE-07's global asyncpg handler lands first, map `ExclusionViolationError �
 
 ## Acceptance criteria
 
-- [ ] The two-session reproduction above fails for the second session.
-- [ ] Concurrent API requests never produce overlapping active bookings and never return 500.
-- [ ] `docs/specs/01_database_design.md` and `06_indexing_strategy.md` mention the exclusion constraint.
+- [x] The two-session reproduction above fails for the second session.
+- [x] Concurrent API requests never produce overlapping active bookings and never return 500.
+- [x] `docs/specs/01_database_design.md` and `06_indexing_strategy.md` mention the exclusion constraint.
+
+## Resolution (2026-10-12)
+
+- `db/schema/02_constraints.sql`:
+  - `CREATE EXTENSION IF NOT EXISTS btree_gist` at the top. It's trusted, so the DB owner can create it; `setup_db.sql` creates `skynest` with `OWNER skynest_user`, and in Docker the user is the superuser.
+  - New section with `excl_booking_room_overlap` exactly as planned (`'[)'`, `WHERE status IN ('Booked','Checked-In')`). `run_all.sql` is still the single entry point and builds cleanly with the seed, so no seed bookings overlap.
+- `trg_check_double_booking` now runs `PERFORM 1 FROM room WHERE room_id = NEW.room_id FOR UPDATE` before its `EXISTS` check. A concurrent second booking waits for the first to commit, then gets the friendly "already booked" message. The lock is only taken when the new row is active.
+- Router: no change. ISSUE-07's global handler already maps `ExclusionViolationError` → `409 Room is not available for the selected dates.`, and the trigger's message still maps to 409 in `create_booking`.
+- `test_business_logic.py` checks for "already booked" in the message, which the trigger still raises, so it passes unchanged.
+- Tests: `tests/test_double_booking.py` (9 tests).
+  - Covered: the two-session reproduction; a 10-request `asyncio.gather` burst (exactly one 201 and nine 409); the constraint with the trigger disabled (overlap, reactivating a cancelled booking into an overlap, inactive bookings don't block, back-to-back stays allowed); back-to-back and overlap through the API.
+  - The concurrency tests use their own pool with real commits, and delete their 2031 bookings before and after.
+  - Ran 5× in a row with no flakes.
+  - 3 fail on the pre-fix code and schema: B didn't wait and both overlapping bookings committed, and two "DID NOT RAISE ExclusionViolationError". The burst test passes pre-fix too: over HTTP the window is small, as the audit saw. It stays as a no-500 guard.
+- Specs: `01_database_design.md` §2.9, `04_triggers.md` §1 (lock + constraint; removed the claim that `create_booking()` takes a lock), `06_indexing_strategy.md` (index #16, GiST note).

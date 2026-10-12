@@ -14,7 +14,13 @@
 --   FK:     fk_<table>_<column>
 --   CHECK:  chk_<table>_<description>
 --   UNIQUE: uq_<table>_<column(s)>
+--   EXCLUDE: excl_<table>_<description>
 -- =============================================================================
+
+-- btree_gist lets a GiST index handle the UUID equality part of
+-- excl_booking_room_overlap. It is a trusted extension (PG13+), so the
+-- database owner can create it without superuser rights.
+CREATE EXTENSION IF NOT EXISTS btree_gist;
 
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -142,3 +148,21 @@ ALTER TABLE bill
         CHECK (amount_paid >= 0),
     ADD CONSTRAINT chk_bill_outstanding
         CHECK (outstanding_balance >= 0);
+
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- EXCLUSION CONSTRAINTS
+-- ─────────────────────────────────────────────────────────────────────────────
+
+-- No two active bookings for the same room may overlap. This is the real
+-- guarantee against double booking: trg_check_double_booking only sees
+-- committed rows, so two concurrent inserts could both pass it.
+-- '[)': the check-out day can be the next guest's check-in day.
+-- Cancelled and Checked-Out bookings don't block (same rule as the trigger).
+ALTER TABLE booking
+    ADD CONSTRAINT excl_booking_room_overlap
+        EXCLUDE USING gist (
+            room_id WITH =,
+            daterange(check_in_date, check_out_date, '[)') WITH &&
+        )
+        WHERE (status IN ('Booked', 'Checked-In'));

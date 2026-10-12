@@ -17,6 +17,7 @@
 
 ```
 IF NEW.status NOT IN ('Cancelled', 'Checked-Out') THEN
+  PERFORM 1 FROM room WHERE room_id = NEW.room_id FOR UPDATE;  -- serialize per room
   IF EXISTS (
     SELECT 1 FROM booking
     WHERE room_id = NEW.room_id
@@ -32,7 +33,8 @@ RETURN NEW;
 ```
 
 ### Notes
-- This is a **safety net** — `create_booking()` also checks with `FOR UPDATE` lock.
+- **Concurrency:** the trigger locks the room row first, so two concurrent bookings for the same room run one after another; the second waits for the first to commit, then sees it and gets this error. Without the lock both `EXISTS` checks would pass under READ COMMITTED, because neither sees the other's uncommitted insert.
+- The guarantee is the exclusion constraint `excl_booking_room_overlap` (see `01_database_design.md` §2.9). It also catches anything that skips the trigger; the API maps its error to 409.
 - The trigger catches edge cases like direct SQL INSERTs or status UPDATEs that reactivate a cancelled booking.
 - Does NOT fire for Cancelled/Checked-Out status transitions (those free up the room).
 

@@ -14,6 +14,7 @@
   - [x] Query for overlapping active bookings (`status NOT IN ('Cancelled', 'Checked-Out')`)
   - [x] Overlap check: `existing.check_in_date < new.check_out_date AND existing.check_out_date > new.check_in_date`
   - [x] Raise exception on overlap: `RAISE EXCEPTION 'Room % is already booked for the selected dates.'`
+  - [x] Lock the room row (`FOR UPDATE`) first so concurrent bookings for one room are serialized (ISSUE-05)
   - [x] Define `BEFORE INSERT ON booking FOR EACH ROW` trigger
 - [x] **Booking Creation Stored Procedure** (`db/procedures/booking.sql`)
   - [x] Implement `create_booking(p_guest_id, p_room_id, p_check_in_date, p_check_out_date, p_payment_option, OUT p_booking_id)`
@@ -61,7 +62,7 @@
 ## Phase 4: Testing & Verification
 
 - [ ] **Database Level Verification**
-  - [ ] Test double-booking trigger with overlapping date ranges in psql (ensure exception is raised)
+  - [x] Test double-booking trigger with overlapping date ranges in psql (ensure exception is raised): covered by `backend/tests/test_double_booking.py`, incl. two concurrent sessions
   - [ ] Test booking creation and verify `rate_at_booking` is locked
   - [ ] Verify check-in and check-out procedures update both `booking` and `room` statuses
 - [ ] **API Level Verification**

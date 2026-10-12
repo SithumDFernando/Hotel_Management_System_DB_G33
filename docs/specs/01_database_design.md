@@ -147,6 +147,7 @@
 | `actual_checkout_time` | TIMESTAMP | NULL |
 
 > CHECK: `check_out_date > check_in_date`
+> EXCLUDE `excl_booking_room_overlap`: no two **active** (`Booked` / `Checked-In`) bookings for the same room may overlap: `EXCLUDE USING gist (room_id WITH =, daterange(check_in_date, check_out_date, '[)') WITH &&) WHERE (status IN ('Booked','Checked-In'))`. The `'[)'` bound lets one guest check out on the day the next checks in. Needs the `btree_gist` extension (trusted, created in `02_constraints.sql`). This is the guarantee against double booking under concurrent requests; `trg_check_double_booking` gives the friendly error message. The API maps a violation to `409 Room is not available for the selected dates.`
 > `rate_at_booking` is snapshotted from `room_rate.daily_rate` at booking creation time so billing is immutable even if rates change.
 
 ---
