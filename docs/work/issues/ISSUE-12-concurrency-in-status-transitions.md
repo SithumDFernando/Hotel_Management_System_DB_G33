@@ -98,5 +98,21 @@ Where a router does "CALL procedure" then "SELECT result", wrap both in `async w
 
 ## Acceptance criteria
 
-- [ ] All four concurrency tests pass reliably, 20 repeated runs.
-- [ ] No status transitions are performed with raw `UPDATE booking SET status` outside `db/procedures/`.
+- [x] All four concurrency tests pass reliably, 20 repeated runs.
+- [x] No status transitions are performed with raw `UPDATE booking SET status` outside `db/procedures/`.
+
+## Resolution (2026-10-12)
+
+- `perform_checkin`: `SELECT … FOR UPDATE`, `v_status booking_status`, `IF NOT FOUND`. `perform_checkout` already had the lock from ISSUE-04. The room `UPDATE`s stay until ISSUE-09.
+- New `cancel_booking(p_booking_id)` procedure in `db/procedures/booking.sql`, as planned. Its message is `Only Booked bookings can be cancelled (current status: %)`.
+  - `bookings.cancel_booking` keeps `assert_booking_access`, then runs `CALL cancel_booking` and maps "not found" → 404 and anything else → 400. The Python status check and the raw `UPDATE` are gone; `grep -rn "UPDATE booking" backend/app` finds nothing.
+- **`reason` decision: removed.** Nothing stored, showed or sent it: the frontend's `cancelBooking(id, reason)` was always called without one. `BookingStatusUpdate` is deleted, the route takes no body (a client sending `{}` still works), and `api/bookings.js` no longer sends one. Add a column later if the hotel wants cancellation reasons.
+- `record_payment` now has `OUT p_payment_id UUID`. `p_notes` lost its `DEFAULT` so the `CALL` stays unambiguous; callers always pass five arguments. `create_payment` reads the payment back `WHERE payment_id = p_payment_id`. Updated call sites: `billing.py` and `tests/test_checkout_billing.py`. `db/tests/test_crud.sql` and the script suites don't call it.
+- Wrapped CALL + read-back in `async with db.transaction()`: `create_booking`, check-in, checkout, `generate_bill`, `create_payment`. Cancel is a single `CALL`.
+- Tests:
+  - New file `tests/test_status_concurrency.py` (6 tests). It covers the four planned tests (5 check-ins, 5 cancels, check-in vs cancel, 2 payments) and adds two deterministic held-transaction tests: a second check-in, and an API cancel, each fired while another session holds an uncommitted check-in.
+  - Each test uses a fresh booking for today on room 103 and real commits through the new shared `pool` / `pool_api` / `pool_login` fixtures in `conftest.py`. It deletes the booking afterwards and puts the room status back. `test_double_booking.py` now uses the same fixtures.
+  - 20 repeated runs of both concurrency files: 20/20 green.
+  - Pre-fix: the two held-transaction tests fail every run (the second check-in succeeds; the cancel returns 200 and cancels a checked-in booking). The in-process bursts only hit the race some of the time on the old code (the cancel burst failed 1 run in 5, with `[200, 200, 400, 400, 400]`). The payment test passed pre-fix because the bill lock already serialized payments. It now guards that each response is its own payment.
+- Specs: `02_api_contract.md` (check-in/cancel/payments; the check-in 400 text now matches the code), `03_stored_procedures_functions.md` (`check_in` concurrency, new `cancel_booking`, `record_payment` signature, `check_out` → `generate_bill` dependency).
+- ⏳ Browser check pending: cancel from the Receptionist dashboard and from My Bookings (the request no longer sends a body).

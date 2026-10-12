@@ -95,3 +95,33 @@ BEGIN
     RETURNING booking_id INTO p_booking_id;
 END;
 $$;
+
+
+-- cancel_booking(booking)   (call with: CALL cancel_booking(...))
+
+-- Cancels a 'Booked' booking. The booking row is locked first, so a cancel
+-- racing a check-in (or another cancel) sees the other's result and raises
+-- instead of overwriting it. Room status is left to trg_room_status.
+
+CREATE OR REPLACE PROCEDURE cancel_booking(p_booking_id UUID)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_status booking_status;
+BEGIN
+    SELECT status INTO v_status
+      FROM booking
+     WHERE booking_id = p_booking_id
+       FOR UPDATE;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Booking not found';
+    END IF;
+
+    IF v_status <> 'Booked' THEN
+        RAISE EXCEPTION 'Only Booked bookings can be cancelled (current status: %)', v_status;
+    END IF;
+
+    UPDATE booking SET status = 'Cancelled' WHERE booking_id = p_booking_id;
+END;
+$$;

@@ -51,7 +51,9 @@ Source: full-stack audit run on **2026-10-12** (backend API probes, DB-level con
   - ⏳ Browser check: add a service after paying, then check out → payment window opens with the new balance.
 - [x] **9. [ISSUE-05](ISSUE-05-double-booking-race-condition.md)** 🔴 Exclusion constraint + room lock against double booking
   - ✅ `excl_booking_room_overlap` (GiST, `btree_gist`, `'[)'`, active statuses only) + `FOR UPDATE` on the room row in `trg_check_double_booking`. The 409 mapping already existed (ISSUE-07 handler). Covered by `tests/test_double_booking.py` (9 tests incl. two-session and 10-request burst; 3 fail on the pre-fix code/schema; 5 repeat runs with no flakes). Full suite: 164 passed + `test_phase4` live run passed, on a fresh `run_all.sql` build.
-- [ ] **10. [ISSUE-12](ISSUE-12-concurrency-in-status-transitions.md)** 🟠 `FOR UPDATE` in check-in/checkout, `cancel_booking` procedure, `record_payment` returns its ID
+- [x] **10. [ISSUE-12](ISSUE-12-concurrency-in-status-transitions.md)** 🟠 `FOR UPDATE` in check-in/checkout, `cancel_booking` procedure, `record_payment` returns its ID
+  - ✅ `perform_checkin` locks the booking. New `cancel_booking` procedure (router no longer does SELECT-then-UPDATE). `record_payment` has `OUT p_payment_id` and the API returns that payment. CALL + read-back wrapped in transactions. Unused cancel `reason` removed (decision in the issue file). Covered by `tests/test_status_concurrency.py` (6 tests; the 2 deterministic held-transaction tests fail on every pre-fix run) on new shared `pool` / `pool_api` fixtures. 20/20 repeated runs green. Full suite: 170 passed + `test_phase4` live run passed, on a fresh `run_all.sql` build.
+  - ⏳ Browser check: cancel from the Receptionist dashboard and My Bookings (the request no longer sends a body).
 - [ ] **11. [ISSUE-09](ISSUE-09-room-status-trigger-overrides-maintenance.md)** 🟠 Trigger is the single owner of room status; never overrides Maintenance
 - [ ] **12. [ISSUE-08](ISSUE-08-missing-booking-business-rules.md)** 🟠 Booking, check-in and service-usage business rules + payment vocabulary
 

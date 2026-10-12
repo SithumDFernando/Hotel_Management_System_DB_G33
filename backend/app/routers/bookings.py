@@ -17,7 +17,7 @@ from app.schemas.booking import (
     BookingCreate, BookingOut, BookingListOut, 
     BookingListResponse, GuestInfo, RoomInfo, BookingDetailOut,
     BookingCheckInResponse, BookingCheckOutResponse, BillSummary,
-    BookingStatusUpdate, BookingCancelResponse, BookingStatus
+    BookingCancelResponse, BookingStatus
 )
 
 router = APIRouter()
@@ -35,20 +35,16 @@ async def create_booking(
     await assert_room_access(db, user, body.room_id)
 
     try:
-        # Calls the stored procedure.
-        result = await db.fetchrow(
-            "CALL create_booking($1::UUID, $2::UUID, $3::DATE, $4::DATE, $5::VARCHAR, NULL)",
-            body.guest_id, body.room_id, body.check_in_date, body.check_out_date, body.payment_option
-        )
-        if not result or "p_booking_id" not in result:
-             raise HTTPException(status_code=500, detail="Failed to create booking")
-        booking_id = result["p_booking_id"]
-        
-        # Fetch the created booking
-        booking = await db.fetchrow(
-            "SELECT * FROM booking WHERE booking_id = $1",
-            booking_id
-        )
+        # CALL + read back in one transaction, so the response is what was committed
+        async with db.transaction():
+            result = await db.fetchrow(
+                "CALL create_booking($1::UUID, $2::UUID, $3::DATE, $4::DATE, $5::VARCHAR, NULL)",
+                body.guest_id, body.room_id, body.check_in_date, body.check_out_date,
+                body.payment_option
+            )
+            booking = await db.fetchrow(
+                "SELECT * FROM booking WHERE booking_id = $1", result["p_booking_id"]
+            )
         return BookingOut(**dict(booking))
         
     except asyncpg.exceptions.RaiseError as e:
@@ -219,12 +215,12 @@ async def checkin_booking(
 ):
     await assert_booking_access(db, user, booking_id)
     try:
-        await db.execute("CALL perform_checkin($1::UUID)", booking_id)
-        
-        row = await db.fetchrow(
-            "SELECT booking_id, status, actual_checkin_time FROM booking WHERE booking_id = $1::UUID",
-            booking_id
-        )
+        async with db.transaction():
+            await db.execute("CALL perform_checkin($1::UUID)", booking_id)
+            row = await db.fetchrow(
+                "SELECT booking_id, status, actual_checkin_time FROM booking WHERE booking_id = $1::UUID",
+                booking_id
+            )
         return BookingCheckInResponse(
             booking_id=row["booking_id"],
             status=row["status"],
@@ -245,20 +241,20 @@ async def checkout_booking(
 ):
     await assert_booking_access(db, user, booking_id)
     try:
-        await db.execute("CALL perform_checkout($1::UUID)", booking_id)
-        
-        row = await db.fetchrow(
-            "SELECT booking_id, status, actual_checkout_time FROM booking WHERE booking_id = $1::UUID",
-            booking_id
-        )
-        # perform_checkout has just recalculated this bill
-        bill_row = await db.fetchrow(
-            """
-            SELECT total_amount, amount_paid, outstanding_balance, balance_flag
-              FROM bill WHERE booking_id = $1::UUID
-            """,
-            booking_id
-        )
+        async with db.transaction():
+            await db.execute("CALL perform_checkout($1::UUID)", booking_id)
+            row = await db.fetchrow(
+                "SELECT booking_id, status, actual_checkout_time FROM booking WHERE booking_id = $1::UUID",
+                booking_id
+            )
+            # perform_checkout has just recalculated this bill
+            bill_row = await db.fetchrow(
+                """
+                SELECT total_amount, amount_paid, outstanding_balance, balance_flag
+                  FROM bill WHERE booking_id = $1::UUID
+                """,
+                booking_id
+            )
 
         return BookingCheckOutResponse(
             booking_id=row["booking_id"],
@@ -283,22 +279,20 @@ async def checkout_booking(
 @router.patch("/{booking_id}/cancel", response_model=BookingCancelResponse)
 async def cancel_booking(
     booking_id: UUID,
-    body: BookingStatusUpdate,
     db=Depends(get_db),
     user: dict = Depends(require_role("receptionist", "manager", "admin", "guest"))
 ):
     # Existence, guest ownership and branch scoping
-    row = await assert_booking_access(db, user, booking_id)
+    await assert_booking_access(db, user, booking_id)
 
-    # Business rule: Only 'Booked' bookings can be cancelled
-    if row["status"] != "Booked":
-        raise HTTPException(status_code=400, detail="Only 'Booked' bookings can be cancelled")
-
-    # Update status to Cancelled
-    # Note: reason is in body.reason, but we have no DB column for it, so it's ignored.
-    await db.execute(
-        "UPDATE booking SET status = 'Cancelled' WHERE booking_id = $1::UUID",
-        booking_id
-    )
+    # The procedure locks the booking and checks it is still 'Booked', so a
+    # cancel racing a check-in or another cancel can't overwrite it
+    try:
+        await db.execute("CALL cancel_booking($1::UUID)", booking_id)
+    except asyncpg.exceptions.RaiseError as e:
+        msg = str(e)
+        if "not found" in msg.lower():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=msg)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg)
 
     return BookingCancelResponse(status="Cancelled")

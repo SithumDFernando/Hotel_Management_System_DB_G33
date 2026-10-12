@@ -88,13 +88,14 @@ async def generate_bill(
     """Generate the bill for a booking, or recalculate it if one exists."""
     await assert_booking_access(db, user, booking_id)
     try:
-        await db.execute(
-            "CALL generate_bill($1::UUID, $2::NUMERIC)", booking_id, discount
-        )
+        async with db.transaction():
+            await db.execute(
+                "CALL generate_bill($1::UUID, $2::NUMERIC)", booking_id, discount
+            )
+            row = await db.fetchrow(BILL_SELECT, booking_id)
     except asyncpg.exceptions.RaiseError as exc:
         raise _db_error_to_http(exc)
 
-    row = await db.fetchrow(BILL_SELECT, booking_id)
     return _bill_from_row(row)
 
 # GET /api/billing/{booking_id}
@@ -126,26 +127,27 @@ async def create_payment(
     """Record a payment against a booking's bill (partial payments allowed)."""
     await assert_booking_access(db, user, body.booking_id)
     try:
-        await db.execute(
-            "CALL record_payment($1::UUID, $2::NUMERIC, $3, $4)",
-            body.booking_id,
-            body.amount,
-            body.payment_method,
-            body.notes,
-        )
+        async with db.transaction():
+            # The last NULL is the placeholder for OUT p_payment_id
+            result = await db.fetchrow(
+                "CALL record_payment($1::UUID, $2::NUMERIC, $3, $4, NULL)",
+                body.booking_id,
+                body.amount,
+                body.payment_method,
+                body.notes,
+            )
+            # Read back this call's own payment, not "the newest one"
+            row = await db.fetchrow(
+                """
+                SELECT payment_id, booking_id, amount, payment_method, paid_at, notes
+                FROM payment
+                WHERE payment_id = $1::UUID
+                """,
+                result["p_payment_id"],
+            )
     except asyncpg.exceptions.RaiseError as exc:
         raise _db_error_to_http(exc)
 
-    row = await db.fetchrow(
-        """
-        SELECT payment_id, booking_id, amount, payment_method, paid_at, notes
-        FROM payment
-        WHERE booking_id = $1::UUID
-        ORDER BY paid_at DESC
-        LIMIT 1
-        """,
-        body.booking_id,
-    )
     return _payment_from_row(row)
 
 # GET /api/payments/{booking_id}

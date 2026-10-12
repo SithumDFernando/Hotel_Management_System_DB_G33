@@ -160,7 +160,7 @@ async def test_discount_kept_when_services_are_added_before_checkout(api, login,
 async def test_db_checkout_refreshes_stale_bill(db_conn):
     bk = BK01_COLOMBO_CHECKED_IN
     await db_conn.execute("CALL generate_bill($1::UUID, NULL)", bk)
-    await db_conn.execute("CALL record_payment($1::UUID, $2, 'Cash', NULL)", bk,
+    await db_conn.execute("CALL record_payment($1::UUID, $2, 'Cash', NULL, NULL)", bk,
                           (await _bill(db_conn, bk))["outstanding_balance"])
     await db_conn.execute(
         "INSERT INTO service_usage (booking_id, service_id, usage_date, quantity) "

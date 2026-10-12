@@ -20,10 +20,6 @@ class BookingCreate(BaseModel):
             raise ValueError("check_out_date must be after check_in_date")
         return self
 
-class BookingStatusUpdate(BaseModel):
-    """Used for PATCH /cancel — optionally accept a reason."""
-    reason: str | None = None
-
 class BookingOut(BaseModel):
     """Full booking response."""
     booking_id: UUID

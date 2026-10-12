@@ -9,8 +9,8 @@ ISSUE-05: two overlapping active bookings for one room can never both commit.
 - API: a burst of identical POST /bookings gives exactly one 201, the rest
   409, never a 500.
 The concurrency tests need real commits on separate connections, so they use
-their own pool and delete the bookings they made (dates in 2031, which no
-seed booking uses). The rest run in the rolled-back `db_conn` fixture.
+the `pool` / `pool_api` fixtures and delete the bookings they made (dates in
+2031, which no seed booking uses). The rest run in the rolled-back `db_conn` fixture.
 
 Run:  cd backend && pytest tests/test_double_booking.py -q
 """
@@ -19,12 +19,6 @@ import asyncio
 
 import asyncpg
 import pytest
-from httpx import ASGITransport, AsyncClient
-
-from app.config import settings
-from app.db import get_db
-from app.main import app
-pytestmark = pytest.mark.db
 
 # Seed data (db/seed/sample_data.sql)
 ROOM_103_COLOMBO = "e0000000-0000-0000-0000-000000000003"
@@ -56,37 +50,18 @@ async def _active_overlaps(conn):
 
 
 @pytest.fixture
-async def pool():
-    pool = await asyncpg.create_pool(settings.DATABASE_URL, min_size=2, max_size=12)
-    try:
-        async with pool.acquire() as conn:
-            await _cleanup(conn)
-        yield pool
-    finally:
-        async with pool.acquire() as conn:
-            await _cleanup(conn)
-        await pool.close()
-
-
-@pytest.fixture
-async def pool_api(pool):
-    """In-process client where each request gets its own autocommit connection."""
-    async def _override_get_db():
-        async with pool.acquire() as conn:
-            yield conn
-
-    app.dependency_overrides[get_db] = _override_get_db
-    try:
-        async with AsyncClient(transport=ASGITransport(app=app),
-                               base_url="http://test/api") as client:
-            yield client
-    finally:
-        app.dependency_overrides.pop(get_db, None)
+async def clean_2031(pool):
+    """Concurrency tests commit for real: remove their bookings before and after."""
+    async with pool.acquire() as conn:
+        await _cleanup(conn)
+    yield
+    async with pool.acquire() as conn:
+        await _cleanup(conn)
 
 
 # ── Concurrency ──────────────────────────────────────────────────────────────
 
-async def test_two_sessions_cannot_both_book(pool):
+async def test_two_sessions_cannot_both_book(pool, clean_2031):
     """The audit's reproduction: A holds its transaction open while B books."""
     a = await pool.acquire()
     b = await pool.acquire()
@@ -111,11 +86,8 @@ async def test_two_sessions_cannot_both_book(pool):
         await pool.release(b)
 
 
-async def test_api_burst_gives_one_201_and_no_500(pool_api, pool):
-    resp = await pool_api.post("/auth/login", json={"email": "rec.colombo@skynest.lk",
-                                                    "password": "SkyNest@2026"})
-    assert resp.status_code == 200, resp.text
-    headers = {"Authorization": f"Bearer {resp.json()['access_token']}"}
+async def test_api_burst_gives_one_201_and_no_500(pool_api, pool_login, pool, clean_2031):
+    headers = await pool_login("receptionist")
     body = {"guest_id": GUEST_KAMAL, "room_id": ROOM_103_COLOMBO,
             "check_in_date": "2031-03-01", "check_out_date": "2031-03-04",
             "payment_option": "Cash"}

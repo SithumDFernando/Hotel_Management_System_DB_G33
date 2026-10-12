@@ -12,6 +12,6 @@ export const listBookings = (params = {}, signal) =>
 
 export const getBooking = (id, signal) => client.get(`/bookings/${id}`, { signal }).then((r) => r.data);
 
-export const cancelBooking = (id, reason) => client.patch(`/bookings/${id}/cancel`, { reason }).then((r) => r.data);
+export const cancelBooking = (id) => client.patch(`/bookings/${id}/cancel`).then((r) => r.data);
 export const checkInBooking = (id) => client.patch(`/bookings/${id}/checkin`).then((r) => r.data);
 export const checkOutBooking = (id) => client.patch(`/bookings/${id}/checkout`).then((r) => r.data);

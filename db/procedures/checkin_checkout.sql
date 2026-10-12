@@ -11,7 +11,8 @@
 --   1. perform_checkin(p_booking_id UUID)
 --      -----------------------------------------
 --      Steps:
---        a. Validate: booking.status must be 'Booked'. Raise exception otherwise.
+--        a. Lock the booking row (FOR UPDATE) so concurrent check-ins run one
+--           after another; validate status = 'Booked'. Raise exception otherwise.
 --        b. Update booking:
 --             SET status = 'Checked-In',
 --                 actual_checkin_time = NOW()
@@ -52,17 +53,20 @@ CREATE OR REPLACE PROCEDURE perform_checkin(p_booking_id UUID)
 LANGUAGE plpgsql
 AS $$
 DECLARE
-    v_status VARCHAR;
+    v_status  booking_status;
     v_room_id UUID;
 BEGIN
+    -- A concurrent second check-in waits here, then sees 'Checked-In'
     SELECT status, room_id INTO v_status, v_room_id
-    FROM booking WHERE booking_id = p_booking_id;
-    
-    IF v_status IS NULL THEN
+      FROM booking
+     WHERE booking_id = p_booking_id
+       FOR UPDATE;
+
+    IF NOT FOUND THEN
         RAISE EXCEPTION 'Booking not found';
     END IF;
 
-    IF v_status != 'Booked' THEN
+    IF v_status <> 'Booked' THEN
         RAISE EXCEPTION 'Only Booked bookings can be checked in';
     END IF;
 

@@ -317,9 +317,11 @@ Calls `create_booking()` stored procedure (SERIALIZABLE).
 ### PATCH `/api/bookings/:booking_id/cancel`
 > Receptionist, Manager, Admin, Guest (own booking, if still 'Booked')
 
+Calls `cancel_booking()` stored procedure (locks the booking, so a cancel racing a check-in can't cancel a guest who was just checked in). No request body.
+
 **Response (200):** `{ "status": "Cancelled" }`
 
-**Errors:** `400 Only 'Booked' bookings can be cancelled` · `403` other branch / other guest · `404 Booking not found`
+**Errors:** `400 Only Booked bookings can be cancelled (current status: Checked-In)` · `403` other branch / other guest · `404 Booking not found`
 
 ---
 
@@ -328,7 +330,7 @@ Calls `create_booking()` stored procedure (SERIALIZABLE).
 ### PATCH `/api/bookings/:booking_id/checkin`
 > Receptionist, Manager, Admin
 
-Calls `perform_checkin()` stored procedure.
+Calls `perform_checkin()` stored procedure, which locks the booking row, so of several simultaneous check-ins exactly one succeeds.
 
 **Response (200):**
 ```json
@@ -339,7 +341,7 @@ Calls `perform_checkin()` stored procedure.
 }
 ```
 
-**Errors:** `400 Booking is not in 'Booked' status` · `403` booking of another branch · `404 Booking not found`
+**Errors:** `400 Only Booked bookings can be checked in` · `403` booking of another branch · `404 Booking not found`
 
 ### PATCH `/api/bookings/:booking_id/checkout`
 > Receptionist, Manager, Admin
@@ -512,7 +514,7 @@ Calls `generate_bill()` stored procedure (with optional `?discount=0.00` query p
 ### POST `/api/payments`
 > Receptionist, Manager, Admin
 
-Calls `record_payment()` stored procedure.
+Calls `record_payment()` stored procedure, which returns the new `payment_id`; the response is that payment (not "the newest payment for the booking"), so concurrent payments each get their own back.
 
 **Request:**
 ```json
