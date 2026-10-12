@@ -1,51 +1,104 @@
-// =============================================================================
-// frontend/src/context/AuthContext.jsx
-// =============================================================================
-// Purpose:
-//   React Context that provides authentication state (current user, JWT token,
-//   and role) to the entire component tree. Components anywhere in the app
-//   can call `useContext(AuthContext)` (or the `useAuth` hook) to access the
-//   current user without prop-drilling.
-//
-// What to implement here:
-//
-//   State managed:
-//     - user: { account_id, email, role } | null
-//     - token: string | null  (the raw JWT stored in localStorage)
-//     - isLoading: boolean    (true while restoring session from localStorage)
-//
-//   Context value to expose:
-//     { user, token, isLoading, login, logout }
-//
-//   Functions:
-//     login(token, userInfo):
-//       - Saves token to localStorage ('access_token').
-//       - Saves user info to state.
-//       - Typically called from the Login page after a successful POST /auth/login.
-//
-//     logout():
-//       - Removes 'access_token' from localStorage.
-//       - Clears user and token state.
-//       - Navigates to /login.
-//
-//   Session restore (useEffect on mount):
-//     - On first render, check if localStorage has 'access_token'.
-//     - If yes, call getMe() from api/auth.js to verify and restore the session.
-//     - If getMe() fails (token expired), call logout().
-//     - While restoring, set isLoading = true so ProtectedRoute doesn't flash
-//       the login page before the session is confirmed.
-//
-// Usage example in a component:
-//   import { useContext } from 'react';
-//   import { AuthContext } from '../context/AuthContext';
-//   const { user, logout } = useContext(AuthContext);
-//
-// Or via the useAuth hook (see hooks/useAuth.js).
-//
-// Dependencies:
-//   - react              (createContext, useState, useEffect, useContext)
-//   - react-router-dom   (useNavigate — for redirect on logout)
-//   - ../api/auth        (getMe — for session restore)
-// =============================================================================
+import { createContext, useCallback, useEffect, useMemo, useState } from 'react';
+import * as authApi from '@/api/auth';
+import { getStoredToken, storeToken, UNAUTHORIZED_EVENT } from '@/api/client';
 
-// TODO: Implement AuthContext.jsx
+export const AuthContext = createContext(null);
+
+// Decode the JWT payload just to read `exp` — the server remains the authority.
+function isExpired(token) {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    return payload.exp ? payload.exp * 1000 < Date.now() : false;
+  } catch {
+    return true;
+  }
+}
+
+export const homeForRole = (role) =>
+  ({
+    admin: '/dashboard/admin',
+    manager: '/dashboard/manager',
+    receptionist: '/dashboard/receptionist',
+    guest: '/rooms',
+  })[role] || '/';
+
+export function AuthProvider({ children }) {
+  const [token, setToken] = useState(() => {
+    const t = getStoredToken();
+    return t && !isExpired(t) ? t : null;
+  });
+  const [user, setUser] = useState(null);
+  const [isLoading, setLoading] = useState(Boolean(token));
+
+  const logout = useCallback(() => {
+    storeToken(null);
+    setToken(null);
+    setUser(null);
+  }, []);
+
+  // Restore session on mount.
+  useEffect(() => {
+    if (!token) {
+      if (getStoredToken()) storeToken(null);
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    authApi
+      .getMe()
+      .then((me) => !cancelled && setUser(me))
+      .catch(() => !cancelled && logout())
+      .finally(() => !cancelled && setLoading(false));
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Axios tells us when the server rejected our token.
+  useEffect(() => {
+    window.addEventListener(UNAUTHORIZED_EVENT, logout);
+    return () => window.removeEventListener(UNAUTHORIZED_EVENT, logout);
+  }, [logout]);
+
+  // Auto-logout at token expiry.
+  useEffect(() => {
+    if (!token) return undefined;
+    try {
+      const { exp } = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+      const ms = exp * 1000 - Date.now();
+      if (ms <= 0) {
+        logout();
+        return undefined;
+      }
+      const id = setTimeout(logout, Math.min(ms, 2 ** 31 - 1));
+      return () => clearTimeout(id);
+    } catch {
+      return undefined;
+    }
+  }, [token, logout]);
+
+  const login = useCallback(async (email, password) => {
+    const res = await authApi.login(email, password);
+    storeToken(res.access_token);
+    setToken(res.access_token);
+    const me = await authApi.getMe();
+    setUser(me);
+    return me;
+  }, []);
+
+  const value = useMemo(
+    () => ({
+      token,
+      user,
+      isLoading,
+      isAuthenticated: Boolean(token && user),
+      login,
+      logout,
+      getToken: () => token,
+    }),
+    [token, user, isLoading, login, logout],
+  );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}

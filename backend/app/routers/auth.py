@@ -8,49 +8,29 @@ Purpose:
 
 Endpoints:
     POST /api/auth/login     — Public.  Returns JWT on valid credentials.
-    POST /api/auth/register  — Admin creates staff; or guest self-registers.
+    POST /api/auth/signup    — Public.  Guest self-registration (profile + account).
+    POST /api/auth/register  — Admin only. Creates staff/any-role accounts.
     GET  /api/auth/me        — Protected. Returns current user info.
 """
 
+import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, EmailStr
 
 from app.auth import verify_password, hash_password, create_access_token
 from app.db import get_db
-from app.dependencies import get_current_user, require_role
+from app.dependencies import (
+    assert_guest_profile_free, assert_role_links, get_current_user, get_optional_user, require_role,
+)
+from app.schemas.auth import (
+    LoginRequest,
+    LoginResponse,
+    MeResponse,
+    RegisterRequest,
+    SignupRequest,
+)
 
 router = APIRouter()
 
-
-# ── Request / Response Schemas ────────────────────────────────────────────────
-
-class LoginRequest(BaseModel):
-    email: str
-    password: str
-
-
-class LoginResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-    role: str
-    branch_id: str | None = None
-    account_id: str
-
-
-class RegisterRequest(BaseModel):
-    email: str
-    password: str
-    role: str = "guest"           # default for self-registration
-    branch_id: str | None = None  # required for receptionist/manager
-    guest_id: str | None = None   # required for guest role
-
-
-class MeResponse(BaseModel):
-    account_id: str
-    email: str
-    role: str
-    branch_id: str | None = None
-    guest_id: str | None = None
 
 
 # ── POST /api/auth/login ─────────────────────────────────────────────────────
@@ -98,16 +78,93 @@ async def login(body: LoginRequest, db=Depends(get_db)):
     )
 
 
+# ── POST /api/auth/signup ────────────────────────────────────────────────────
+
+@router.post("/signup", status_code=status.HTTP_201_CREATED)
+async def signup(body: SignupRequest, db=Depends(get_db)):
+    """
+    Public guest self-registration: creates the guest profile and the login
+    account atomically (both rows or neither). Role is always 'guest'.
+    """
+    if len(body.password) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Password must be at least 8 characters",
+        )
+
+    exists = await db.fetchval(
+        "SELECT account_id FROM user_account WHERE email = $1", body.email
+    )
+    if exists:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An account with this email already exists",
+        )
+
+    hashed = hash_password(body.password)
+    try:
+        async with db.transaction():
+            guest_id = await db.fetchval(
+                """
+                INSERT INTO guest (full_name, nic_passport, email, phone,
+                                   date_of_birth, nationality, guest_type)
+                VALUES ($1, $2, $3, $4, $5, $6, 'Individual')
+                RETURNING guest_id
+                """,
+                body.full_name,
+                body.nic_passport,
+                body.email,
+                body.phone,
+                body.date_of_birth,
+                body.nationality,
+            )
+            account_id = await db.fetchval(
+                """
+                INSERT INTO user_account (email, password_hash, role, guest_id)
+                VALUES ($1, $2, 'guest', $3)
+                RETURNING account_id
+                """,
+                body.email,
+                hashed,
+                guest_id,
+            )
+    except asyncpg.exceptions.UniqueViolationError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A guest with this NIC/passport or email already exists. "
+                   "Please contact the front desk.",
+        )
+
+    return {"account_id": str(account_id), "guest_id": str(guest_id)}
+
+
 # ── POST /api/auth/register ──────────────────────────────────────────────────
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
-async def register(body: RegisterRequest, db=Depends(get_db)):
+async def register(
+    body: RegisterRequest,
+    db=Depends(get_db),
+    caller: dict | None = Depends(get_optional_user),
+):
     """
-    Create a new user account.
+    Create a user account for staff (admin only).
 
-    - Guests can self-register (role is forced to 'guest').
-    - Admins can create staff accounts (receptionist, manager, admin).
+    Anonymous callers cannot choose a role or link an existing guest profile
+    (that would allow privilege escalation / profile takeover) — guests use
+    POST /api/auth/signup instead.
     """
+    if caller is None or caller["role"] != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only an admin can create accounts here. Guests should use /api/auth/signup.",
+        )
+    if body.role not in {"admin", "manager", "receptionist", "guest"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid role",
+        )
+    assert_role_links(body.role, body.branch_id, body.guest_id)
+
     # Check if email already exists
     existing = await db.fetchval(
         "SELECT account_id FROM user_account WHERE email = $1",
@@ -118,6 +175,7 @@ async def register(body: RegisterRequest, db=Depends(get_db)):
             status_code=status.HTTP_409_CONFLICT,
             detail="An account with this email already exists",
         )
+    await assert_guest_profile_free(db, body.guest_id)
 
     # Hash the password
     hashed = hash_password(body.password)

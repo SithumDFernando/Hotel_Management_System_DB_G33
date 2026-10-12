@@ -1,50 +1,46 @@
-// =============================================================================
-// frontend/src/api/client.js
-// =============================================================================
-// Purpose:
-//   Configures and exports a shared Axios (or fetch) HTTP client instance that
-//   all API modules use to make requests to the FastAPI backend. Centralising
-//   the client configuration here means:
-//     - The base URL is set once (reads from VITE_API_BASE_URL env var).
-//     - The Authorization header (Bearer token) is automatically attached
-//       to every request via a request interceptor.
-//     - 401 responses (expired/invalid token) are intercepted globally and
-//       trigger an automatic logout + redirect to /login.
-//
-// What to implement here:
-//   import axios from 'axios';
-//
-//   const client = axios.create({
-//     baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
-//     headers: { 'Content-Type': 'application/json' },
-//   });
-//
-//   // Request interceptor: attach token from localStorage
-//   client.interceptors.request.use((config) => {
-//     const token = localStorage.getItem('access_token');
-//     if (token) {
-//       config.headers.Authorization = `Bearer ${token}`;
-//     }
-//     return config;
-//   });
-//
-//   // Response interceptor: handle 401 globally (session expired)
-//   client.interceptors.response.use(
-//     (response) => response,
-//     (error) => {
-//       if (error.response?.status === 401) {
-//         localStorage.removeItem('access_token');
-//         window.location.href = '/login';
-//       }
-//       return Promise.reject(error);
-//     }
-//   );
-//
-//   export default client;
-//
-// Dependencies:
-//   - axios (npm install axios)
-//   - VITE_API_BASE_URL environment variable (see frontend/.env.example)
-// =============================================================================
+import axios from 'axios';
 
-// TODO: Implement api/client.js
+export const TOKEN_KEY = 'skynest_token';
+export const UNAUTHORIZED_EVENT = 'skynest:unauthorized';
+
+export const getStoredToken = () => {
+  try {
+    return localStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null;
+  }
+};
+
+export const storeToken = (token) => {
+  try {
+    if (token) localStorage.setItem(TOKEN_KEY, token);
+    else localStorage.removeItem(TOKEN_KEY);
+  } catch {
+    /* storage unavailable — session just won't persist */
+  }
+};
+
+const client = axios.create({
+  baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
+  headers: { 'Content-Type': 'application/json' },
+});
+
+client.interceptors.request.use((config) => {
+  const token = getStoredToken();
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
+// A 401 while we hold a token means it expired/was revoked: tell AuthContext.
+// (A 401 from /auth/login has no token yet, so the form can show its own error.)
+client.interceptors.response.use(
+  (res) => res,
+  (err) => {
+    if (err.response?.status === 401 && getStoredToken()) {
+      window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
+    }
+    return Promise.reject(err);
+  },
+);
+
+export default client;
