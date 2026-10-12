@@ -89,6 +89,7 @@ Source: full-stack audit run on **2026-10-12** (backend API probes, DB-level con
   - ✅ 14.1 catalogue no longer filters on tonight's `room.status`. 14.2 `ReportTable` key-less column crash fixed, page-level error boundary keeps the navbar, `?report=` in the URL, View bill opens in place. 14.3 sign-out confirm dialog + toast. 14.4 `GET/PATCH /auth/profile`, `POST /auth/change-password`, `/profile` page. Specs 02, 08 and 09 updated.
   - ✅ Fresh `run_all.sql` build (scratch DB): 239 passed incl. `tests/test_profile.py` (14). `npm run build` OK. Headless Edge: 27 scripted checks (4 roles, desktop + 375px) pass with no JS errors, console errors or 5xx.
   - ⚠ The shared dev DB `skynest` in Docker is stale (pre-ISSUE-08/09 procedures); rebuild it from `run_all.sql`, or 29 tests fail and the running backend behaves like the old code.
+- [ ] **19. [ISSUE-15](ISSUE-15-stale-dev-database-cancel-500.md)** 🔴 Cancel booking returns 500 on the Docker dev DB: the volume predates ISSUE-12 (`cancel_booking` missing). Rebuild, plus a startup schema check, `/api/health` 503 and a 503 (not 500) for missing routines
 
 ---
 

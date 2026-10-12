@@ -99,7 +99,7 @@ _Add a dated line per finished task: what changed, what was verified, anything d
   - **BookingSummary:** shows the booked rate instead of a browser-computed total.
   - New `formatNumericDate` / `formatStayRange` helpers.
   - **Verified:** book as a guest (success plus toast), double-book gives 409, past check-in shows the inline error with the button disabled, the bill modal, and 375px layout.
-  - **Blocked:** cancel returns **500** because the running database has no `cancel_booking` procedure (it predates ISSUE-08; the repo's `db/procedures/booking.sql` has it). Tick UI-06 after re-applying the procedures and re-testing cancel.
+  - **Blocked:** cancel returns **500** because the running database has no `cancel_booking` procedure (it predates ISSUE-08; the repo's `db/procedures/booking.sql` has it). Tracked as [ISSUE-15](../issues/ISSUE-15-stale-dev-database-cancel-500.md); tick UI-06 after it lands and cancel is re-tested.
   - **Also open:** a receptionist checkout was rendered but not submitted (needs GuestPicker, UI-08). The server's 409 detail contains a raw room UUID ("Room e0000000-… is already booked"); fix the copy in the backend or in UI-10.
   - A test booking remains in the dev DB: Kamal Perera, Single Room 103, 01/12–03/12/2026.
   - **Burn-down after Phase B: 197** (ServiceRequest 38, BillTable 26, UsersTab 22, GuestPicker 17, ReceptionistDashboard 15, ErrorBoundary 14, ReportTable 11, BranchOverview 11, BillPaymentModal 11, others ≤ 7). Every Phase B file is at 0.
