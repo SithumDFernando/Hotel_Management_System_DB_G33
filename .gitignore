@@ -36,3 +36,6 @@ Thumbs.db
 *.db
 *.dump
 *.sql.bak
+
+# Security
+*.pem

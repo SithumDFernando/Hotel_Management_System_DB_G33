@@ -77,13 +77,15 @@ function Overlay({ open, onClose, title, subtitle, footer, children, panelClass,
   );
 }
 
+// `lg` (bills) fills the screen on phones so long content scrolls inside it.
 export function Modal({ size = 'md', ...props }) {
   const width = { sm: 'max-w-md', md: 'max-w-xl', lg: 'max-w-3xl' }[size];
+  const full = size === 'lg';
   return (
     <Overlay
       {...props}
-      wrapClass="items-center justify-center p-4"
-      panelClass={`w-full ${width} rounded-lg`}
+      wrapClass={`items-center justify-center ${full ? 'sm:p-4' : 'p-4'}`}
+      panelClass={`w-full ${width} ${full ? 'h-full sm:h-auto sm:rounded-lg' : 'rounded-lg'}`}
     />
   );
 }

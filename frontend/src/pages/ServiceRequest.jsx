@@ -8,36 +8,14 @@ import BillPaymentModal from '@/components/BillPaymentModal';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import Icon from '@/components/ui/Icon';
-import { EmptyState, ErrorState, InlineAlert, Skeleton } from '@/components/ui/States';
+import { ErrorState, InlineAlert, Skeleton } from '@/components/ui/States';
+import Tabs from '@/components/ui/Tabs';
 import { useToast } from '@/components/ui/Toast';
 import {
-  bookingRef, calculateNights, errorMessage, formatCurrency, formatDate, todayISO,
+  bookingRef, errorMessage, formatCurrency, formatNumericDate, formatStayRange, todayISO,
 } from '@/utils/formatters';
 
-const categoryIcon = (c = '') => {
-  const k = c.toLowerCase();
-  if (k.includes('f&b') || k.includes('food')) return 'utensils';
-  if (k.includes('wellness') || k.includes('spa')) return 'lotus';
-  if (k.includes('house') || k.includes('laundry')) return 'shirt';
-  if (k.includes('transport')) return 'car';
-  if (k.includes('excursion') || k.includes('tour')) return 'sun';
-  return 'sparkles';
-};
-
-function Stepper({ value, onChange, disabled, label }) {
-  return (
-    <div className="inline-flex items-center rounded-xl border border-navy-100 bg-navy-50" role="group" aria-label={`Quantity for ${label}`}>
-      <button type="button" disabled={disabled || value <= 1} onClick={() => onChange(value - 1)} aria-label="Decrease quantity" className="p-2 text-navy-600 disabled:opacity-30">
-        <Icon name="minus" className="h-3.5 w-3.5" />
-      </button>
-      <span className="w-8 text-center text-sm font-semibold tabular-nums" aria-live="polite">{value}</span>
-      <button type="button" disabled={disabled || value >= 99} onClick={() => onChange(value + 1)} aria-label="Increase quantity" className="p-2 text-navy-600 disabled:opacity-30">
-        <Icon name="plus" className="h-3.5 w-3.5" />
-      </button>
-    </div>
-  );
-}
-
+// Console page: add services to an in-house guest's stay and see the running total.
 export default function ServiceRequest() {
   const { bookingId } = useParams();
   const { user } = useAuth();
@@ -52,13 +30,15 @@ export default function ServiceRequest() {
   const [category, setCategory] = useState('all');
   const [q, setQ] = useState('');
   const [qty, setQty] = useState({});
+  const [qtyError, setQtyError] = useState({});
   const [adding, setAdding] = useState(null);
   const [folio, setFolio] = useState(false);
 
   const b = booking.data;
   const canOrder = b?.status === 'Checked-In';
-  const dashboard = user.role === 'manager' ? '/dashboard/manager' : '/dashboard/receptionist';
-  // Return to wherever we came from (keeps dashboard tabs); a direct link falls back to the dashboard.
+  const isManager = user.role === 'manager';
+  const dashboard = isManager ? '/dashboard/manager' : '/dashboard/receptionist';
+  // Return to wherever we came from; a direct link falls back to the dashboard.
   const hasHistory = location.key !== 'default';
   const goBack = (e) => {
     if (!hasHistory) return;
@@ -76,12 +56,17 @@ export default function ServiceRequest() {
   }, [groups, category, q]);
 
   const add = async (service) => {
-    const quantity = qty[service.service_id] || 1;
+    const raw = qty[service.service_id] ?? '1';
+    const quantity = Number(raw);
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 99) {
+      setQtyError((p) => ({ ...p, [service.service_id]: 'Enter a whole number from 1 to 99.' }));
+      return;
+    }
     setAdding(service.service_id);
     try {
       await addUsage(bookingId, { service_id: service.service_id, usage_date: todayISO(), quantity });
-      toast.success(`${quantity} × ${service.service_name} added to folio`);
-      setQty((p) => ({ ...p, [service.service_id]: 1 }));
+      toast.success(`Added: ${quantity} × ${service.service_name}, ${b.guest.full_name}`);
+      setQty((p) => ({ ...p, [service.service_id]: '1' }));
       usage.refetch();
     } catch (err) {
       toast.error(errorMessage(err));
@@ -90,176 +75,167 @@ export default function ServiceRequest() {
     }
   };
 
+  const back = (
+    <Link to={dashboard} onClick={goBack} className="inline-flex items-center gap-1 rounded-sm text-[13px] text-ink-600 hover:text-ink-900">
+      <Icon name="arrowLeft" className="h-3.5 w-3.5" /> {isManager ? 'Overview' : 'Today'}
+    </Link>
+  );
+
   if (booking.error) {
     return (
-      <div className="mx-auto max-w-3xl px-4 py-14">
-        <ErrorState message={booking.error} onRetry={booking.refetch} />
-        <div className="mt-4 text-center"><Button variant="secondary" to={dashboard} onClick={goBack}>Back</Button></div>
+      <div className="mx-auto max-w-3xl px-4 py-10">
+        {back}
+        <div className="mt-4"><ErrorState message={`Couldn't load this booking. ${booking.error}`} onRetry={booking.refetch} /></div>
       </div>
     );
   }
 
   const usages = [...(usage.data?.usages || [])].sort((a, c) => c.usage_date.localeCompare(a.usage_date));
+  const tabs = [{ key: 'all', label: 'All' }, ...groups.map((g) => ({ key: g.category, label: g.category }))];
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
-      <nav className="mb-3 text-xs text-navy-500" aria-label="Breadcrumb">
-        <Link to={dashboard} className="hover:text-gold-700">Dashboard</Link> / <span>Services</span>
-      </nav>
-      <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="eyebrow">Folio additions</p>
-          <h1 className="mt-1 text-4xl font-semibold">Service requests</h1>
-          <p className="mt-1 text-sm text-navy-500">Post chargeable guest services to the stay’s folio.</p>
-        </div>
-        <Button variant="secondary" to={dashboard} onClick={goBack}><Icon name="arrowLeft" /> Back</Button>
+    <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
+      {back}
+      <header className="mt-2">
+        {booking.isLoading || !b ? (
+          <><Skeleton className="h-6 w-72" /><Skeleton className="mt-2 h-4 w-96 max-w-full" /></>
+        ) : (
+          <>
+            <h1 className="text-xl font-semibold text-ink-900">Add services · {b.guest.full_name}, Room {b.room.room_number}</h1>
+            <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-ink-600">
+              <span>{b.room.type_name}</span>
+              <span aria-hidden="true">·</span>
+              <span className="tabular">{formatStayRange(b.check_in_date, b.check_out_date)}</span>
+              <span aria-hidden="true">·</span>
+              <Badge status={b.status} />
+              <span aria-hidden="true">·</span>
+              <span className="font-mono text-2xs">{bookingRef(b.booking_id)}</span>
+            </p>
+          </>
+        )}
       </header>
 
-      {/* Booking header */}
-      <section className="card mb-6 p-5">
-        {booking.isLoading || !b ? (
-          <Skeleton className="h-16 w-full" />
-        ) : (
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-2xl font-semibold">{b.guest.full_name}</h2>
-                <Badge status={b.status} />
-              </div>
-              <p className="mt-1 text-sm text-navy-500">
-                {b.room.type_name} Room {b.room.room_number} · {b.room.branch_name} · {bookingRef(b.booking_id)}
-              </p>
-            </div>
-            <dl className="flex gap-8 text-sm">
-              <div><dt className="text-[11px] uppercase tracking-wider text-navy-400">Stay</dt><dd className="font-semibold">{formatDate(b.check_in_date)} – {formatDate(b.check_out_date)}</dd></div>
-              <div><dt className="text-[11px] uppercase tracking-wider text-navy-400">Nights</dt><dd className="font-semibold">{calculateNights(b.check_in_date, b.check_out_date)}</dd></div>
-            </dl>
-          </div>
-        )}
-      </section>
-
       {b && !canOrder && (
-        <div className="mb-6">
+        <div className="mt-4">
           <InlineAlert tone="info">
-            Services can only be added while a guest is <strong>Checked-In</strong>. This booking is <strong>{b.status}</strong>
-            {b.status === 'Booked' ? ' — check the guest in from the dashboard first.' : '.'}
+            Services can only be added while the guest is checked in.
+            {b.status === 'Booked' ? ' Check the guest in from Today first.' : ''}
           </InlineAlert>
         </div>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_400px]">
-        {/* Catalogue */}
-        <section aria-label="Service catalogue">
-          <div className="card p-5">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-xl font-semibold">Service catalogue</h2>
-              <div className="relative">
-                <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-navy-400" />
-                <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search services…" aria-label="Search services" className="input w-56 pl-9" />
-              </div>
+      <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+        <section aria-labelledby="catalogue-heading" className="card min-w-0 p-4 sm:p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 id="catalogue-heading" className="text-base font-semibold text-ink-900">Catalogue</h2>
+            <div className="relative w-full sm:w-56">
+              <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-600" />
+              <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search services" aria-label="Search services" className="input pl-9" />
             </div>
-            <div className="mt-4 flex flex-wrap gap-2" role="group" aria-label="Filter by category">
-              {['all', ...groups.map((g) => g.category)].map((c) => (
-                <button
-                  key={c}
-                  aria-pressed={category === c}
-                  onClick={() => setCategory(c)}
-                  className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${category === c ? 'bg-navy-900 text-white' : 'bg-navy-50 text-navy-700 hover:bg-navy-100'}`}
-                >
-                  {c === 'all' ? 'All offerings' : c}
-                </button>
-              ))}
-            </div>
+          </div>
+          {groups.length > 1 && <Tabs tabs={tabs} value={category} onChange={setCategory} className="mt-3" />}
 
-            <div className="mt-5 space-y-6">
-              {catalogue.error ? (
-                <ErrorState message={catalogue.error} onRetry={catalogue.refetch} />
-              ) : catalogue.isLoading ? (
-                [...Array(3)].map((_, i) => <Skeleton key={i} className="h-20 w-full" />)
-              ) : filtered.length === 0 ? (
-                <EmptyState icon="search" title="No services found" message="Try another category or search term." />
-              ) : (
-                filtered.map((g) => (
-                  <div key={g.category}>
-                    <h3 className="mb-2 flex items-center gap-2 font-sans text-xs font-bold uppercase tracking-wider text-navy-600">
-                      <Icon name={categoryIcon(g.category)} className="h-4 w-4 text-gold-700" /> {g.category}
-                    </h3>
-                    <ul className="space-y-2">
-                      {g.services.map((s) => {
-                        const quantity = qty[s.service_id] || 1;
-                        return (
-                          <li key={s.service_id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-navy-100 p-3.5">
-                            <div className="flex min-w-0 items-center gap-3">
-                              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-navy-50 text-navy-600">
-                                <Icon name={categoryIcon(g.category)} className="h-5 w-5" />
-                              </span>
-                              <div className="min-w-0">
-                                <p className="truncate font-semibold">{s.service_name}</p>
-                                <p className="text-sm font-semibold text-gold-700">{formatCurrency(s.base_price)} <span className="text-xs font-normal text-navy-400">/ unit</span></p>
+          <div className="mt-4 space-y-6">
+            {catalogue.error ? (
+              <ErrorState message={`Couldn't load the service catalogue. ${catalogue.error}`} onRetry={catalogue.refetch} />
+            ) : catalogue.isLoading ? (
+              [0, 1, 2].map((i) => <Skeleton key={i} className="h-12 w-full" />)
+            ) : filtered.length === 0 ? (
+              <p className="text-sm text-ink-600">
+                No services match.{' '}
+                <button type="button" className="rounded-sm text-tea-700 underline" onClick={() => { setQ(''); setCategory('all'); }}>Clear search</button>
+              </p>
+            ) : (
+              filtered.map((g) => (
+                <div key={g.category}>
+                  <h3 className="mb-1 text-sm font-semibold text-ink-600">{g.category}</h3>
+                  <ul className="divide-y divide-ink-100 border-y border-ink-100">
+                    {g.services.map((s) => {
+                      const qid = `qty-${s.service_id}`;
+                      const err = qtyError[s.service_id];
+                      return (
+                        <li key={s.service_id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-2.5">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-ink-900">{s.service_name}</p>
+                            <p className="text-2xs tabular text-ink-600">{formatCurrency(s.base_price)} each</p>
+                          </div>
+                          {canOrder && (
+                            <div className="flex items-start gap-2">
+                              <div>
+                                <label htmlFor={qid} className="sr-only">Quantity of {s.service_name}</label>
+                                <input
+                                  id={qid}
+                                  type="number"
+                                  min="1"
+                                  max="99"
+                                  step="1"
+                                  inputMode="numeric"
+                                  value={qty[s.service_id] ?? '1'}
+                                  onChange={(e) => {
+                                    setQty((p) => ({ ...p, [s.service_id]: e.target.value }));
+                                    setQtyError((p) => ({ ...p, [s.service_id]: '' }));
+                                  }}
+                                  aria-invalid={Boolean(err)}
+                                  aria-describedby={err ? `${qid}-error` : undefined}
+                                  className={`input h-8 w-16 py-1 text-right tabular ${err ? 'border-signal-700' : ''}`}
+                                />
                               </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Stepper label={s.service_name} value={quantity} disabled={!canOrder} onChange={(v) => setQty((p) => ({ ...p, [s.service_id]: v }))} />
-                              <Button variant="secondary" size="sm" disabled={!canOrder} loading={adding === s.service_id} onClick={() => add(s)} title={canOrder ? undefined : 'Guest must be checked in'}>
-                                <Icon name="plus" className="h-3.5 w-3.5" /> Add · {formatCurrency(s.base_price * quantity)}
+                              <Button variant="secondary" size="sm" loading={adding === s.service_id} onClick={() => add(s)} aria-label={`Add ${s.service_name}`}>
+                                Add
                               </Button>
                             </div>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </div>
-                ))
-              )}
-            </div>
+                          )}
+                          {err && <p id={`${qid}-error`} role="alert" className="w-full text-right text-[13px] text-signal-700">{err}</p>}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              ))
+            )}
           </div>
         </section>
 
-        {/* Folio */}
-        <aside className="lg:sticky lg:top-24 lg:self-start" aria-label="Services used">
-          <div className="card overflow-hidden">
-            <div className="flex items-center justify-between border-b border-navy-100 px-5 py-4">
-              <div>
-                <h2 className="text-xl font-semibold">Services used</h2>
-                <p className="text-xs text-navy-500">{usages.length} item{usages.length === 1 ? '' : 's'} on this folio</p>
-              </div>
-            </div>
-
+        <aside aria-labelledby="stay-heading" className="min-w-0 lg:sticky lg:top-20 lg:self-start">
+          <div className="card">
+            <h2 id="stay-heading" className="border-b border-ink-100 px-4 py-3 text-base font-semibold text-ink-900">This stay</h2>
             {usage.error ? (
-              <div className="p-4"><ErrorState message={usage.error} onRetry={usage.refetch} /></div>
+              <div className="p-4"><ErrorState message={`Couldn't load services for this stay. ${usage.error}`} onRetry={usage.refetch} /></div>
             ) : usage.isLoading ? (
-              <div className="space-y-2 p-4"><Skeleton className="h-10 w-full" /><Skeleton className="h-10 w-full" /></div>
+              <div className="space-y-2 p-4"><Skeleton className="h-8 w-full" /><Skeleton className="h-8 w-full" /></div>
             ) : usages.length === 0 ? (
-              <p className="px-5 py-10 text-center text-sm text-navy-500">No services posted yet.</p>
+              <p className="px-4 py-4 text-sm text-ink-600">No services yet for this stay.</p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-navy-50"><tr><th className="th">Date</th><th className="th">Service</th><th className="th text-right">Qty</th><th className="th text-right">Total</th></tr></thead>
-                  <tbody className="divide-y divide-navy-100">
+                <table className="w-full">
+                  <thead>
+                    <tr className="bg-paper-200">
+                      <th scope="col" className="th">Date</th>
+                      <th scope="col" className="th">Service</th>
+                      <th scope="col" className="th text-right">Qty</th>
+                      <th scope="col" className="th text-right">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-ink-100">
                     {usages.map((u) => (
                       <tr key={u.usage_id}>
-                        <td className="px-4 py-3 text-xs text-navy-500">{formatDate(u.usage_date)}</td>
-                        <td className="px-4 py-3"><span className="font-medium">{u.service_name}</span><span className="block text-xs text-navy-400">{formatCurrency(u.unit_price)} each</span></td>
-                        <td className="px-4 py-3 text-right tabular-nums">{u.quantity}</td>
-                        <td className="px-4 py-3 text-right font-semibold tabular-nums">{formatCurrency(u.line_total)}</td>
+                        <td className="td whitespace-nowrap tabular text-ink-600">{formatNumericDate(u.usage_date).slice(0, 5)}</td>
+                        <td className="td">{u.service_name}</td>
+                        <td className="td text-right tabular">{u.quantity}</td>
+                        <td className="td whitespace-nowrap text-right tabular">{formatCurrency(u.line_total)}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
             )}
-
-            <div className="border-t border-navy-100 bg-gold-50 px-5 py-4">
-              <div className="flex items-end justify-between">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-gold-800">Service charges total</span>
-                <span className="font-serif text-2xl font-semibold">{formatCurrency(usage.data?.grand_total ?? 0)}</span>
-              </div>
-              <p className="mt-1 text-[11px] text-navy-500">Tax is applied when the final bill is generated.</p>
+            <div className="mx-4 flex items-baseline justify-between gap-4 border-t border-ink-900 py-3">
+              <span className="text-sm font-semibold text-ink-900">Services total</span>
+              <span className="text-base font-semibold tabular text-ink-900">{formatCurrency(usage.data?.grand_total ?? 0)}</span>
             </div>
+            <p className="px-4 text-2xs text-ink-600">Tax is added on the bill.</p>
             <div className="p-4">
-              <Button variant="secondary" className="w-full" disabled={!b} onClick={() => setFolio(true)}>
-                <Icon name="receipt" /> View complete folio &amp; bill
-              </Button>
+              <Button variant="secondary" className="w-full" disabled={!b} onClick={() => setFolio(true)}>Open bill</Button>
             </div>
           </div>
         </aside>

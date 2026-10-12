@@ -12,10 +12,17 @@ import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import Tabs from '@/components/ui/Tabs';
 import { useToast } from '@/components/ui/Toast';
-import { errorMessage, formatCurrency, formatDate, todayISO } from '@/utils/formatters';
+import { errorMessage, formatCurrency, formatNumericDate, todayISO } from '@/utils/formatters';
 
 const money = (v) => formatCurrency(v);
-const date = (v) => (v ? formatDate(v) : '—');
+const date = (v) => (v ? formatNumericDate(v) : '–');
+// Small labelled filter control for report toolbars.
+const Filter = ({ label, children }) => (
+  <label className="block">
+    <span className="mb-1 block text-2xs text-ink-600">{label}</span>
+    {children}
+  </label>
+);
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 const TABS = [
@@ -88,7 +95,7 @@ export default function ReportsPanel({ branchId = '', showBranch = false }) {
   const config = {
     occupancy: {
       title: 'Room occupancy',
-      emptyMessage: 'No rooms found for this period.',
+      emptyMessage: `No rows for ${formatNumericDate(from)}${from === to ? '' : `–${formatNumericDate(to)}`}. Choose a wider date range.`,
       columns: [
         ...branchCol,
         { key: 'room_number', label: 'Room' },
@@ -98,19 +105,22 @@ export default function ReportsPanel({ branchId = '', showBranch = false }) {
         { key: 'guest_name', label: 'Guest' },
         { key: 'check_in_date', label: 'Check-in', format: date },
         { key: 'check_out_date', label: 'Check-out', format: date },
-        { key: 'booking_status', label: 'Booking', render: (r) => (r.booking_status ? <Badge status={r.booking_status} /> : '—') },
+        { key: 'booking_status', label: 'Booking', render: (r) => (r.booking_status ? <Badge status={r.booking_status} /> : '–') },
       ],
       toolbar: (
-        <div className="flex items-center gap-2">
-          <input type="date" aria-label="From date" className="input !w-auto !py-2" value={from} onChange={(e) => { setFrom(e.target.value); if (to < e.target.value) setTo(e.target.value); }} />
-          <span className="text-xs text-navy-400">to</span>
-          <input type="date" aria-label="To date" className="input !w-auto !py-2" min={from} value={to} onChange={(e) => setTo(e.target.value)} />
+        <div className="flex items-end gap-2">
+          <Filter label="From">
+            <input type="date" className="input !w-auto" value={from} onChange={(e) => { setFrom(e.target.value); if (to < e.target.value) setTo(e.target.value); }} />
+          </Filter>
+          <Filter label="To">
+            <input type="date" className="input !w-auto" min={from} value={to} onChange={(e) => setTo(e.target.value)} />
+          </Filter>
         </div>
       ),
     },
     billing: {
       title: 'Guest billing summary',
-      emptyMessage: unpaidOnly ? 'No unpaid balances. 🎉' : 'No bookings found.',
+      emptyMessage: unpaidOnly ? 'No bills with a balance due.' : 'No bills or bookings yet.',
       columns: [
         ...branchCol,
         { key: 'guest_name', label: 'Guest' },
@@ -121,7 +131,7 @@ export default function ReportsPanel({ branchId = '', showBranch = false }) {
         { key: 'amount_paid', label: 'Paid', align: 'right', format: money },
         {
           key: 'outstanding_balance', label: 'Outstanding', align: 'right', format: money,
-          render: (r) => <span className={r.outstanding_balance > 0 ? 'font-semibold text-red-700' : 'text-navy-400'}>{money(r.outstanding_balance)}</span>,
+          render: (r) => <span className={r.outstanding_balance > 0 ? 'font-medium text-signal-700' : 'text-ink-600'}>{money(r.outstanding_balance)}</span>,
         },
         {
           key: 'balance_flag', label: 'Status', sortable: false,
@@ -139,17 +149,20 @@ export default function ReportsPanel({ branchId = '', showBranch = false }) {
           }]
           : []),
       ],
-      summary: (rows) => (
-        <>
-          Billed <strong>{money(rows.reduce((s, r) => s + r.total_amount, 0))}</strong> · Collected{' '}
-          <strong>{money(rows.reduce((s, r) => s + r.amount_paid, 0))}</strong> · Outstanding{' '}
-          <strong className="text-red-700">{money(rows.reduce((s, r) => s + r.outstanding_balance, 0))}</strong>
-        </>
-      ),
+      summary: (rows) => {
+        const owed = rows.reduce((s, r) => s + r.outstanding_balance, 0);
+        return (
+          <>
+            Billed <strong className="font-medium text-ink-900">{money(rows.reduce((s, r) => s + r.total_amount, 0))}</strong> · Collected{' '}
+            <strong className="font-medium text-ink-900">{money(rows.reduce((s, r) => s + r.amount_paid, 0))}</strong> · Balance due{' '}
+            <strong className={`font-medium ${owed > 0 ? 'text-signal-700' : 'text-ink-900'}`}>{money(owed)}</strong>
+          </>
+        );
+      },
       toolbar: (
-        <label className="flex items-center gap-2 text-xs font-semibold text-navy-600">
-          <input type="checkbox" className="h-4 w-4 accent-gold-700" checked={unpaidOnly} onChange={(e) => setUnpaidOnly(e.target.checked)} />
-          Unpaid only
+        <label className="flex h-9 items-center gap-2 text-[13px] text-ink-900">
+          <input type="checkbox" className="h-4 w-4 accent-tea-700" checked={unpaidOnly} onChange={(e) => setUnpaidOnly(e.target.checked)} />
+          Balance due only
         </label>
       ),
     },
@@ -180,19 +193,23 @@ export default function ReportsPanel({ branchId = '', showBranch = false }) {
         { key: 'total_outstanding', label: 'Outstanding', align: 'right', format: money },
       ],
       toolbar: (
-        <div className="flex items-center gap-2">
-          <select aria-label="Year" className="input !w-auto !py-2" value={revYear} onChange={(e) => setRevYear(Number(e.target.value))}>
-            {[year, year - 1, year - 2].map((y) => <option key={y}>{y}</option>)}
-          </select>
-          <select aria-label="Month" className="input !w-auto !py-2" value={revMonth} onChange={(e) => setRevMonth(e.target.value)}>
-            <option value="">All months</option>
-            {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
-          </select>
+        <div className="flex items-end gap-2">
+          <Filter label="Year">
+            <select className="input !w-auto" value={revYear} onChange={(e) => setRevYear(Number(e.target.value))}>
+              {[year, year - 1, year - 2].map((y) => <option key={y}>{y}</option>)}
+            </select>
+          </Filter>
+          <Filter label="Month">
+            <select className="input !w-auto" value={revMonth} onChange={(e) => setRevMonth(e.target.value)}>
+              <option value="">All months</option>
+              {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+            </select>
+          </Filter>
         </div>
       ),
     },
     top: {
-      title: 'Top-used services',
+      title: 'Top services by quantity',
       columns: [
         { key: 'usage_rank', label: '#', align: 'right' },
         { key: 'service_name', label: 'Service' },
@@ -203,9 +220,11 @@ export default function ReportsPanel({ branchId = '', showBranch = false }) {
         { key: 'total_revenue', label: 'Revenue', align: 'right', format: money },
       ],
       toolbar: (
-        <select aria-label="Rows" className="input !w-auto !py-2" value={limit} onChange={(e) => setLimit(Number(e.target.value))}>
-          {[5, 10, 20].map((n) => <option key={n} value={n}>Top {n}</option>)}
-        </select>
+        <Filter label="Show">
+          <select className="input !w-auto" value={limit} onChange={(e) => setLimit(Number(e.target.value))}>
+            {[5, 10, 20].map((n) => <option key={n} value={n}>Top {n}</option>)}
+          </select>
+        </Filter>
       ),
     },
   }[tab];

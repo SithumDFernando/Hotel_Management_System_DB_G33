@@ -1,16 +1,28 @@
 import { useMemo } from 'react';
 import {
-  Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis,
+  Bar, BarChart, CartesianGrid, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import { getBillingSummary, getMonthlyRevenue, getOccupancy, getTopServices } from '@/api/reports';
 import useAuth from '@/hooks/useAuth';
 import useFetch from '@/hooks/useFetch';
-import StatCard from '@/components/ui/StatCard';
 import { ErrorState, Skeleton } from '@/components/ui/States';
+import SummaryStrip from '@/components/ui/SummaryStrip';
+import { CHART } from '@/lib/chartTheme';
 import { formatCompactCurrency, formatCurrency, todayISO } from '@/utils/formatters';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const sum = (rows, key) => rows.reduce((s, r) => s + Number(r[key] || 0), 0);
+const axisMoney = (v) => (v >= 1e6 ? `${v / 1e6}M` : v >= 1e3 ? `${v / 1e3}K` : v);
+
+// Round y-axis ticks from zero: 1, 2, 2.5 or 5 × 10^n per step, about four steps.
+function niceTicks(max) {
+  if (!max) return [0];
+  const raw = max / 4;
+  const pow = 10 ** Math.floor(Math.log10(raw));
+  const step = [1, 2, 2.5, 5, 10].map((m) => m * pow).find((st) => st >= raw);
+  return [...Array(Math.ceil(max / step) + 1)].map((_, i) => i * step);
+}
 
 // Last 6 months ending at ym ('YYYY-MM'), oldest first.
 function lastSixMonths(ym) {
@@ -21,18 +33,23 @@ function lastSixMonths(ym) {
   });
 }
 
-function OccupancyRing({ pct }) {
-  const r = 28;
-  const c = 2 * Math.PI * r;
+function RevenueTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null;
+  const row = payload[0].payload;
   return (
-    <svg viewBox="0 0 72 72" className="h-16 w-16 -rotate-90" role="img" aria-label={`${pct}% occupied`}>
-      <circle cx="36" cy="36" r={r} fill="none" stroke="#e3e9f1" strokeWidth="8" />
-      <circle cx="36" cy="36" r={r} fill="none" stroke="#7a5c00" strokeWidth="8" strokeLinecap="round" strokeDasharray={`${(pct / 100) * c} ${c}`} />
-    </svg>
+    <div className="rounded-md border border-ink-100 bg-paper-50 px-3 py-2 text-[13px] shadow-overlay">
+      <p className="font-medium text-ink-900">{label} {row.year}</p>
+      <dl className="mt-1 space-y-0.5 tabular">
+        <div className="flex justify-between gap-6"><dt className="text-ink-600">Rooms</dt><dd>{formatCurrency(row.room)}</dd></div>
+        <div className="flex justify-between gap-6"><dt className="text-ink-600">Services</dt><dd>{formatCurrency(row.service)}</dd></div>
+        <div className="flex justify-between gap-6 border-t border-ink-100 pt-0.5 font-medium"><dt>Total</dt><dd>{formatCurrency(row.room + row.service)}</dd></div>
+      </dl>
+    </div>
   );
 }
 
-// KPIs + 6-month revenue chart + top services. branchId only matters for admins.
+// Spec 11 §8: summary strip, then the revenue chart, then top services.
+// branchId only matters for admins (managers are scoped server-side).
 export default function BranchOverview({ branchId = '', ym }) {
   const { user } = useAuth();
   const today = todayISO();
@@ -80,72 +97,145 @@ export default function BranchOverview({ branchId = '', ym }) {
 
   const current = trend.data?.find((t) => t.month === month && t.year === year);
   const unpaidRows = unpaid.data || [];
+  const owed = sum(unpaidRows, 'outstanding_balance');
   const topRows = top.data || [];
-  const topTotal = sum(topRows, 'total_revenue');
-  const chartData = trend.data || [];
+  const chartData = (trend.data || []).map((d) => ({ ...d, total: d.room + d.service }));
+  const hasRevenue = chartData.some((d) => d.total > 0);
+  const yTicks = niceTicks(Math.max(0, ...chartData.map((d) => d.total)));
+  const scope = branchId || user.role === 'manager' ? 'this branch' : 'all branches';
+  const failed = (q) => (q.error ? '–' : undefined);
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="card p-5">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-navy-500">Occupancy today</p>
-          {occ.isLoading ? <Skeleton className="mt-3 h-16 w-full" /> : (
-            <div className="mt-2 flex items-center justify-between">
-              <p className="font-serif text-4xl font-semibold">{rooms.pct}%</p>
-              <OccupancyRing pct={rooms.pct} />
-            </div>
-          )}
-          <p className="mt-1 text-xs text-navy-500">{rooms.reserved} reserved · {rooms.maintenance} in maintenance</p>
-        </div>
-        <StatCard label="Rooms occupied" icon="bed" value={`${rooms.occupied} / ${rooms.total}`} sub="Checked-in right now" loading={occ.isLoading} />
-        <StatCard label={`Revenue · ${MONTHS[month - 1]} ${year}`} icon="chart" tone="gold" value={formatCompactCurrency(current?.gross)} sub={`Collected ${formatCurrency(current?.collected)} · checked-out stays`} loading={trend.isLoading} />
-        <StatCard label="Outstanding balances" icon="receipt" tone="red" value={formatCompactCurrency(sum(unpaidRows, 'outstanding_balance'))} sub={`${unpaidRows.length} folio${unpaidRows.length === 1 ? '' : 's'} with dues`} loading={unpaid.isLoading} />
-      </div>
+      <SummaryStrip
+        items={[
+          {
+            label: 'Rooms occupied today',
+            value: failed(occ) ?? `${rooms.occupied} of ${rooms.total} (${rooms.pct}%)`,
+            sub: occ.error ? "Couldn't load occupancy" : `${rooms.reserved} reserved · ${rooms.maintenance} in maintenance`,
+            loading: occ.isLoading && !occ.data,
+          },
+          {
+            label: `Revenue, ${MONTHS[month - 1]} ${year}`,
+            value: failed(trend) ?? formatCurrency(current?.gross),
+            sub: 'Checked-out stays, incl. tax',
+            loading: trend.isLoading && !trend.data,
+          },
+          {
+            label: `Collected, ${MONTHS[month - 1]} ${year}`,
+            value: failed(trend) ?? formatCurrency(current?.collected),
+            loading: trend.isLoading && !trend.data,
+          },
+          {
+            label: 'Balance due',
+            value: failed(unpaid) ?? formatCurrency(owed),
+            sub: unpaid.error ? "Couldn't load bills" : `${unpaidRows.length} bill${unpaidRows.length === 1 ? '' : 's'} with a balance`,
+            problem: owed > 0,
+            loading: unpaid.isLoading && !unpaid.data,
+          },
+        ]}
+      />
 
-      <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
-        <section className="card p-5" aria-label="Monthly revenue">
-          <h3 className="font-serif text-lg font-semibold">Monthly revenue breakdown</h3>
-          <p className="text-xs text-navy-500">Last 6 months · room vs services (LKR, incl. tax in gross)</p>
-          {trend.error ? <div className="mt-4"><ErrorState message={trend.error} onRetry={trend.refetch} /></div> : trend.isLoading ? <Skeleton className="mt-4 h-72 w-full" /> : (
-            <div className="mt-4 h-72" role="img" aria-label={`Revenue chart: ${chartData.map((d) => `${d.label} ${formatCompactCurrency(d.room + d.service)}`).join(', ')}`}>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e3e9f1" />
-                  <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={12} />
-                  <YAxis tickLine={false} axisLine={false} fontSize={11} width={48} tickFormatter={(v) => (v >= 1e6 ? `${v / 1e6}M` : v >= 1e3 ? `${v / 1e3}K` : v)} />
-                  <Tooltip formatter={(v) => formatCurrency(v)} cursor={{ fill: 'rgba(11,27,46,0.04)' }} />
-                  <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
-                  <Bar dataKey="room" name="Room revenue" stackId="rev" fill="#0b1b2e" />
-                  <Bar dataKey="service" name="Services" stackId="rev" fill="#d9ae45" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+        <section className="card min-w-0 p-4 sm:p-5" aria-labelledby="rev-heading">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <h2 id="rev-heading" className="text-base font-semibold text-ink-900">Monthly revenue, last 6 months (LKR)</h2>
+            <ul className="flex gap-4 text-[13px] text-ink-600" aria-label="Legend">
+              <li className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: CHART.series[0] }} aria-hidden="true" />Rooms</li>
+              <li className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: CHART.series[1] }} aria-hidden="true" />Services</li>
+            </ul>
+          </div>
+          <p className="mt-0.5 text-2xs text-ink-600">Checked-out stays to {MONTH_NAMES[month - 1]} {year}, {scope}; before tax.</p>
+
+          {trend.error ? (
+            <div className="mt-4"><ErrorState message={`Couldn't load revenue. ${trend.error}`} onRetry={trend.refetch} /></div>
+          ) : trend.isLoading && !trend.data ? (
+            <Skeleton className="mt-4 h-72 w-full" />
+          ) : !hasRevenue ? (
+            <p className="mt-4 flex h-40 items-center justify-center rounded-md border border-dashed border-ink-100 text-sm text-ink-600">
+              No checked-out stays in this period yet.
+            </p>
+          ) : (
+            <>
+              <div
+                className="mt-4 h-72"
+                role="img"
+                aria-label={`Revenue by month: ${chartData.map((d) => `${d.label} ${formatCurrency(d.total)}`).join(', ')}.`}
+              >
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartData} margin={{ top: 20, right: 4, left: 4, bottom: 0 }} barCategoryGap="28%">
+                    <CartesianGrid vertical={false} stroke={CHART.grid} />
+                    <XAxis dataKey="label" tickLine={false} axisLine={{ stroke: CHART.grid }} tick={{ fontSize: 12, fill: CHART.axis }} />
+                    <YAxis
+                      domain={[0, yTicks[yTicks.length - 1]]}
+                      ticks={yTicks}
+                      interval={0}
+                      tickLine={false}
+                      axisLine={false}
+                      width={52}
+                      tick={{ fontSize: 12, fill: CHART.axis }}
+                      tickFormatter={axisMoney}
+                      label={{ value: 'LKR', position: 'insideTopLeft', offset: 0, dy: -18, fontSize: 12, fill: CHART.axis }}
+                    />
+                    <Tooltip content={<RevenueTooltip />} cursor={{ fill: CHART.cursor }} />
+                    <Bar dataKey="room" name="Rooms" stackId="rev" fill={CHART.series[0]} stroke={CHART.surface} strokeWidth={2} isAnimationActive={false} />
+                    <Bar dataKey="service" name="Services" stackId="rev" fill={CHART.series[1]} stroke={CHART.surface} strokeWidth={2} radius={[2, 2, 0, 0]} isAnimationActive={false}>
+                      <LabelList dataKey="total" position="top" formatter={(v) => (v > 0 ? formatCompactCurrency(v).replace('LKR ', '') : '')} style={{ fontSize: 11, fill: CHART.text }} />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <details className="mt-3 text-[13px]">
+                <summary className="w-fit cursor-pointer rounded-sm text-tea-700">Show as table</summary>
+                <div className="mt-2 overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="bg-paper-200">
+                        <th scope="col" className="th">Month</th>
+                        <th scope="col" className="th text-right">Rooms</th>
+                        <th scope="col" className="th text-right">Services</th>
+                        <th scope="col" className="th text-right">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-ink-100">
+                      {chartData.map((d) => (
+                        <tr key={`${d.year}-${d.month}`}>
+                          <th scope="row" className="td text-left font-normal">{d.label} {d.year}</th>
+                          <td className="td text-right tabular">{formatCurrency(d.room)}</td>
+                          <td className="td text-right tabular">{formatCurrency(d.service)}</td>
+                          <td className="td text-right tabular font-medium">{formatCurrency(d.total)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </details>
+            </>
           )}
         </section>
 
-        <section className="card p-5" aria-label="Top services">
-          <h3 className="font-serif text-lg font-semibold">Top performing services</h3>
-          <p className="text-xs text-navy-500">By revenue · {branchId || user.role === 'manager' ? 'this branch' : 'all branches'}</p>
-          {top.error ? <div className="mt-4"><ErrorState message={top.error} onRetry={top.refetch} /></div> : top.isLoading ? <Skeleton className="mt-4 h-48 w-full" /> : topRows.length === 0 ? (
-            <p className="py-10 text-center text-sm text-navy-500">No service usage yet.</p>
+        <section className="card min-w-0 p-4 sm:p-5" aria-labelledby="top-heading">
+          <h2 id="top-heading" className="text-base font-semibold text-ink-900">Top services by quantity</h2>
+          <p className="mt-0.5 text-2xs text-ink-600">All time, {scope}.</p>
+          {top.error ? (
+            <div className="mt-4"><ErrorState message={`Couldn't load top services. ${top.error}`} onRetry={top.refetch} /></div>
+          ) : top.isLoading && !top.data ? (
+            <Skeleton className="mt-4 h-48 w-full" />
+          ) : topRows.length === 0 ? (
+            <p className="mt-4 text-sm text-ink-600">No services used yet.</p>
           ) : (
-            <ul className="mt-4 space-y-4">
-              {topRows.map((s) => {
-                const share = topTotal ? (s.total_revenue / topTotal) * 100 : 0;
-                return (
-                  <li key={s.service_id}>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="font-medium">{s.service_name}</span>
-                      <span className="font-semibold tabular-nums">{formatCurrency(s.total_revenue)}</span>
-                    </div>
-                    <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-navy-100" role="img" aria-label={`${share.toFixed(0)}% share`}>
-                      <div className="h-full rounded-full bg-gold-600" style={{ width: `${share}%` }} />
-                    </div>
-                    <p className="mt-1 text-[11px] text-navy-500">{s.total_quantity} ordered · {share.toFixed(1)}% share</p>
-                  </li>
-                );
-              })}
-            </ul>
+            <ol className="mt-3 divide-y divide-ink-100">
+              {topRows.map((s) => (
+                <li key={s.service_id} className="flex items-baseline gap-3 py-2.5 text-sm">
+                  <span className="w-5 shrink-0 text-right tabular text-ink-600">{s.usage_rank}.</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium text-ink-900">{s.service_name}</span>
+                    <span className="block text-2xs text-ink-600">{s.category} · {formatCurrency(s.total_revenue)}</span>
+                  </span>
+                  <span className="tabular font-medium text-ink-900">{s.total_quantity}</span>
+                </li>
+              ))}
+            </ol>
           )}
         </section>
       </div>

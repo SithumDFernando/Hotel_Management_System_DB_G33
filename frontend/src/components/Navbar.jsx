@@ -28,13 +28,13 @@ const NAV = {
     { to: '/rooms?mode=booking', label: 'New booking' },
   ],
   manager: [
-    { to: '/dashboard/manager', label: 'Dashboard' },
+    { to: '/dashboard/manager', label: 'Overview' },
     { to: '/dashboard/manager?tab=reports', label: 'Reports' },
   ],
   admin: [
-    { to: '/dashboard/admin', label: 'Dashboard' },
+    { to: '/dashboard/admin', label: 'Overview' },
     { to: '/dashboard/admin?tab=branches', label: 'Branches' },
-    { to: '/dashboard/admin?tab=users', label: 'Users' },
+    { to: '/dashboard/admin?tab=users', label: 'Accounts' },
     { to: '/dashboard/admin?tab=reports', label: 'Reports' },
   ],
 };

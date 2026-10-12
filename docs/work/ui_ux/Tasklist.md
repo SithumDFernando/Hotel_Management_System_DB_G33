@@ -40,13 +40,13 @@ Spec 11 already defines the target design (ink / paper / tea green + signal red,
 
 - [x] **4. [UI-04](UI-04-home-page.md)** 🔴 Home page rebuilt to spec 11 §7.1 + plain-fact rewrite of `lib/media.js`
 - [x] **5. [UI-05](UI-05-rooms-and-auth-pages.md)** 🟡 RoomsBrowse, RoomCard, StaySearch, Login, Register, NotFound
-- [ ] **6. [UI-06](UI-06-guest-booking-flow.md)** 🟡 BookingCheckout, BookingSummary, MyBookings
+- [x] **6. [UI-06](UI-06-guest-booking-flow.md)** 🟡 BookingCheckout, BookingSummary, MyBookings
 
 ## Phase C: Staff console
 
-- [ ] **7. [UI-07](UI-07-receptionist-today.md)** 🔴 Receptionist dashboard as the "Today" task list
-- [ ] **8. [UI-08](UI-08-billing-and-services.md)** 🟡 Bill / folio (`BillTable`, `BillPaymentModal`), `ServiceRequest`, `GuestPicker`
-- [ ] **9. [UI-09](UI-09-manager-admin-reports.md)** 🔴 Manager & admin: `BranchOverview`, charts, `ReportsPanel`, `ReportTable`, admin tabs, `RoomManager`, `CatalogueManager`
+- [x] **7. [UI-07](UI-07-receptionist-today.md)** 🔴 Receptionist dashboard as the "Today" task list
+- [x] **8. [UI-08](UI-08-billing-and-services.md)** 🟡 Bill / folio (`BillTable`, `BillPaymentModal`), `ServiceRequest`, `GuestPicker`
+- [x] **9. [UI-09](UI-09-manager-admin-reports.md)** 🔴 Manager & admin: `BranchOverview`, charts, `ReportsPanel`, `ReportTable`, admin tabs, `RoomManager`, `CatalogueManager`
 
 ## Phase D: Cross-cutting and sign-off
 
@@ -103,3 +103,53 @@ _Add a dated line per finished task: what changed, what was verified, anything d
   - **Also open:** a receptionist checkout was rendered but not submitted (needs GuestPicker, UI-08). The server's 409 detail contains a raw room UUID ("Room e0000000-… is already booked"); fix the copy in the backend or in UI-10.
   - A test booking remains in the dev DB: Kamal Perera, Single Room 103, 01/12–03/12/2026.
   - **Burn-down after Phase B: 197** (ServiceRequest 38, BillTable 26, UsersTab 22, GuestPicker 17, ReceptionistDashboard 15, ErrorBoundary 14, ReportTable 11, BranchOverview 11, BillPaymentModal 11, others ≤ 7). Every Phase B file is at 0.
+- **2026-10-12 · UI-06 (ticked):** ISSUE-15 rebuilt the dev DB. Cancel re-tested in headless Edge. From My Bookings as Kamal, the confirm names Room 103 and 01/12–03/12, the toast reads "Cancelled: Single Room 103, 01/12–03/12", and the booking moves to the Cancelled tab. From the Receptionist dashboard (Colombo, Upcoming) the row leaves the list; its toast copy is UI-07's job. A receptionist booking for a guest was submitted with GuestPicker at 1280px (Nimali, "Booked: Single · Room 103, SkyNest Colombo" + toast) and 375px (Kamal; the summary and button sit below the form). Every UI-06 criterion is met. The dev-DB test bookings from before the rebuild are gone; current test data is Room 103 booked for Nimali 10/12–12/12 and Kamal 14/12–15/12, plus two cancelled bookings (Kamal Room 103 01/12–03/12, Nimali Room 102 05/12–08/12).
+- **2026-10-12 · UI-07:**
+  - **ReceptionistDashboard** is now "Today": `h1` + date, then a `SummaryStrip` with the same four values (no `StatCard`, greeting or eyebrow).
+  - **Sections:** three stacked sections (stacked was chosen over tabs): **Departures due**, **Arrivals today**, **Staying on** (in-house guests not due out, so nobody is listed twice; the strip's "In-house" still counts everyone). Upcoming arrivals sit in a collapsed `<details>`. Fixed column widths keep the sections aligned.
+  - **Actions:** one visible action per row: Check in (`primary`), Check out (`primary`), Add service (`secondary`). The rest are in the new **`ui/RowMenu.jsx`** (⋯), which is portalled so the table's scroll box can't clip it. Enter/Space opens it, arrows move, Esc closes and returns focus, and focus returns to ⋯ after a dialog it opened closes.
+  - **Blocked check-in** reasons are shown as text in the row ("Arrives on 10/12/2026").
+  - **402 on check-out** opens the bill with "Balance due: LKR 79,350.00. Take payment before checking out." (amount parsed from the server detail).
+  - **Confirms:** "Check out Kamal Perera? Room 101 becomes available…" and "Cancel this booking? … Room 103 becomes available for 14/12–15/12".
+  - **Toasts:** "Checked in: …", "Checked out: …", "Cancelled: …".
+  - **Search** filters all sections at once; Refresh is a ghost icon button with "Updated HH:MM". Phones get stacked row cards.
+  - The branch fetch (only used for the old eyebrow) is gone.
+  - **Not done:** "Take payment" as the row action for departures needs the balance, which `GET /bookings` doesn't return. Adding a fetch is out of scope for a restyle, so Departures always shows Check out, and the 402 path covers the balance.
+  - **Verified in headless Edge** (rec.colombo, 1280 and 375): check in, add service, check out → 402 → discount → part payment → full payment → "Check out now", cancel from the Upcoming row menu, search, and the keyboard row menu.
+- **2026-10-12 · UI-08:**
+  - **BillTable** is a receipt: a `<dl>` with tabular right-aligned figures, an `ink-900` rule above Total, Paid to date, then a `signal` "Balance due" block (with an optional secondary "Take payment" that jumps to the form) or the "Paid" chip. It has a "Bill calculated" time, a Payments table, and takes an optional `booking` prop for the "Room · Suite 101 · 4 nights" label. Every figure is from `BillOut`; `outstanding_balance` comes from the API.
+  - **BillPaymentModal:**
+    - Title "Bill · Kamal Perera, Suite 101" with the reference and dates.
+    - A `notice` prop shows the 402 banner and focuses the amount.
+    - "Apply discount" reveals the field; server errors (e.g. "Discount must be between 0 and the bill subtotal") show under it instead of replacing the whole modal.
+    - Take payment: radio methods, a "Use full balance" link, and errors under the field.
+    - Toasts: "Payment taken: LKR 2,500.00 by Credit Card, Priya Rajapakse" and "Bill recalculated for …: discount LKR 500.00".
+    - Footer: Close / Print bill / Check out now.
+  - **`Modal size="lg"`** is full height on phones.
+  - **`formatDateTime`** is now `DD/MM/YYYY HH:MM` (only BillTable used it).
+  - **ServiceRequest:** "Add services · guest, Room N" header with stay, status and reference. Catalogue category pills become underline `Tabs`. Each row has a quantity field (1–99, inline error) and a `secondary` "Add" (hidden with an explanation unless checked in). "This stay" table, "Services total" from the API, "Open bill". The back link reads "Today", or "Overview" for managers. A `min-w-0` fix stops the tabs widening the page at 375px.
+  - **GuestPicker:** "Find guest" label with "Name, NIC/passport or email" help (what the API actually searches), result list, selected guest on `tea-100`, and a ghost "Register new guest". Field-labelled validation copy; toast "Registered: …". A 409 shows the server detail + "Open the existing guest instead." + a "Find {NIC}" button that searches for them (the API doesn't return the existing id).
+  - **Verified in headless Edge** as receptionist and manager: add service (and qty 0 error), discount (and over-subtotal error), part and full payment, print (print-media render shows only the folio), the 402 banner, the non-checked-in explanation, the GuestPicker no-match, validation and 409 → find → pick, modal full height at 375px.
+  - **Test harness note:** the 375px horizontal-scroll check now compares against the requested width; the old check missed overflow because mobile emulation widens `innerWidth`. Checkout and MyBookings re-checked clean.
+  - **Burn-down (class-precise grep, the UI-01 §5 colour names counted only after a Tailwind prefix, which reproduces 197 at the Phase B commit): 90.** Every UI-07/08 file is at 0.
+- **2026-10-12 · UI-09:**
+  - **Dashboards:** Manager and Admin headers are the tab name (Inter 20px) with no eyebrows. Underline `Tabs` are wired with `idBase` to a `tabpanel`. Filters have visible labels. The manager's branch fetch (eyebrow only) is gone. The admin "Users" tab is renamed **"Accounts"**, because it lists guest logins too, so "Staff accounts" would be wrong. The navbar labels now match the tabs ("Overview", "Accounts").
+  - **BranchOverview:**
+    - **Summary strip:** "Rooms occupied today 2 of 11 (18%)", revenue and collected for the month, and "Balance due LKR 54,750.00 / 2 bills with a balance" (`signal` only when > 0). Money is in full `LKR` format. `OccupancyRing` and `StatCard` are gone, and **`StatCard.jsx` is deleted**.
+    - **Revenue chart:** stacked `tea-700`/`ink-300` from the new **`src/lib/chartTheme.js`** (the only hex values in the frontend's JSX/JS apart from UI-01's `FALLBACK_GRADIENT`). Rounded 0-based ticks with an "LKR" label, total labels above the bars, 2px surface gaps, a text legend, a token tooltip, `role="img"` with a summary, and a "Show as table" `<details>`.
+    - **Validator:** the dataviz validator gives the pair ΔE 34–36 (CVD-safe). The lightness/chroma "fails" come from spec 11's muted palette, and `ink-300` is under 3:1 on white, so the labels and table view are required, and both are present.
+    - **Top services** now reads "Top services by quantity · All time", matching `v_top_services` (RANK by quantity, no date filter), with revenue shown as secondary text.
+  - **ReportsPanel / ReportTable:** Inter 16px titles, `paper-200` header, sentence-case sortable headers, numeric dates, and labelled filters ("Balance due only" instead of "Unpaid only"). Red appears only for amounts > 0. The 🎉 is removed. The occupancy empty state names the dates ("No rows for 12/10/2026. Choose a wider date range.").
+  - **Admin tabs:**
+    - **Branches:** City/Branch/Phone/Manager table, "Edit branch · SkyNest Kandy", field-labelled validation, toasts "Saved: …" / "Added: …".
+    - **Accounts:** role as plain text and no avatars. Guest rows say "Managed by the guest" instead of a disabled button. The create flow shows a `paper-200` "This password is shown once…" note, a monospace `<dl>` and "Copy email and password". The self-demotion 409 shows inline.
+    - **Bookings:** labelled filters and numeric dates.
+  - **RoomManager:** a Branch column when showing all branches. "Mark as maintenance" / "Return to service" buttons; Occupied rooms show "Guest checked in" as text.
+  - **CatalogueManager:** sentence-case category headings, `secondary` "Save price", and `ghost` Deactivate behind "Deactivate Laundry? It won't be offered for new orders. Past charges stay on bills." "Add service" opens a `Drawer`. Toasts name the service and price.
+  - **Bug fixed along the way:** an `sr-only` "Actions" header in a table inside an unpositioned `overflow-x-auto` escaped the scroll box and widened the page at 375px (Accounts was 519px wide). The scroll wrappers in UsersTab, BranchesTab, RoomManager and ReceptionistDashboard are now `relative`.
+  - **Verified in headless Edge:**
+    - **Kandy manager:** overview at 1280 and 375, all five reports, maintenance toggle both ways, price edit (restored), deactivate confirm → Keep.
+    - **Admin:** overview chart and table view, branch edit + revert, add-branch validation, create receptionist (validation + generated password), self-demotion → "You cannot remove your own admin role.", billing → View bill, bookings status filter, room toggle, price edit (restored), add service → deactivate.
+    - **375px sweep:** all 7 admin tabs, 4 manager tabs and 4 reports: no page-level horizontal scroll.
+  - **Open (not a restyle; logged for a separate fix):** Billing summary → "View bill" on a booking that has no bill and isn't Checked-In or Checked-Out (e.g. the cancelled Galle seed booking) opens the modal, which calls `generate_bill` and shows "Booking must be Checked-In or Checked-Out to generate a bill" with a Retry that can't succeed. The old modal did the same. Fix: hide "View bill" for rows without a bill unless the booking is in-house, or have the modal fall back to `GET` for non-billable bookings.
+  - **Burn-down: 20** (ErrorBoundary 14, Profile 6, both UI-10). Every Phase C file is at 0.

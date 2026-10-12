@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { createBranch, updateBranch } from '@/api/admin';
 import Button from '@/components/ui/Button';
-import Icon from '@/components/ui/Icon';
 import { Drawer } from '@/components/ui/Modal';
 import { Input } from '@/components/ui/Field';
 import { EmptyState, ErrorState, InlineAlert, Skeleton } from '@/components/ui/States';
@@ -36,7 +35,7 @@ function BranchDrawer({ branch, open, onClose, onSaved }) {
   const submit = async (e) => {
     e.preventDefault();
     const v = {};
-    FIELDS.forEach(([k, label]) => !f[k].trim() && (v[k] = `${label} is required`));
+    FIELDS.forEach(([k, label]) => !f[k].trim() && (v[k] = `Enter the ${label.toLowerCase()}.`));
     setErrors(v);
     if (Object.keys(v).length) return;
 
@@ -51,7 +50,7 @@ function BranchDrawer({ branch, open, onClose, onSaved }) {
       } else {
         await createBranch(payload);
       }
-      toast.success(editing ? 'Branch updated' : 'Branch created');
+      toast.success(editing ? `Saved: ${payload.name}` : `Added: ${payload.name}`);
       onSaved();
       onClose();
     } catch (err) {
@@ -65,9 +64,9 @@ function BranchDrawer({ branch, open, onClose, onSaved }) {
     <Drawer
       open={open}
       onClose={onClose}
-      title={editing ? `Edit ${branch.name}` : 'Add branch'}
-      subtitle="Branch details shown to guests on the public site."
-      footer={<div className="flex justify-end gap-2"><Button variant="ghost" onClick={onClose}>Cancel</Button><Button type="submit" form="branch-form" loading={busy}>{editing ? 'Save changes' : 'Create branch'}</Button></div>}
+      title={editing ? `Edit branch · ${branch.name}` : 'Add branch'}
+      subtitle="The name, address and phone are shown to guests on the public site."
+      footer={<div className="flex justify-end gap-2"><Button variant="ghost" onClick={onClose}>Cancel</Button><Button type="submit" form="branch-form" loading={busy}>{editing ? 'Save changes' : 'Add branch'}</Button></div>}
     >
       <form id="branch-form" onSubmit={submit} noValidate className="space-y-4">
         {serverError && <InlineAlert>{serverError}</InlineAlert>}
@@ -87,29 +86,30 @@ export default function BranchesTab({ branches }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-navy-500">{list.length} branch{list.length === 1 ? '' : 'es'}</p>
-        <Button onClick={() => setDrawer({ open: true, branch: null })}><Icon name="plus" /> Add branch</Button>
+        <p className="text-sm text-ink-600">{list.length} branch{list.length === 1 ? '' : 'es'}</p>
+        <Button onClick={() => setDrawer({ open: true, branch: null })}>Add branch</Button>
       </div>
 
       {error ? <ErrorState message={error} onRetry={refetch} /> : isLoading ? (
         <Skeleton className="h-48 w-full" />
       ) : list.length === 0 ? (
-        <EmptyState icon="building" title="No branches yet" action={<Button onClick={() => setDrawer({ open: true, branch: null })}>Add the first branch</Button>} />
+        <EmptyState title="No branches yet" message="Add a branch to start taking bookings there." action={<Button onClick={() => setDrawer({ open: true, branch: null })}>Add branch</Button>} />
       ) : (
-        <div className="card overflow-x-auto">
+        <div className="card relative overflow-x-auto">
           <table className="w-full min-w-[760px]">
-            <thead className="bg-navy-50">
-              <tr><th className="th">Branch</th><th className="th">Contact</th><th className="th">Manager</th><th className="th text-right">Rooms</th><th className="th text-right">Active bookings</th><th className="th text-right">Actions</th></tr>
+            <thead>
+              <tr className="bg-paper-200"><th scope="col" className="th">City</th><th scope="col" className="th">Branch</th><th scope="col" className="th">Phone</th><th scope="col" className="th">Manager</th><th scope="col" className="th text-right">Rooms</th><th scope="col" className="th text-right">Active bookings</th><th scope="col" className="th"><span className="sr-only">Actions</span></th></tr>
             </thead>
-            <tbody className="divide-y divide-navy-100">
+            <tbody className="divide-y divide-ink-100">
               {list.map((b) => (
-                <tr key={b.branch_id} className="hover:bg-navy-50/50">
-                  <td className="td"><span className="font-semibold">{b.name}</span><span className="block text-xs text-navy-500">{b.address}</span></td>
-                  <td className="td text-xs">{b.city}<span className="block text-navy-500">{b.phone}</span></td>
+                <tr key={b.branch_id} className="hover:bg-paper-100">
+                  <td className="td font-medium text-ink-900">{b.city}</td>
+                  <td className="td">{b.name}<span className="block text-2xs text-ink-600">{b.address}</span></td>
+                  <td className="td whitespace-nowrap tabular">{b.phone}</td>
                   <td className="td">{b.manager_name}</td>
-                  <td className="td text-right tabular-nums">{b.total_rooms}</td>
-                  <td className="td text-right tabular-nums">{b.active_bookings}</td>
-                  <td className="td text-right"><Button size="sm" variant="secondary" onClick={() => setDrawer({ open: true, branch: b })}><Icon name="edit" className="h-3.5 w-3.5" /> Edit</Button></td>
+                  <td className="td text-right tabular">{b.total_rooms}</td>
+                  <td className="td text-right tabular">{b.active_bookings}</td>
+                  <td className="td text-right"><Button size="sm" variant="secondary" onClick={() => setDrawer({ open: true, branch: b })} aria-label={`Edit ${b.name}`}>Edit</Button></td>
                 </tr>
               ))}
             </tbody>

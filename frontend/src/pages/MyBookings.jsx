@@ -58,7 +58,7 @@ function BillModal({ booking, onClose }) {
       ) : (
         <div className="space-y-6">
           {state.bill ? (
-            <BillTable bill={state.bill} payments={state.payments} />
+            <BillTable bill={state.bill} payments={state.payments} booking={booking} />
           ) : (
             <InlineAlert tone="info">
               No bill yet. The front desk prepares it at check-out, with room charges, services and tax.

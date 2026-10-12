@@ -67,15 +67,11 @@ export function formatStayRange(checkIn, checkOut) {
   return `${dm(checkIn)}–${dm(checkOut)}`;
 }
 
+// "12/10/2026 09:42" (spec 11 §9: DD/MM/YYYY, 24-hour).
 export function formatDateTime(value) {
   if (!value) return '—';
-  return new Date(value).toLocaleString('en-GB', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  const d = new Date(value);
+  return `${formatNumericDate(d)} ${d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
 }
 
 export function calculateNights(checkIn, checkOut) {
