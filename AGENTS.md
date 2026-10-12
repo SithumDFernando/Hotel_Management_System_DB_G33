@@ -21,6 +21,10 @@ This file (`AGENTS.md`) is used by the Antigravity agent to understand project-s
 - When making database schema changes, ensure `db/run_all.sql` remains the single entry point to rebuild the schema.
 - API endpoints must conform to the contract defined in `docs/specs/02_api_contract.md`.
 - Frontend pages should align with the routing map defined in `docs/specs/09_frontend_pages.md`.
+- **Git Commit & Push Policy**:
+  - The agent **MUST NEVER** automatically execute `git commit` or `git push`.
+  - Perform all code, database, test, and documentation implementations autonomously in auto mode as needed.
+  - When a task or execution milestone is finished, the agent must **suggest a concise conventional commit message (1–3 sentences)** and wait for the user to perform the commit manually before continuing further execution.
 
 ## Task Tracking & Feature Verification Rules
 
