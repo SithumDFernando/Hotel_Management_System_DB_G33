@@ -82,7 +82,9 @@ export default function ReportTable({
               <thead className="bg-navy-50">
                 <tr>
                   {columns.map((c) => {
-                    const active = sort?.key === c.key;
+                    // Action columns have no key; without this, undefined === undefined
+                    // marks them sorted while nothing is, and sort.dir throws.
+                    const active = Boolean(c.key) && sort?.key === c.key;
                     const sortable = c.key && c.sortable !== false;
                     return (
                       <th key={c.key || c.label} className={`th ${c.align === 'right' ? 'text-right' : ''}`} aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}>

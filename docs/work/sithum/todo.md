@@ -71,7 +71,7 @@
   - [x] Review Sheereen's PR: Rate/tax functions, bill UPSERT & payments
   - [x] Review Chamika's PR: Service catalog, guest CRUD & price snapshot trigger
   - [x] Review Sadeepa's PR: 5 management views & reporting endpoints
-- [ ] **System Verification & Smoke Tests**
-  - [ ] Execute `db/run_all.sql` cleanly against local PostgreSQL instance
-  - [ ] Validate complete OpenAPI contract at `/docs`
-  - [ ] Verify frontend authentication flow and role guard integration
+- [x] **System Verification & Smoke Tests** (TASKLIST tasks 15–16, 2026-10-12)
+  - [x] Execute `db/run_all.sql` cleanly against local PostgreSQL instance: fresh builds with `ON_ERROR_STOP=1`, 225 tests + `test_phase4` pass
+  - [x] Validate complete OpenAPI contract at `/docs`: `/docs` serves OpenAPI 3.1 with 39 operations; roles and error codes checked against `02_api_contract.md` (task 17)
+  - [x] Verify frontend authentication flow and role guard integration: headless-browser login as every role; wrong-role routes redirect to the role's home, signed-out users go to `/login?next=`

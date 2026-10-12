@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
+import ErrorBoundary from './ErrorBoundary';
 import Navbar from './Navbar';
 
 function Footer() {
@@ -28,6 +29,7 @@ const TITLES = [
   ['/booking', 'Book a room'],
   ['/my-bookings', 'My bookings'],
   ['/services', 'Service requests'],
+  ['/profile', 'Your profile'],
   ['/dashboard/receptionist', 'Front desk'],
   ['/dashboard/manager', 'Manager dashboard'],
   ['/dashboard/admin', 'Admin console'],
@@ -35,7 +37,7 @@ const TITLES = [
 ];
 
 export default function Layout() {
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   // Start each page at the top on navigation and keep the tab title meaningful.
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -50,7 +52,10 @@ export default function Layout() {
       </a>
       <Navbar />
       <main id="main" className="flex-1">
-        <Outlet />
+        {/* resetKey: navigating anywhere (navbar, back) clears a crashed page */}
+        <ErrorBoundary page resetKey={pathname + search}>
+          <Outlet />
+        </ErrorBoundary>
       </main>
       <Footer />
     </div>

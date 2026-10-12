@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { getBooking } from '@/api/bookings';
 import { addUsage, getServices, getUsage } from '@/api/services';
 import useAuth from '@/hooks/useAuth';
@@ -42,6 +42,8 @@ export default function ServiceRequest() {
   const { bookingId } = useParams();
   const { user } = useAuth();
   const toast = useToast();
+  const location = useLocation();
+  const navigate = useNavigate();
 
   const booking = useFetch((s) => getBooking(bookingId, s), [bookingId]);
   const catalogue = useFetch((s) => getServices(s), []);
@@ -55,7 +57,14 @@ export default function ServiceRequest() {
 
   const b = booking.data;
   const canOrder = b?.status === 'Checked-In';
-  const back = user.role === 'manager' ? '/dashboard/manager' : '/dashboard/receptionist';
+  const dashboard = user.role === 'manager' ? '/dashboard/manager' : '/dashboard/receptionist';
+  // Return to wherever we came from (keeps dashboard tabs); a direct link falls back to the dashboard.
+  const hasHistory = location.key !== 'default';
+  const goBack = (e) => {
+    if (!hasHistory) return;
+    e.preventDefault();
+    navigate(-1);
+  };
 
   const groups = catalogue.data || [];
   const filtered = useMemo(() => {
@@ -85,7 +94,7 @@ export default function ServiceRequest() {
     return (
       <div className="mx-auto max-w-3xl px-4 py-14">
         <ErrorState message={booking.error} onRetry={booking.refetch} />
-        <div className="mt-4 text-center"><Button variant="outline" to={back}>Back to dashboard</Button></div>
+        <div className="mt-4 text-center"><Button variant="outline" to={dashboard} onClick={goBack}>Back</Button></div>
       </div>
     );
   }
@@ -95,7 +104,7 @@ export default function ServiceRequest() {
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
       <nav className="mb-3 text-xs text-navy-500" aria-label="Breadcrumb">
-        <Link to={back} className="hover:text-gold-700">Dashboard</Link> / <span>Services</span>
+        <Link to={dashboard} className="hover:text-gold-700">Dashboard</Link> / <span>Services</span>
       </nav>
       <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
@@ -103,7 +112,7 @@ export default function ServiceRequest() {
           <h1 className="mt-1 text-4xl font-semibold">Service requests</h1>
           <p className="mt-1 text-sm text-navy-500">Post chargeable guest services to the stay’s folio.</p>
         </div>
-        <Button variant="outline" to={back}><Icon name="arrowLeft" /> Back</Button>
+        <Button variant="outline" to={dashboard} onClick={goBack}><Icon name="arrowLeft" /> Back</Button>
       </header>
 
       {/* Booking header */}

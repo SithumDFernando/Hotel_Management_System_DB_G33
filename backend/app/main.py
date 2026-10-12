@@ -35,14 +35,14 @@ async def lifespan(app: FastAPI):
     """
     # --- STARTUP PHASE ---
     await init_db()
-    print("✅ Database connection pool initialised")
+    print("Database connection pool initialised")
 
     # --- APPLICATION RUNNING PHASE ---
     yield
 
     # --- SHUTDOWN PHASE ---
     await close_db()
-    print("🛑 Database connection pool closed")
+    print("Database connection pool closed")
 
 
 # ── Create App ────────────────────────────────────────────────────────────────

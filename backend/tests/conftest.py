@@ -55,13 +55,14 @@ def pytest_collection_modifyitems(items):
 @pytest.fixture(autouse=True)
 def _reset_rate_limits():
     """The suite logs in from one client address; start each test fresh."""
-    from app.rate_limit import login_failures, signup_attempts
+    from app.rate_limit import login_failures, password_failures, signup_attempts
 
-    login_failures.reset()
-    signup_attempts.reset()
+    limiters = (login_failures, signup_attempts, password_failures)
+    for limiter in limiters:
+        limiter.reset()
     yield
-    login_failures.reset()
-    signup_attempts.reset()
+    for limiter in limiters:
+        limiter.reset()
 
 
 @pytest.fixture

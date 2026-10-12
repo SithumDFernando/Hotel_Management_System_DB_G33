@@ -191,8 +191,8 @@ Spread across bookings 1, 2, 3, 6 — only checked-in/checked-out bookings.
 9. user_account
 10. booking
 11. service_usage
-12. bill (generated via calculate_bill() for checked-out bookings)
-13. payment (via record_payment())
+12. bill (direct INSERT with precomputed totals; generate_bill() recalculates them on the next call)
+13. payment (direct INSERT with fixed IDs and paid_at; bill.amount_paid matches the inserted payments)
 ```
 
 > Use `SELECT` after inserts to verify trigger-set values (`unit_price`, `room.status`).

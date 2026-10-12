@@ -1,14 +1,18 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { getBooking } from '@/api/bookings';
 import {
   getBillingSummary, getMonthlyRevenue, getOccupancy, getServiceUsage, getTopServices,
 } from '@/api/reports';
 import useAuth from '@/hooks/useAuth';
 import useFetch from '@/hooks/useFetch';
+import BillPaymentModal from '@/components/BillPaymentModal';
 import ReportTable from '@/components/ReportTable';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import Tabs from '@/components/ui/Tabs';
-import { formatCurrency, formatDate, todayISO } from '@/utils/formatters';
+import { useToast } from '@/components/ui/Toast';
+import { errorMessage, formatCurrency, formatDate, todayISO } from '@/utils/formatters';
 
 const money = (v) => formatCurrency(v);
 const date = (v) => (v ? formatDate(v) : '—');
@@ -26,16 +30,27 @@ const TABS = [
 // scoped server-side. `showBranch` adds a branch column for cross-branch views.
 export default function ReportsPanel({ branchId = '', showBranch = false }) {
   const { user } = useAuth();
+  const toast = useToast();
   const today = todayISO();
   const year = new Date().getFullYear();
 
-  const [tab, setTab] = useState('occupancy');
+  // The open report lives in the URL (?report=) so refresh and back/forward keep it.
+  const [params, setParams] = useSearchParams();
+  const tab = TABS.some((t) => t.key === params.get('report')) ? params.get('report') : 'occupancy';
+  const setTab = (t) => {
+    const next = new URLSearchParams(params);
+    if (t === 'occupancy') next.delete('report');
+    else next.set('report', t);
+    setParams(next, { replace: true });
+  };
   const [from, setFrom] = useState(today);
   const [to, setTo] = useState(today);
   const [unpaidOnly, setUnpaidOnly] = useState(false);
   const [revYear, setRevYear] = useState(year);
   const [revMonth, setRevMonth] = useState('');
   const [limit, setLimit] = useState(10);
+  const [opening, setOpening] = useState(null);
+  const [billBooking, setBillBooking] = useState(null);
 
   const fetchers = {
     occupancy: (s) => getOccupancy({ branch_id: branchId, ...(from === to ? { date: from } : { from_date: from, to_date: to }) }, s),
@@ -44,7 +59,29 @@ export default function ReportsPanel({ branchId = '', showBranch = false }) {
     revenue: (s) => getMonthlyRevenue({ branch_id: branchId, year: revYear, month: revMonth }, s),
     top: (s) => getTopServices({ branch_id: branchId, limit }, s),
   };
-  const { data, isLoading, error, refetch } = useFetch(fetchers[tab], [tab, branchId, from, to, unpaidOnly, revYear, revMonth, limit]);
+  // Rows are tagged with their tab so the previous report's rows are never
+  // rendered with the next report's columns while it loads.
+  const report = useFetch(
+    (s) => Promise.resolve(fetchers[tab](s)).then((rows) => ({ tab, rows })),
+    [tab, branchId, from, to, unpaidOnly, revYear, revMonth, limit],
+  );
+  const { error, refetch } = report;
+  const fresh = report.data?.tab === tab;
+  const data = fresh ? report.data.rows : null;
+  const isLoading = report.isLoading || (!fresh && !error);
+
+  // The billing summary has no booking status or room type, so fetch the
+  // booking before opening the bill.
+  const openBill = async (bookingId) => {
+    setOpening(bookingId);
+    try {
+      setBillBooking(await getBooking(bookingId));
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setOpening(null);
+    }
+  };
 
   const branchCol = showBranch ? [{ key: 'branch_name', label: 'Branch' }] : [];
 
@@ -91,8 +128,15 @@ export default function ReportsPanel({ branchId = '', showBranch = false }) {
           format: (_, r) => (!r.bill_id ? 'No bill' : r.balance_flag ? 'Balance due' : 'Settled'),
           render: (r) => (!r.bill_id ? <Badge tone="gray">No bill</Badge> : r.balance_flag ? <Badge tone="amber">Balance due</Badge> : <Badge tone="green">Settled</Badge>),
         },
-        ...(user.role === 'manager'
-          ? [{ label: 'Folio', render: (r) => <Button size="sm" variant="outline" to={`/services/${r.booking_id}`}>Open</Button> }]
+        ...(['manager', 'admin'].includes(user.role)
+          ? [{
+            label: 'Bill',
+            render: (r) => (
+              <Button size="sm" variant="outline" loading={opening === r.booking_id} disabled={Boolean(opening)} onClick={() => openBill(r.booking_id)}>
+                View bill
+              </Button>
+            ),
+          }]
           : []),
       ],
       summary: (rows) => (
@@ -182,6 +226,9 @@ export default function ReportsPanel({ branchId = '', showBranch = false }) {
         summary={config.summary}
         exportName={`skynest-${tab}-${today}`}
       />
+      {billBooking && (
+        <BillPaymentModal booking={billBooking} onClose={() => setBillBooking(null)} onChanged={refetch} />
+      )}
     </div>
   );
 }

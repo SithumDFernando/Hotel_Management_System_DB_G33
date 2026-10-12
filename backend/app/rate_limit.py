@@ -9,6 +9,9 @@ endpoints (ISSUE-10):
   count, so staff logging in all day are never limited, and a successful
   login clears the counter.
 - signup_attempts: 10 sign-ups per client IP per hour.
+- password_failures: 5 wrong current passwords per account in 15 minutes
+  on POST /auth/change-password, so a stolen session can't be used to
+  guess the password; a successful change clears the counter.
 
 Limitation: the state lives in this process's memory. That is fine for the
 single uvicorn process in docker-compose; with several workers or hosts,
@@ -61,6 +64,7 @@ class SlidingWindowLimiter:
 
 login_failures = SlidingWindowLimiter(limit=10, window_s=300)
 signup_attempts = SlidingWindowLimiter(limit=10, window_s=3600)
+password_failures = SlidingWindowLimiter(limit=5, window_s=900)
 
 
 def client_ip(request: Request) -> str:

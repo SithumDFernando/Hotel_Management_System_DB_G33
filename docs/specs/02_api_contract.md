@@ -10,7 +10,8 @@
 
 - All IDs are UUID strings.
 - Dates are `YYYY-MM-DD`, timestamps are ISO 8601.
-- Pagination: `?page=1&per_page=20` (default 20, max 100).
+- Pagination (`GET /bookings` only): `?page=1&per_page=20` (default 20, max 100).
+- `401` without a valid token on any non-public endpoint; `403` when the role isn't allowed (see the matrix in `08_auth_and_roles.md`).
 - Error responses: `{ "detail": "message" }` with appropriate HTTP status.
 - A guest token whose account has no guest profile gets `403 This account has no guest profile. Contact the front desk.` on every guest-scoped endpoint.
 - Branch scoping: managers and receptionists may only act on bookings and rooms of their own branch; guests only on their own bookings; admins on everything (see `08_auth_and_roles.md`). Every endpoint that takes a `booking_id` (path or body) or acts on a room checks existence first (`404`), then access (`403 Not authorised for bookings of another branch.` / `403 Guests can only access their own bookings.`).
@@ -98,6 +99,45 @@ Email is matched case-insensitively (trimmed + lower-cased).
 **Response (201):** `{ "account_id": "uuid-..." }`
 
 **Errors:** `403` caller not admin · `400 Invalid role` · `422` password under 8 characters or over 72 bytes · `409` email exists (case-insensitive), or `This guest profile is already linked to another account.` · `404` referenced branch/guest doesn't exist · `422` invalid role ↔ link combination (same rules as `POST /api/admin/users`)
+
+### GET `/api/auth/profile`
+> Any signed-in user. Backs the `/profile` page.
+
+**Response (200):**
+```json
+{
+  "account_id": "uuid-...",
+  "email": "kamal@mail.com",
+  "role": "guest",
+  "branch_id": null,
+  "branch_name": null,
+  "guest": { "guest_id": "uuid-...", "full_name": "Kamal Perera", "nic_passport": "200012345678", "email": "kamal@mail.com", "phone": "+94 77 123 4567", "date_of_birth": "2000-03-15", "nationality": "Sri Lankan", "gender": "Male", "guest_type": "Individual", "company_name": null, "company_reg_number": null, "billing_contact_name": null }
+}
+```
+Staff accounts get `branch_name` (manager/receptionist) and `guest: null`.
+
+**Errors:** `401` not signed in
+
+### PATCH `/api/auth/profile`
+> Guest only. Updates the caller's own guest profile; only fields sent (not null) change.
+
+**Request:** any of `full_name` (2–150), `phone` (7–20), `date_of_birth`, `nationality` (≤50), `gender` (≤10)
+```json
+{ "phone": "+94 77 000 1111", "nationality": "Sri Lankan" }
+```
+
+**Response (200):** the updated guest (same shape as `guest` above)
+
+**Errors:** `400 No fields provided for update.` · `403` staff caller, or a guest account with no guest profile · `422` invalid value, or any other field (`email` and `nic_passport` are changed by the front desk via `PUT /api/guests/:id`)
+
+### POST `/api/auth/change-password`
+> Any signed-in user changes their own password.
+
+**Request:** `{ "current_password": "...", "new_password": "min8chars" }`
+
+**Response (200):** `{ "detail": "Password changed." }`. Existing tokens stay valid until they expire.
+
+**Errors:** `400 Current password is incorrect.` · `400 The new password must be different from the current one.` · `422` new password under 8 characters or over 72 bytes · `429 Too many attempts. Try again later.` after 5 wrong current passwords for one account in 15 minutes (`Retry-After` header)
 
 ---
 
@@ -200,7 +240,7 @@ Email is matched case-insensitively (trimmed + lower-cased).
 ```
 
 ### POST `/api/guests`
-> Receptionist, Manager, Admin
+> Receptionist, Admin (managers get `403`)
 
 **Request:**
 ```json
@@ -243,16 +283,16 @@ Email is matched case-insensitively (trimmed + lower-cased).
 > Receptionist, Manager, Admin, or the guest themselves
 
 ### PUT `/api/guests/:guest_id`
-> Receptionist, Manager, Admin
+> Receptionist, Admin (managers get `403`)
 
 ---
 
 ## 4. Bookings — `/api/bookings`
 
 ### POST `/api/bookings`
-> Receptionist, Manager, Guest
+> Receptionist, Manager, Admin, Guest (for themselves)
 
-Calls `create_booking()` stored procedure (SERIALIZABLE).
+Calls `create_booking()` stored procedure at the default READ COMMITTED level. Overlaps are prevented by the room-row lock in `trg_double_booking` plus the exclusion constraint `excl_booking_room_overlap` (20 parallel requests → one 201, nineteen 409).
 
 **Request:**
 ```json
@@ -376,7 +416,7 @@ Calls `perform_checkout()` stored procedure, which first recalculates the bill w
 ## 6. Services — `/api/services`
 
 ### GET `/api/services`
-> Receptionist, Manager, Admin, Guest (Public catalogue)
+> Any signed-in role: Receptionist, Manager, Admin, Guest (anonymous → `401`)
 
 **Response (200):** Array of service categories with their active services:
 ```json
@@ -577,7 +617,7 @@ Calls `record_payment()` stored procedure, which returns the new `payment_id`; t
 **Params:** `?branch_id=uuid`
 
 ### GET `/api/reports/monthly-revenue`
-**Params:** `?year=2026&month=2&branch_id=uuid`
+**Params:** `?year=2026&month=2&branch_id=uuid`. `year` is required (2000–2100); `month` is optional (1–12, omit for the whole year). Missing or out-of-range → `422`.
 
 ### GET `/api/reports/top-services`
 **Params:** `?limit=10&branch_id=uuid` (`limit` 1–100)

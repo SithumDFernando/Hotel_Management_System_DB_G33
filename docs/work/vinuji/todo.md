@@ -67,11 +67,11 @@
 
 ## Phase 4: Testing & Verification
 
-- [ ] **Database Level Verification**
+- [x] **Database Level Verification**
   - [x] Test double-booking trigger with overlapping date ranges in psql (ensure exception is raised): covered by `backend/tests/test_double_booking.py`, incl. two concurrent sessions
-  - [ ] Test booking creation and verify `rate_at_booking` is locked
+  - [x] Test booking creation and verify `rate_at_booking` is locked: raising the room rate by 5,000 after `create_booking` left `rate_at_booking` at 8,000 and the room charges unchanged
   - [x] Verify check-in and check-out procedures update both `booking` and `room` statuses: covered by `backend/tests/test_room_status.py` (room via the trigger)
-- [ ] **API Level Verification**
-  - [ ] Verify endpoints in FastAPI Swagger UI (`http://localhost:8000/docs`)
-  - [ ] Verify 409 Conflict returned when booking already reserved room
-  - [ ] Verify 403 Forbidden returned when unauthorized role attempts check-in/out
+- [x] **API Level Verification**
+  - [x] Verify endpoints in FastAPI Swagger UI (`http://localhost:8000/docs`): `/docs` loads; booking endpoints exercised over HTTP in task 16
+  - [x] Verify 409 Conflict returned when booking already reserved room: 20 parallel requests → one 201, nineteen 409
+  - [x] Verify 403 Forbidden returned when unauthorized role attempts check-in/out: guest check-in/out → 403, other-branch receptionist → 403

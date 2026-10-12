@@ -56,9 +56,9 @@
 
 ## Phase 4: Testing & Verification
 
-- [ ] **Database Level Verification**
-  - [ ] Test `fn_get_current_rate` with branch-room pairings in psql
-  - [ ] Test `service_usage_trigger` rejection for non-Checked-In bookings and price snapshotting
-- [ ] **API Level Verification**
-  - [ ] Test guest search and creation endpoints with Corporate vs Individual validations
-  - [ ] Test service catalog CRUD and service ordering via `/docs`
+- [x] **Database Level Verification**
+  - [x] Test `fn_get_current_rate` with branch-room pairings in psql: matches `room_rate.daily_rate`; an unknown pairing raises 'No rate configured for this room type at this branch'
+  - [x] Test `service_usage_trigger` rejection for non-Checked-In bookings and price snapshotting: Checked-Out booking rejected; inserted `unit_price` equals the catalogue `base_price`
+- [x] **API Level Verification**
+  - [x] Test guest search and creation endpoints with Corporate vs Individual validations: Corporate without `company_name` → 422, with company fields → 201, duplicate NIC → 409, search by name/NIC works. Gaps found: search by phone returns nothing (SRS REQ-3.5), and an Individual guest may store `company_name`
+  - [x] Test service catalog CRUD and service ordering via `/docs`: create (manager), price update and deactivate (admin) work; inactive services are hidden; categories and names come back sorted
