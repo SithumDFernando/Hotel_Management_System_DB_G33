@@ -75,6 +75,9 @@ async def missing_schema_objects(conn) -> dict[str, list[str]]: ...
   - Add `GET /api/health` returning `{"status": "ok"}` (200), or `{"status": "schema_out_of_date", "missing": {...}, "fix": "docker compose down -v && docker compose up --build"}` (**503**).
   - Point the compose `backend` healthcheck at `/api/health` if it has one; otherwise leave compose alone.
 - Optional: a middleware that returns 503 with the same body for any `/api/*` request while `schema_missing` is non-empty. **Recommended:** a clear 503 everywhere beats a random 500 on one button. Decide and record the decision here.
+  - **Decision (2026-10-12): adopted.** `stale_schema_guard` in `main.py` returns `503 {"detail": "The database is out of date. Ask the system admin to rebuild it."}` for every `/api/*` path except `/api/health` while `app.state.schema_missing` is non-empty. A stale DB matches no version of the repo (e.g. double booking possible without `excl_booking_room_overlap`), so serving any API from it is worse than refusing. `GET /` stays 200.
+  - **Healthcheck:** the backend healthcheck lives in `backend/Dockerfile` (not compose) and probes `/openapi.json`. It is left as is: pointing it at `/api/health` would mark a stale backend unhealthy, and the `frontend` service (`depends_on: service_healthy`) would then never start, hiding the message.
+  - The check also covers views (`v_*`, selected by the reports/billing routers), `uq_user_account_email_ci` (ISSUE-10), and all six `db/functions/` (called by procedures and views; the routers call none directly).
 
 ### 15.3 Map "missing routine" errors clearly
 
@@ -110,8 +113,15 @@ Full suite must stay green (`pytest -q`, 239+ tests) on a fresh build.
 
 ## Acceptance criteria
 
-- [ ] Local dev DB rebuilt; six procedures and the four named constraints present.
-- [ ] Cancel works from My Bookings and from the Receptionist dashboard (booking → `Cancelled`, toast states the room and dates).
-- [ ] On a DB missing any required object, the backend logs one clear error at startup, `GET /api/health` returns 503 listing the missing objects, and the affected endpoint returns 503 (not 500) with no SQL in the body.
-- [ ] On a fresh build, `/api/health` returns 200 and the full test suite passes, including the new `test_schema_check.py`.
-- [ ] README troubleshooting and spec 02 updated; team notice text handed to the user.
+- [x] Local dev DB rebuilt; six procedures and the four named constraints present.
+- [x] Cancel works from My Bookings and from the Receptionist dashboard (booking → `Cancelled`, toast states the room and dates). *(The receptionist toast still reads "Booking SN-… cancelled"; it gets room and dates in UI-07.)*
+- [x] On a DB missing any required object, the backend logs one clear error at startup, `GET /api/health` returns 503 listing the missing objects, and the affected endpoint returns 503 (not 500) with no SQL in the body.
+- [x] On a fresh build, `/api/health` returns 200 and the full test suite passes, including the new `test_schema_check.py`.
+- [x] README troubleshooting and spec 02 updated (plus spec 10 §2.4); team notice text handed to the user.
+
+## Verification (2026-10-12)
+
+- **Against the old volume** (before the wipe), backend rebuilt with the new code: the startup log showed one `DATABASE SCHEMA IS OUT OF DATE` block listing `procedures: cancel_booking`, `constraints: chk_booking_payment_option, chk_payment_method` and `indexes: uq_user_account_email_ci`. `GET /api/health` → 503 with that list and the fix command; `GET /api/branches` → 503 with the generic detail; `GET /` → 200.
+- **After `docker compose down -v && docker compose up -d --build`:** six procedures and the four constraints present, no startup error, `/api/health` → 200.
+- **Tests:** a fresh `run_all.sql` scratch DB gave 253 passed (239 + 14 in `test_schema_check.py`). The rebuilt dev DB gave 253 passed, plus the live `test_phase4` passed against the Docker API. Tests ran in a `skynest-backend` container on the compose network: a native Windows PostgreSQL also listens on `localhost:5432` and rejects the `skynest_user` password from the host.
+- **Browser (headless Edge):** My Bookings as Kamal, Room 103 01/12–03/12: the confirm reads "Room 103 at SkyNest Colombo becomes available for 01/12–03/12…", the toast reads "Cancelled: Single Room 103, 01/12–03/12", and the booking moves to the Cancelled tab. Receptionist (Colombo), Upcoming → Cancel → confirm: the toast reads "Booking SN-80FF4F02 cancelled" and the row leaves the list.

@@ -288,6 +288,13 @@ The database initialization script runs only on an empty volume. Wipe the volume
 docker compose down -v && docker compose up --build
 ```
 
+### Q: 503 "The database is out of date", or a 500 with `procedure … does not exist`?
+Your Docker `pgdata` volume was created before the latest changes in `db/`. `db/docker/init.sh` (which runs `db/run_all.sql`) only runs when the volume is **empty**, so pulling new SQL doesn't update an existing database. The backend checks this at startup: its log shows a `DATABASE SCHEMA IS OUT OF DATE` block listing what's missing, and http://localhost:8000/api/health returns 503 with the same list. Rebuild (this wipes local data and reloads the seed):
+```bash
+docker compose down -v && docker compose up --build
+```
+Don't patch the old volume by applying single `.sql` files: it is usually missing several constraints, triggers and indexes, and a partial patch matches no version of the repo.
+
 ### Q: `uvicorn` fails with `ValidationError: DATABASE_URL field required` (Native mode)?
 You forgot to create the backend `.env` file! Copy it from `.env.example`:
 ```bash
