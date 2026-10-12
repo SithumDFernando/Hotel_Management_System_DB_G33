@@ -118,7 +118,7 @@ async def run_tests():
         conn.fetchrow.side_effect = fetchrow
         admin_token = create_access_token({"sub": admin_id, "role": "admin"})
         conn.fetchval.side_effect = [None, uuid4()]
-        r = await client.post("/api/auth/register", json={**reg, "email": "staff@skynest.lk", "role": "receptionist"},
+        r = await client.post("/api/auth/register", json={**reg, "email": "staff@skynest.lk", "role": "receptionist", "branch_id": str(uuid4())},
                               headers={"Authorization": f"Bearer {admin_token}"})
         check(r.status_code == 201, "admin can create staff account -> 201")
 

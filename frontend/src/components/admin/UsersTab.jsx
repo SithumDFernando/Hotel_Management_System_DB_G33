@@ -119,7 +119,7 @@ function CreateDrawer({ open, onClose, branches, onSaved }) {
           </Select>
           {needsBranch && (
             <Select label="Branch" required value={f.branch_id} error={errors.branch_id} onChange={(e) => setF({ ...f, branch_id: e.target.value })}>
-              <option value="">Select a branch…</option>
+              <option value="" disabled>Select a branch…</option>
               {branches.map((b) => <option key={b.branch_id} value={b.branch_id}>{b.name}</option>)}
             </Select>
           )}
@@ -185,8 +185,8 @@ function EditDrawer({ user, branches, onClose, onSaved }) {
           {STAFF_ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
         </Select>
         {needsBranch && (
-          <Select label="Branch" value={branchId} onChange={(e) => setBranchId(e.target.value)}>
-            <option value="">Select a branch…</option>
+          <Select label="Branch" required value={branchId} onChange={(e) => setBranchId(e.target.value)}>
+            <option value="" disabled>Select a branch…</option>
             {branches.map((b) => <option key={b.branch_id} value={b.branch_id}>{b.name}</option>)}
           </Select>
         )}

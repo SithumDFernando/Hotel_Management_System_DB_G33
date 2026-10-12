@@ -13,6 +13,8 @@ Provides:
     - assert_booking_access(): 404/403 guard for one booking (guest owns it,
                                branch staff share its branch, admin always)
     - assert_room_access():    404/403 guard for one room (branch staff only)
+    - require_branch():        branch_id of a manager/receptionist, 403 if missing
+    - assert_role_links():     422 unless role ↔ branch_id/guest_id links are valid
 
 Usage in routers:
     @router.get("/admin/stats")
@@ -153,9 +155,26 @@ def require_role(*allowed_roles: str):
 BRANCH_SCOPED_ROLES = {"manager", "receptionist"}
 
 
+def require_branch(user: dict) -> str | None:
+    """
+    The user's branch_id as a string, for scoping queries.
+
+    Branch-scoped roles must have a branch: if one has none (misconfigured
+    account), refuse with 403 instead of falling back to "no filter".
+    Returns None for global roles (admin, guest).
+    """
+    if user["role"] not in BRANCH_SCOPED_ROLES:
+        return None
+    if not user.get("branch_id"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your account is not assigned to a branch. Contact an administrator.",
+        )
+    return str(user["branch_id"])
+
+
 def _assert_same_branch(user: dict, branch_id, detail: str) -> None:
-    # A branch-scoped user without a branch_id never matches (fails closed).
-    if user["role"] in BRANCH_SCOPED_ROLES and str(branch_id) != str(user.get("branch_id")):
+    if user["role"] in BRANCH_SCOPED_ROLES and require_branch(user) != str(branch_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
 
 
@@ -210,3 +229,36 @@ async def assert_room_access(db, user: dict, room_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Room not found")
     _assert_same_branch(user, row["branch_id"], "Not authorised for rooms of another branch.")
     return row
+
+
+# ── Account role ↔ link rules ─────────────────────────────────────────────────
+
+def assert_role_links(role: str, branch_id, guest_id) -> None:
+    """
+    Validate the (role, branch_id, guest_id) an account will end up with,
+    on create and on update. Mirrors the DB CHECK chk_user_account_role_links:
+
+        admin                  -> no branch, no guest profile
+        manager / receptionist -> branch required, no guest profile
+        guest                  -> guest profile required, no branch
+
+    Raises 422 with a readable message when the combination is invalid.
+    """
+    def reject(detail: str):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=detail)
+
+    if role in BRANCH_SCOPED_ROLES:
+        if not branch_id:
+            reject(f"A {role} account must be assigned to a branch.")
+        if guest_id:
+            reject("Staff accounts cannot be linked to a guest profile.")
+    elif role == "guest":
+        if not guest_id:
+            reject("A guest account must be linked to a guest profile.")
+        if branch_id:
+            reject("A guest account cannot be assigned to a branch.")
+    elif role == "admin":
+        if branch_id:
+            reject("An admin account cannot be assigned to a branch (admins are global).")
+        if guest_id:
+            reject("Staff accounts cannot be linked to a guest profile.")

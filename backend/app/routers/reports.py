@@ -12,7 +12,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.db import get_db
-from app.dependencies import require_role
+from app.dependencies import require_branch, require_role
 from app.schemas.report import (
     BillingSummaryResponse,
     BillingSummaryRow,
@@ -36,11 +36,12 @@ router = APIRouter()
 def _resolve_branch(user: dict, branch_id_param: Optional[UUID]) -> Optional[str]:
     """
     If the logged-in user is a manager, ignore any branch_id query param and
-    force the filter to their own branch. Admins may pass any branch_id or
+    force the filter to their own branch (403 if they have none, so this
+    never returns None for a manager). Admins may pass any branch_id or
     omit it to see all branches.
     """
     if user["role"] == "manager":
-        return str(user["branch_id"]) if user["branch_id"] else None
+        return require_branch(user)
     return str(branch_id_param) if branch_id_param else None
 
 

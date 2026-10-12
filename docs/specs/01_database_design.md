@@ -117,8 +117,8 @@
 | Column | Type | Constraints |
 |--------|------|-------------|
 | `account_id` | UUID | PK, DEFAULT gen_random_uuid() |
-| `guest_id` | UUID | NULL, FK → guest |
-| `branch_id` | UUID | NULL, FK → branch |
+| `guest_id` | UUID | NULL, FK → guest (ON DELETE RESTRICT) |
+| `branch_id` | UUID | NULL, FK → branch (ON DELETE RESTRICT) |
 | `email` | VARCHAR(100) | NOT NULL, UNIQUE |
 | `password_hash` | VARCHAR(255) | NOT NULL |
 | `role` | user_role | NOT NULL |
@@ -126,6 +126,8 @@
 > - `guest_id` is set only when `role = 'guest'`
 > - `branch_id` is set for `receptionist` and `manager` (scopes them to a branch)
 > - `admin` has both NULL
+> - Enforced by CHECK `chk_user_account_role_links`: `manager`/`receptionist` → `branch_id NOT NULL, guest_id NULL`; `guest` → `guest_id NOT NULL, branch_id NULL`; `admin` → both NULL.
+> - The FKs are `RESTRICT`, not `SET NULL`: nulling a link would break the CHECK, so a branch with staff (or a guest profile with a login) can't be deleted.
 
 ---
 

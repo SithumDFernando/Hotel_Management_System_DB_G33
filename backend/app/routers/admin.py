@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.auth import hash_password
 from app.db import get_db
-from app.dependencies import require_role
+from app.dependencies import assert_role_links, require_role
 from app.schemas.branch import BranchCreate, BranchListResponse, BranchOut, BranchUpdate
 from app.schemas.user import UserCreate, UserListResponse, UserOut, UserPatch
 
@@ -252,6 +252,7 @@ async def create_user(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid role '{body.role}'. Must be one of: {', '.join(sorted(VALID_ROLES))}",
         )
+    assert_role_links(body.role, body.branch_id, body.guest_id)
 
     # Email must be unique across all accounts
     existing = await db.fetchrow(
@@ -320,10 +321,12 @@ async def patch_user(
     Update a user's role and/or branch assignment.
     Only supplied (non-None) fields are changed.
     Pass branch_id as an empty string to clear the branch assignment.
+    The resulting (role, branch_id, guest_id) must be valid (422), and an
+    admin cannot remove their own admin role (409).
     Access: admin only.
     """
     existing = await db.fetchrow(
-        "SELECT account_id, role, branch_id FROM user_account WHERE account_id = $1::UUID",
+        "SELECT account_id, role, branch_id, guest_id FROM user_account WHERE account_id = $1::UUID",
         account_id,
     )
     if existing is None:
@@ -368,6 +371,15 @@ async def patch_user(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No fields provided for update.",
         )
+
+    # Admins can't demote themselves; since only admins reach this endpoint,
+    # this also guarantees the last admin can never be removed.
+    if str(account_id) == str(_user["account_id"]) and new_role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="You cannot remove your own admin role.",
+        )
+    assert_role_links(new_role, new_branch_id, existing["guest_id"])
 
     await db.execute(
         """

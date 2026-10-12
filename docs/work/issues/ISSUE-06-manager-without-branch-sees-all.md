@@ -82,5 +82,16 @@ Make sure the seed accounts satisfy the CHECK (they do today). Run `run_all.sql`
 
 ## Acceptance criteria
 
-- [ ] No API path can produce a branch-scoped account without a branch.
-- [ ] If one exists anyway, it gets 403, never cross-branch data and never 500.
+- [x] No API path can produce a branch-scoped account without a branch.
+- [x] If one exists anyway, it gets 403, never cross-branch data and never 500.
+
+## Resolution (2026-10-12)
+
+- `require_branch(user)` in `app/dependencies.py` is used by `reports._resolve_branch`, `bookings.list_bookings` and ISSUE-03's `assert_booking_access` / `assert_room_access`. For a branchless manager/receptionist it returns 403 and never `None`.
+- `assert_role_links(role, branch_id, guest_id)` implements the full rule table (including the guest row) and is called by `admin.create_user`, `admin.patch_user` (on the **resulting** state) and `auth.register`. Errors are 422. `patch_user` also returns 409 when an admin tries to demote themselves, which covers "last admin" because only admins can call it.
+  - Because guest accounts keep their `guest_id`, a guest → staff role change is rejected (422).
+  - Promoting staff to admin requires `"branch_id": ""` in the same request (the UI already sends it).
+- DB: `chk_user_account_role_links` CHECK added. `fk_user_account_branch` and `fk_user_account_guest` changed `SET NULL` → `RESTRICT`. Seed accounts validate on a fresh `run_all.sql` build.
+- Frontend: `UsersTab.jsx` already required a branch for staff and hid it for admin. The empty "Select a branch…" option is now disabled in both drawers.
+- Left for ISSUE-11 (task 7): `UNIQUE (guest_id)`, the `require_guest_id` helper for the `str(user.get("guest_id"))` call sites, and the My Bookings 403 state.
+- Tests: `tests/test_role_links.py` (35 tests). On the pre-fix code and schema, 32 fail. A branchless manager got all three branches' data from every report (200), and `GET /bookings` returned 422 (it was a 500 before ISSUE-07). Mock fixtures in `test_frontend_support_api.py` / `test_phase4_api_mock.py` were updated to create staff with a branch.

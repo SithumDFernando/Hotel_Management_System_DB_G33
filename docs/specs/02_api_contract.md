@@ -94,6 +94,8 @@
 
 **Response (201):** `{ "account_id": "uuid-..." }`
 
+**Errors:** `403` caller not admin · `400 Invalid role` · `409` email exists · `404` referenced branch/guest doesn't exist · `422` invalid role ↔ link combination (same rules as `POST /api/admin/users`)
+
 ---
 
 ## 1b. Branches (public) — `/api/branches`
@@ -592,6 +594,16 @@ Lists all staff and manager accounts with their roles and assigned branches.
 ### POST `/api/admin/users`
 Creates a new user account with hashed password, assigned role, and branch.
 
+**Role ↔ link rules** (validated on the resulting account; `422` with a string `detail` otherwise):
+
+| `role` | `branch_id` | `guest_id` |
+|---|---|---|
+| `admin` | must be empty | must be empty |
+| `manager` / `receptionist` | **required** | must be empty |
+| `guest` | must be empty | **required** |
+
+**Errors:** `400` invalid role · `404` branch/guest not found · `409` email exists · `422` invalid role ↔ link combination (e.g. `A manager account must be assigned to a branch.`)
+
 ### PATCH `/api/admin/users/:account_id`
 Updates a user account's role and/or branch assignment:
 ```json
@@ -600,6 +612,10 @@ Updates a user account's role and/or branch assignment:
   "branch_id": "uuid-..."
 }
 ```
+
+`branch_id: ""` clears the branch. The **resulting** role/branch/guest combination must follow the rules above, so clearing a receptionist's branch, or promoting a manager to admin without `"branch_id": ""`, is `422`. Guest accounts can't be turned into staff (they keep their `guest_id`).
+
+**Errors:** `400` invalid role / no fields · `404` account or branch not found · `409 You cannot remove your own admin role.` · `422` invalid role ↔ link combination
 
 > **Note on Deletion:** User deletion (`DELETE /api/admin/users/:account_id`) is omitted intentionally to preserve referential integrity, booking audits, and financial transaction histories.
 

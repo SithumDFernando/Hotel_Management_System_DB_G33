@@ -43,11 +43,14 @@ ALTER TABLE room_amenity
         FOREIGN KEY (amenity_id) REFERENCES amenity(amenity_id) ON DELETE CASCADE;
 
 -- USER_ACCOUNT → GUEST, BRANCH
+-- RESTRICT (not SET NULL): nulling the link would leave a guest/staff account
+-- that violates chk_user_account_role_links, so a branch with staff or a guest
+-- profile with a login can't be deleted out from under the account.
 ALTER TABLE user_account
     ADD CONSTRAINT fk_user_account_guest
-        FOREIGN KEY (guest_id) REFERENCES guest(guest_id) ON DELETE SET NULL,
+        FOREIGN KEY (guest_id) REFERENCES guest(guest_id) ON DELETE RESTRICT,
     ADD CONSTRAINT fk_user_account_branch
-        FOREIGN KEY (branch_id) REFERENCES branch(branch_id) ON DELETE SET NULL;
+        FOREIGN KEY (branch_id) REFERENCES branch(branch_id) ON DELETE RESTRICT;
 
 -- BOOKING → GUEST, ROOM
 ALTER TABLE booking
@@ -112,6 +115,16 @@ ALTER TABLE bill
 ALTER TABLE booking
     ADD CONSTRAINT chk_booking_dates
         CHECK (check_out_date > check_in_date);
+
+-- Each role has exactly the links it needs: branch staff belong to a branch,
+-- guests to a guest profile, admins to neither (they are global)
+ALTER TABLE user_account
+    ADD CONSTRAINT chk_user_account_role_links
+        CHECK (
+            (role IN ('manager', 'receptionist') AND branch_id IS NOT NULL AND guest_id IS NULL)
+         OR (role = 'guest' AND guest_id IS NOT NULL AND branch_id IS NULL)
+         OR (role = 'admin' AND branch_id IS NULL AND guest_id IS NULL)
+        );
 
 -- Corporate guests must have a company name
 ALTER TABLE guest

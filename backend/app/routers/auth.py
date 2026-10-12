@@ -18,7 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.auth import verify_password, hash_password, create_access_token
 from app.db import get_db
-from app.dependencies import get_current_user, get_optional_user, require_role
+from app.dependencies import assert_role_links, get_current_user, get_optional_user, require_role
 from app.schemas.auth import (
     LoginRequest,
     LoginResponse,
@@ -161,6 +161,7 @@ async def register(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid role",
         )
+    assert_role_links(body.role, body.branch_id, body.guest_id)
 
     # Check if email already exists
     existing = await db.fetchval(

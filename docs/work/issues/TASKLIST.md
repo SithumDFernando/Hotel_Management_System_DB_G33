@@ -36,7 +36,9 @@ Source: full-stack audit run on **2026-10-12** (backend API probes, DB-level con
   - ✅ `assert_booking_access` / `assert_room_access` on every booking/room endpoint; covered by `tests/test_authz_branch.py` (22 tests, 13 fail on the pre-fix code). Full suite: 94 passed + `test_phase4` live run passed, on a fresh `run_all.sql` build.
   - ✅ Decisions: guest directory stays hotel-wide; `top-services` is now branch-scoped for managers (new view `v_top_services_by_branch`).
   - ⏳ Browser check of the Overview/Reports top-services panels (manager + admin) still pending.
-- [ ] **6. [ISSUE-06](ISSUE-06-manager-without-branch-sees-all.md)** 🔴 Branch staff must have a branch (API validation + DB CHECK + fail-closed helper)
+- [x] **6. [ISSUE-06](ISSUE-06-manager-without-branch-sees-all.md)** 🔴 Branch staff must have a branch (API validation + DB CHECK + fail-closed helper)
+  - ✅ `require_branch` + `assert_role_links` in `dependencies.py`, `chk_user_account_role_links` CHECK, `user_account` FKs → `RESTRICT`, admins can't demote themselves (409). Covered by `tests/test_role_links.py` (35 tests, 32 fail on the pre-fix code/schema). Full suite: 129 passed + `test_phase4` live run passed, on a fresh `run_all.sql` build.
+  - ⏳ Browser check of Admin → Users create/edit drawers (branch now required, empty option disabled) still pending.
 - [ ] **7. [ISSUE-11](ISSUE-11-guest-account-without-profile.md)** 🟠 Guest accounts must have exactly one guest profile
 
 ## Phase 4: Money and data integrity (DB procedures/triggers)

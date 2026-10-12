@@ -83,6 +83,8 @@ async def run_tests():
             return None # no conflict
         if "INSERT INTO branch" in query:
             return {"branch_id": str(uuid4())}
+        if "SELECT branch_id FROM branch WHERE branch_id" in query:
+            return {"branch_id": args[0]}  # branch exists
         if "SELECT * FROM branch WHERE branch_id" in query:
             return {"branch_id": args[0], "name": "Test Branch", "city": "Colombo", "address": "123 Street", "phone": "0112345678", "manager_name": "John"}
         if "INSERT INTO user_account" in query:
@@ -285,7 +287,7 @@ async def run_tests():
         # Create user
         r = await client.post(
             "/api/admin/users",
-            json={"email": "newrec@skynest.lk", "password": "SecurePassword123!", "role": "receptionist"},
+            json={"email": "newrec@skynest.lk", "password": "SecurePassword123!", "role": "receptionist", "branch_id": branch_id},
             headers=admin_headers
         )
         if r.status_code == 201 and "account_id" in r.json():

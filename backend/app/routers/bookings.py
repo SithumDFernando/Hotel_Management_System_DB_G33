@@ -10,7 +10,7 @@ from typing import Optional
 import asyncpg
 
 from app.db import get_db
-from app.dependencies import assert_booking_access, assert_room_access, require_role
+from app.dependencies import assert_booking_access, assert_room_access, require_branch, require_role
 from app.schemas.booking import (
     BookingCreate, BookingOut, BookingListOut, 
     BookingListResponse, GuestInfo, RoomInfo, BookingDetailOut,
@@ -91,7 +91,7 @@ async def list_bookings(
     elif user_role in ["manager", "receptionist"]:
         param_idx += 1
         conditions.append(f"r.branch_id = ${param_idx}::UUID")
-        params.append(str(user.get("branch_id")))
+        params.append(require_branch(user))
 
     if booking_status:
         param_idx += 1
