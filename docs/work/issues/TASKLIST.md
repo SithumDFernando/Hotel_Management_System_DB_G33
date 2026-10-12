@@ -92,6 +92,13 @@ Source: full-stack audit run on **2026-10-12** (backend API probes, DB-level con
 - [x] **19. [ISSUE-15](ISSUE-15-stale-dev-database-cancel-500.md)** 🔴 Cancel booking returns 500 on the Docker dev DB: the volume predates ISSUE-12 (`cancel_booking` missing). Rebuild, plus a startup schema check, `/api/health` 503 and a 503 (not 500) for missing routines
   - ✅ Old volume wiped and rebuilt (6 procedures and the 4 constraints present). New `app/schema_check.py` checks procedures, functions, views, triggers, named constraints and the email index at startup: one loud log block, `GET /api/health` 200/503, and a 503 guard on every other `/api/*` (decision recorded in the issue). Undefined function/table/object errors map to 503, not 500, with no SQL in the body. Checked against the real stale volume before the wipe (it reported `cancel_booking`, 2 CHECKs and `uq_user_account_email_ci`). Covered by `tests/test_schema_check.py` (14 tests, incl. a static guard that every `CALL` and `v_*` in `app/` is listed). Full suite: 253 passed on a fresh `run_all.sql` build + `test_phase4` live run passed. README, spec 02 (§0 Health, 503 row) and spec 10 §2.4 updated. Cancel browser-checked from My Bookings and the Receptionist dashboard.
 
+## Phase 9: Manual testing
+
+- [ ] **20.** Demo data dated from the build day (`db/seed/demo_data.sql`, loaded by `run_all.sql`) plus the click-by-click guide [docs/work/manual_testing/MANUAL_TESTING_GUIDE.md](../manual_testing/MANUAL_TESTING_GUIDE.md), grouped by login
+  - ✅ Scratch build `skynest_demo`: clean under `ON_ERROR_STOP`, row counts per branch/status match the matrix, room states correct, only BK-05 is Checked-Out with a balance. Backend suite **253 passed** on that build. Report figures in the guide (overview tiles, balances, top services, room counts) were read from the API on that build.
+  - ⏳ Not yet done: headless-browser pass over the guide's expected values (Docker Desktop stopped mid-run), dev DB rebuild and the live `test_phase4` run.
+  - ⚠ Found while writing the guide (logged as KI-13 to KI-15): the overview occupancy tile undercounts (Colombo "1 of 7" with 5 of 11 rooms occupied); an overdue guest's room is offered as free; the seven fixed-seed bookings share the reference `SN-30000000`.
+
 ---
 
 ## Why this order

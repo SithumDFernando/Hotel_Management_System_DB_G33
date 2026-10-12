@@ -2,6 +2,8 @@
 
 > Minimum data requirements from the project brief + extras for a convincing demo.
 
+> **Two seed files.** `db/run_all.sql` loads `db/seed/sample_data.sql` (fixed dates, fixed IDs; the backend tests depend on it) and then `db/seed/demo_data.sql` (dates relative to the build day, for manual testing; see [Demo data](#demo-data-demo_datasql) below). Where the tables in the sections before Demo data disagree with `sample_data.sql`, the SQL file is what actually loads.
+
 ---
 
 ## Summary
@@ -196,3 +198,76 @@ Spread across bookings 1, 2, 3, 6 — only checked-in/checked-out bookings.
 ```
 
 > Use `SELECT` after inserts to verify trigger-set values (`unit_price`, `room.status`).
+
+---
+
+## Demo data (`demo_data.sql`)
+
+Loaded after `sample_data.sql`. It only adds rows; it changes nothing that `sample_data.sql` inserts. Every date is relative to `CURRENT_DATE` on the day the database is built (written **D**), so the receptionist's Today screen always has work on it. **Rebuild the database on the day you test.** The manual test guide is [docs/work/manual_testing/MANUAL_TESTING_GUIDE.md](../work/manual_testing/MANUAL_TESTING_GUIDE.md).
+
+Bookings, bills and payments go through the real triggers and procedures (`trg_room_status`, `trg_service_usage`, `generate_bill`, `record_payment`), so room status, prices, tax and balances are the system's own figures.
+
+### Totals after both files
+
+| Entity | sample_data | + demo_data | Total |
+|---|---|---|---|
+| Rooms | 12 | 21 (x05–x11 per branch) | 33 |
+| Guests | 6 | 28 | 34 |
+| User accounts | 7 | 11 | 18 |
+| Bookings | 7 | 50 | 57 |
+| Bills | 4 | 30 | 34 |
+
+### Extra accounts (password `SkyNest@2026`)
+
+| Email | Role | Branch / guest | Scenario |
+|---|---|---|---|
+| admin.ops@skynest.lk | admin | — | Second admin |
+| mgr.galle@skynest.lk | manager | Galle | Every branch now has a manager |
+| rec.kandy@skynest.lk | receptionist | Kandy | Every branch now has a receptionist |
+| rec2.colombo@skynest.lk | receptionist | Colombo | Second desk at one branch |
+| ruwan@mail.com | guest | Ruwan Jayasinghe | Colombo, arrives today |
+| kasun@mail.com | guest | Kasun Herath | Colombo, overdue arrival (can still check in) |
+| sanduni@mail.com | guest | Sanduni Wickramasinghe | Colombo, in house, departs today, balance due |
+| dilan@mail.com | guest | Dilan Gunawardena | Colombo, in house, departs today, paid in full |
+| tharindu@mail.com | guest | Tharindu Senanayake | Colombo, staying on, part paid, discount |
+| ishara@mail.com | guest | Ishara Fonseka | No bookings (empty states) |
+| travel@ceylontea.lk | guest | Ceylon Tea Traders (Corporate) | Galle, staying on, part paid |
+
+John Smith (`f0…03`) keeps no login on purpose; the backend tests rely on it.
+
+### Rooms
+
+| Room | Colombo | Kandy | Galle |
+|---|---|---|---|
+| x05 | 105 Single | 205 Single | 305 Single |
+| x06 | 106 Double | 206 Double | 306 Double |
+| x07 | 107 Double | 207 Double | 307 Double |
+| x08 | 108 Deluxe | 208 Deluxe | 308 Deluxe |
+| x09 | 109 Suite | 209 Suite | 309 Suite |
+| x10 | 110 Single | 210 Single | 310 Single |
+| x11 | 111 Double | 211 Single, **Maintenance** | 311 Deluxe, **Maintenance** |
+
+### Booking matrix (the same at each branch)
+
+Booking IDs are `7XYY0000-0000-0000-0000-000000000000`, where X is the branch (1 Colombo, 2 Kandy, 3 Galle) and YY is the case. The UI reference therefore reads `SN-7XYY0000`; for example, `SN-71060000` is Colombo case F.
+
+| Case | YY | Room | Dates | Status | Bill | Colombo / Kandy / Galle guest |
+|---|---|---|---|---|---|---|
+| A arrives today | 01 | x06 | D → D+2 | Booked | — | Ruwan / Nuwan Dissanayake / Gayan Weerasinghe |
+| B overdue arrival | 02 | x07 | D−1 → D+2 | Booked | — | Kasun / Hiruni Ekanayake / Dinithi Abeysekara |
+| C stay ended, never arrived | 03 | x06 | D−3 → D−1 | Booked | — | Chathuri Peiris / Pradeep Kumara / Sunil Rathnayake |
+| E upcoming | 05 | x08 | D+5 → D+8 | Booked | — | Ahmed Rizvi / John Smith / Yuki Tanaka |
+| F departs today, balance due | 06 | x08 | D−2 → D | Checked-In | unpaid | Sanduni / Emma Brown / Madushani Perera |
+| G departs today, paid | 07 | x09 | D−2 → D | Checked-In | paid | Dilan / Ravi Shankar / Oliver Grant |
+| H overdue checkout | 08 | x05 | D−4 → D−1 | Checked-In | LKR 10,000 paid | Malith Rodrigo / Lakmal Bandara / Asela Mendis |
+| I staying on | 09 | x10 | D−1 → D+3 | Checked-In | LKR 2,000 discount, LKR 5,000 paid | Tharindu / Lanka Exports / Ceylon Tea Traders |
+| K holds a Double (409 test) | 10 | x07 | D+10 → D+14 | Booked | — | Sarah Williams / Tomas Muller / Shanika Fernando |
+| X cancelled | 11 | x06 (Colombo 111) | D+10 → D+12 | Cancelled | — | Nimali / Kamal / Priya |
+| U upcoming | 12 | — | — | Booked | — | — / Nimali, 210, D+12 → D+14 / Kamal, 306, D+20 → D+22 |
+| P0 this month | 90 | x05 | D−9 → D−6 | Checked-Out | paid | Nimali / Pradeep / Sunil |
+| P1–P5 previous 5 months | 91–95 | x09 | day 10 → 13 | Checked-Out | paid (P2 corporate, LKR 3,000 discount in Kandy and Galle) | rotating |
+
+Walk-ins with no bookings, for the GuestPicker: Nadeesha Karunaratne and Kevin Lee.
+
+> **Clock:** `CURRENT_DATE` is the database server's date. The Docker database runs on UTC, so a build between 00:00 and 05:30 Sri Lanka time is dated the day before your local date. Build after 05:30 local time.
+
