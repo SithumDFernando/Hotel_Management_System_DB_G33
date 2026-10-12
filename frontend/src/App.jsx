@@ -8,6 +8,7 @@ import Login from '@/pages/Login';
 import Register from '@/pages/Register';
 import BookingCheckout from '@/pages/BookingCheckout';
 import MyBookings from '@/pages/MyBookings';
+import Profile from '@/pages/Profile';
 import ServiceRequest from '@/pages/ServiceRequest';
 import ReceptionistDashboard from '@/pages/ReceptionistDashboard';
 import Spinner from '@/components/ui/Spinner';
@@ -44,6 +45,14 @@ export default function App() {
           element={
             <ProtectedRoute roles={['guest']}>
               <MyBookings />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="profile"
+          element={
+            <ProtectedRoute roles={['guest', 'receptionist', 'manager', 'admin']}>
+              <Profile />
             </ProtectedRoute>
           }
         />

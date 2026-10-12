@@ -70,7 +70,9 @@ export default function RoomsBrowse() {
 
   const branches = useFetch((s) => getBranches(s), []);
   const rooms = useFetch(
-    (signal) => getRooms(datesValid ? { check_in: value.check_in, check_out: value.check_out } : { status: 'Available' }, signal),
+    // Without dates this is the catalogue: room.status is tonight's occupancy, so
+    // filtering on it would hide rooms that are free on other dates.
+    (signal) => getRooms(datesValid ? { check_in: value.check_in, check_out: value.check_out } : {}, signal),
     [datesValid, value.check_in, value.check_out],
   );
 
@@ -155,13 +157,13 @@ export default function RoomsBrowse() {
       <div className="mt-8 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-xl font-semibold">
-            {rooms.isLoading ? 'Searching…' : `${visible.length} ${visible.length === 1 ? 'room' : 'rooms'} available`}
+            {rooms.isLoading ? 'Searching…' : `${visible.length} ${visible.length === 1 ? 'room' : 'rooms'}${datesValid ? ' available' : ''}`}
           </h2>
-          {datesValid && (
-            <p className="text-xs text-navy-500">
-              {formatDate(value.check_in)} – {formatDate(value.check_out)} · {nights} night{nights > 1 ? 's' : ''}
-            </p>
-          )}
+          <p className="text-xs text-navy-500">
+            {datesValid
+              ? `${formatDate(value.check_in)} – ${formatDate(value.check_out)} · ${nights} night${nights > 1 ? 's' : ''}`
+              : 'Choose dates to check availability.'}
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <div role="group" aria-label="Filter by branch" className="flex rounded-xl bg-navy-50 p-1">

@@ -105,6 +105,9 @@ One rule for every endpoint that sets a password: `POST /auth/signup`, `POST /au
 | `POST /auth/signup` | — | — | — | — | ✓¹ |
 | `POST /auth/register` | ✓ | — | — | — | — |
 | `GET /auth/me` | ✓ | ✓ | ✓ | ✓ | — |
+| `GET /auth/profile` | ✓ | ✓ | ✓ | ✓ | — |
+| `PATCH /auth/profile` | — | — | — | ✓ (own) | — |
+| `POST /auth/change-password` | ✓ (own) | ✓ (own) | ✓ (own) | ✓ (own) | — |
 | `GET /branches` | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `GET /rooms` | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `GET /rooms/:id` | ✓ | ✓ | ✓ | ✓ | ✓ |

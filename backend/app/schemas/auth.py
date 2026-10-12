@@ -8,9 +8,10 @@ Purpose:
 from datetime import date
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.fields import LoginEmail, NewPassword, NormEmail
+from app.schemas.guest import FullName, Gender, GuestOut, Nationality, Phone
 
 
 class LoginRequest(BaseModel):
@@ -50,3 +51,34 @@ class MeResponse(BaseModel):
     role: str
     branch_id: str | None = None
     guest_id: str | None = None
+
+
+# ── Self-service profile (GET/PATCH /auth/profile, POST /auth/change-password)
+
+class ProfileResponse(BaseModel):
+    account_id: str
+    email: str
+    role: str
+    branch_id: str | None = None
+    branch_name: str | None = None
+    guest: GuestOut | None = None   # set for guest accounts with a linked profile
+
+
+class ProfileUpdate(BaseModel):
+    """
+    What a guest may change about themselves. Email (the login) and
+    NIC/passport (identity) are changed only by the front desk, so sending
+    them is a 422 rather than being silently ignored.
+    """
+    model_config = ConfigDict(extra="forbid")
+
+    full_name: FullName | None = None
+    phone: Phone | None = None
+    date_of_birth: date | None = None
+    nationality: Nationality | None = None
+    gender: Gender | None = None
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(max_length=1024)
+    new_password: NewPassword

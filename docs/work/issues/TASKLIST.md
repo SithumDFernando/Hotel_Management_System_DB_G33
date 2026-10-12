@@ -83,6 +83,13 @@ Source: full-stack audit run on **2026-10-12** (backend API probes, DB-level con
   - ✅ 02: `/guests` write roles (managers 403), admin on `POST /bookings`, `GET /services` needs sign-in, READ COMMITTED + lock/exclusion instead of the false SERIALIZABLE claim, pagination scope, `monthly-revenue` params. 03: real names/signatures (`perform_checkin`, `perform_checkout`, `generate_bill`, OUT params), discount/paid logic, missing errors, 15% vs SRS 16% noted. 04: real trigger names (`trg_double_booking`, `trg_room_status`, `trg_service_usage`), actual messages, conditional price snapshot, payment trigger marked not implemented. 07: seed build order. 08: `SECRET_KEY`, expiry, full access matrix (signup/register/me/branches/services/admin), guest-write decision, ProtectedRoute behaviour. All open verification items in the five `todo.md` files were verified and ticked.
   - ⚠ Not changed (needs a decision): spec 07's seed counts disagree with the seed itself (see task 15).
 
+## Phase 8: Teammate click-through reports
+
+- [x] **18. [ISSUE-14](ISSUE-14-frontend-bug-reports.md)** 🔴 Rooms browse without dates, manager billing summary crash, logout confirmation, profile page
+  - ✅ 14.1 catalogue no longer filters on tonight's `room.status`. 14.2 `ReportTable` key-less column crash fixed, page-level error boundary keeps the navbar, `?report=` in the URL, View bill opens in place. 14.3 sign-out confirm dialog + toast. 14.4 `GET/PATCH /auth/profile`, `POST /auth/change-password`, `/profile` page. Specs 02, 08 and 09 updated.
+  - ✅ Fresh `run_all.sql` build (scratch DB): 239 passed incl. `tests/test_profile.py` (14). `npm run build` OK. Headless Edge: 27 scripted checks (4 roles, desktop + 375px) pass with no JS errors, console errors or 5xx.
+  - ⚠ The shared dev DB `skynest` in Docker is stale (pre-ISSUE-08/09 procedures); rebuild it from `run_all.sql`, or 29 tests fail and the running backend behaves like the old code.
+
 ---
 
 ## Why this order

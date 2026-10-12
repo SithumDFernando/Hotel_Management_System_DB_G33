@@ -13,6 +13,7 @@
 | `/login` | `Login` | Public | Login form |
 | `/register` | `Register` | Public | Guest self-signup (`POST /api/auth/signup`), then auto sign-in |
 | `/my-bookings` | `MyBookings` | Guest | Own bookings (upcoming / past / cancelled), cancel `Booked`, view bill + services. A guest login with no linked guest profile sees a "contact the front desk" empty state instead (no API call). |
+| `/profile` | `Profile` | Any signed-in role | Account details; guests edit contact details (`PATCH /api/auth/profile`); everyone changes their password (`POST /api/auth/change-password`). Email and NIC/passport are read-only. |
 | `/booking/:roomId` | `BookingCheckout` | Guest, Receptionist, Manager | Booking form + summary |
 | `/services/:bookingId` | `ServiceRequest` | Receptionist, Manager | Add services to a checked-in booking |
 | `/dashboard/receptionist` | `ReceptionistDashboard` | Receptionist | Today's bookings, check-in/out, payments |
@@ -46,10 +47,11 @@
 **Features:**
 - Filter panel: branch dropdown, room type, date range (check-in/out), capacity
 - Room grid displaying `RoomCard` components
-- Each card shows: room type, capacity, daily rate, amenities, availability badge
+- Each card shows: room type, capacity, daily rate, amenities; "Available for your dates" once dates are picked
 - "Book Now" button on each card → navigates to `/booking/:roomId`
+- Without dates the page is the catalogue: every room except `Maintenance`, headed "N rooms" with "Choose dates to check availability." `room.status` is tonight's occupancy, so it is **not** used to filter (an `Occupied` room is free on other dates). With dates the API's booking anti-join decides availability.
 
-**API calls:** `GET /api/rooms?branch_id=&room_type=&check_in=&check_out=&status=Available`
+**API calls:** `GET /api/rooms` (no dates) or `GET /api/rooms?check_in=&check_out=` (Maintenance rooms are hidden client-side in both)
 
 **Components used:** `Navbar`, `RoomCard`
 
@@ -151,7 +153,7 @@ KPI cards: arrivals, in-house, departures due, rooms available (`GET /rooms?stat
 | Billing Summary | Guests with outstanding balances | `GET /reports/billing-summary` |
 | Service Analytics | Top services, usage trends | `GET /reports/top-services`, `GET /reports/service-usage` |
 
-Tabs (URL `?tab=`): **Overview** (KPIs, 6-month stacked revenue chart, top services), **Reports** (all five reports via `ReportsPanel`), **Rooms** (maintenance toggle, `PATCH /rooms/:id/status`; clearing Maintenance on a room with a checked-in guest gets a 409 for `Available`, so the toggle sets it back to `Occupied`), **Service catalogue** (create / reprice / deactivate, `/services`).
+Tabs (URL `?tab=`): **Overview** (KPIs, 6-month stacked revenue chart, top services), **Reports** (all five reports via `ReportsPanel`; the open report is kept in `?report=`, and Billing summary rows have a **View bill** button that opens `BillPaymentModal` in place, for managers and admins), **Rooms** (maintenance toggle, `PATCH /rooms/:id/status`; clearing Maintenance on a room with a checked-in guest gets a 409 for `Available`, so the toggle sets it back to `Occupied`), **Service catalogue** (create / reprice / deactivate, `/services`).
 
 **Components used:** `Navbar`, `ReportTable`, `ReportsPanel`, `BranchOverview`, `RoomManager`, `CatalogueManager`
 
@@ -201,7 +203,11 @@ Shared UI primitives (Button, Badge, Modal/Drawer, Toast, Tabs, Pagination, Stat
 | Role | Nav Items |
 |------|-----------|
 | Public (not logged in) | Home, Rooms, Login |
-| Guest | Home, Rooms, My Bookings, Logout |
-| Receptionist | Dashboard, Rooms, New Booking, Logout |
-| Manager | Dashboard, Reports, Logout |
-| Admin | Dashboard, Branches, Users, Reports, Logout |
+| Guest | Home, Rooms, My Bookings, Profile, Sign out |
+| Receptionist | Dashboard, Rooms, New Booking, Profile, Sign out |
+| Manager | Dashboard, Reports, Profile, Sign out |
+| Admin | Dashboard, Branches, Users, Reports, Profile, Sign out |
+
+Profile is the email/role block on desktop and a menu item on mobile. **Sign out** asks first ("Sign out of SkyNest?" with Stay signed in / Sign out), then shows a "Signed out" toast on Home. Automatic sign-out (token expired or rejected) does not ask.
+
+A page that throws while rendering shows "This page couldn't be displayed" with Go back / Try again inside the layout, so the navbar stays usable.

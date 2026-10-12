@@ -23,7 +23,9 @@ export default function RoomCard({ room, stay = {} }) {
   const { room_type: type, branch } = room;
   const nights = calculateNights(stay.check_in, stay.check_out);
   const hasDates = nights > 0;
-  const bookable = hasDates || room.status === 'Available';
+  // room.status is tonight's occupancy, not future availability: an Occupied
+  // room can still be booked for other dates (checked at checkout).
+  const bookable = room.status !== 'Maintenance';
 
   const q = new URLSearchParams();
   if (hasDates) {
@@ -73,11 +75,7 @@ export default function RoomCard({ room, stay = {} }) {
             </p>
           </div>
           <div className="flex flex-col items-end gap-2">
-            {(hasDates || room.status !== 'Available') && (
-              <Badge tone={hasDates || room.status === 'Available' ? 'green' : 'gray'}>
-                {hasDates ? 'Available for your dates' : room.status}
-              </Badge>
-            )}
+            {hasDates && <Badge tone="green">Available for your dates</Badge>}
             <Button to={`/booking/${room.room_id}${q.size ? `?${q}` : ''}`} disabled={!bookable} aria-disabled={!bookable} className={bookable ? '' : 'pointer-events-none opacity-50'}>
               Book now <Icon name="arrowRight" />
             </Button>

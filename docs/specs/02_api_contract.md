@@ -100,6 +100,45 @@ Email is matched case-insensitively (trimmed + lower-cased).
 
 **Errors:** `403` caller not admin · `400 Invalid role` · `422` password under 8 characters or over 72 bytes · `409` email exists (case-insensitive), or `This guest profile is already linked to another account.` · `404` referenced branch/guest doesn't exist · `422` invalid role ↔ link combination (same rules as `POST /api/admin/users`)
 
+### GET `/api/auth/profile`
+> Any signed-in user. Backs the `/profile` page.
+
+**Response (200):**
+```json
+{
+  "account_id": "uuid-...",
+  "email": "kamal@mail.com",
+  "role": "guest",
+  "branch_id": null,
+  "branch_name": null,
+  "guest": { "guest_id": "uuid-...", "full_name": "Kamal Perera", "nic_passport": "200012345678", "email": "kamal@mail.com", "phone": "+94 77 123 4567", "date_of_birth": "2000-03-15", "nationality": "Sri Lankan", "gender": "Male", "guest_type": "Individual", "company_name": null, "company_reg_number": null, "billing_contact_name": null }
+}
+```
+Staff accounts get `branch_name` (manager/receptionist) and `guest: null`.
+
+**Errors:** `401` not signed in
+
+### PATCH `/api/auth/profile`
+> Guest only. Updates the caller's own guest profile; only fields sent (not null) change.
+
+**Request:** any of `full_name` (2–150), `phone` (7–20), `date_of_birth`, `nationality` (≤50), `gender` (≤10)
+```json
+{ "phone": "+94 77 000 1111", "nationality": "Sri Lankan" }
+```
+
+**Response (200):** the updated guest (same shape as `guest` above)
+
+**Errors:** `400 No fields provided for update.` · `403` staff caller, or a guest account with no guest profile · `422` invalid value, or any other field (`email` and `nic_passport` are changed by the front desk via `PUT /api/guests/:id`)
+
+### POST `/api/auth/change-password`
+> Any signed-in user changes their own password.
+
+**Request:** `{ "current_password": "...", "new_password": "min8chars" }`
+
+**Response (200):** `{ "detail": "Password changed." }`. Existing tokens stay valid until they expire.
+
+**Errors:** `400 Current password is incorrect.` · `400 The new password must be different from the current one.` · `422` new password under 8 characters or over 72 bytes · `429 Too many attempts. Try again later.` after 5 wrong current passwords for one account in 15 minutes (`Retry-After` header)
+
 ---
 
 ## 1b. Branches (public) — `/api/branches`

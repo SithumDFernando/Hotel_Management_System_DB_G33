@@ -4,6 +4,8 @@ import useAuth from '@/hooks/useAuth';
 import { homeForRole } from '@/context/AuthContext';
 import Icon from '@/components/ui/Icon';
 import Button from '@/components/ui/Button';
+import { Modal } from '@/components/ui/Modal';
+import { useToast } from '@/components/ui/Toast';
 
 // Nav items per role (docs/specs/09_frontend_pages.md "Navbar Behavior by Role").
 const NAV = {
@@ -40,7 +42,9 @@ export default function Navbar() {
   const { user, isAuthenticated, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const toast = useToast();
   const [open, setOpen] = useState(false);
+  const [confirmLogout, setConfirmLogout] = useState(false);
 
   const items = NAV[isAuthenticated ? user.role : 'public'];
   const staff = isAuthenticated && user.role !== 'guest';
@@ -55,10 +59,18 @@ export default function Navbar() {
     return !current.has('tab') && !current.has('mode');
   };
 
-  const onLogout = () => {
-    logout();
+  // Ask first: signing out drops any unsaved work on the current page.
+  const askLogout = () => {
     setOpen(false);
+    setConfirmLogout(true);
+  };
+
+  const onLogout = () => {
+    const email = user?.email;
+    setConfirmLogout(false);
+    logout();
     navigate('/');
+    toast.success(email ? `Signed out: ${email}` : 'Signed out');
   };
 
   const link = (item, mobile) => (
@@ -87,7 +99,7 @@ export default function Navbar() {
           <span className="leading-tight">
             <span className="block font-serif text-lg font-semibold">SkyNest</span>
             <span className="block text-[9px] font-semibold uppercase tracking-[0.18em] text-gold-700">
-              {staff ? 'Staff Portal' : 'Hospitality Â· Sri Lanka'}
+              {staff ? 'Staff Portal' : 'Hospitality · Sri Lanka'}
             </span>
           </span>
         </Link>
@@ -100,12 +112,17 @@ export default function Navbar() {
         <div className="hidden items-center gap-3 lg:flex">
           {isAuthenticated ? (
             <>
-              <div className="text-right leading-tight">
+              <Link
+                to="/profile"
+                title="Your profile"
+                aria-current={location.pathname === '/profile' ? 'page' : undefined}
+                className="rounded-lg px-2 py-1 text-right leading-tight hover:bg-navy-50"
+              >
                 <p className="max-w-[180px] truncate text-xs font-semibold">{user.email}</p>
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-gold-700">{ROLE_LABEL[user.role]}</p>
-              </div>
-              <Button variant="outline" size="sm" onClick={onLogout}>
-                <Icon name="logout" className="h-3.5 w-3.5" /> Logout
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-gold-700">{ROLE_LABEL[user.role]} · Profile</p>
+              </Link>
+              <Button variant="outline" size="sm" onClick={askLogout}>
+                <Icon name="logout" className="h-3.5 w-3.5" /> Sign out
               </Button>
             </>
           ) : (
@@ -130,10 +147,11 @@ export default function Navbar() {
             {isAuthenticated ? (
               <>
                 <p className="px-3 text-xs text-navy-500">
-                  {user.email} Â· {ROLE_LABEL[user.role]}
+                  {user.email} · {ROLE_LABEL[user.role]}
                 </p>
-                <Button variant="outline" className="mt-2 w-full" onClick={onLogout}>
-                  <Icon name="logout" /> Logout
+                <div className="mt-2">{link({ to: '/profile', label: 'Profile' }, true)}</div>
+                <Button variant="outline" className="mt-2 w-full" onClick={askLogout}>
+                  <Icon name="logout" /> Sign out
                 </Button>
               </>
             ) : (
@@ -144,6 +162,23 @@ export default function Navbar() {
           </div>
         </div>
       )}
+
+      <Modal
+        open={confirmLogout}
+        onClose={() => setConfirmLogout(false)}
+        size="sm"
+        title="Sign out of SkyNest?"
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setConfirmLogout(false)}>Stay signed in</Button>
+            <Button variant="dark" onClick={onLogout}>Sign out</Button>
+          </div>
+        }
+      >
+        <p className="text-sm text-navy-600">
+          You’ll need your email and password to sign back in{user ? ` as ${user.email}` : ''}.
+        </p>
+      </Modal>
     </header>
   );
 }
