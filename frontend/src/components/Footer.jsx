@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import useAuth from '@/hooks/useAuth';
 import useFetch from '@/hooks/useFetch';
 import { getBranches } from '@/api/auth';
 import Logo from '@/components/ui/Logo';
@@ -10,6 +11,7 @@ const CITIES = ['Colombo', 'Kandy', 'Galle'];
 const LINK = 'rounded-sm hover:underline focus-visible:ring-offset-ink-900';
 
 export default function Footer() {
+  const { isAuthenticated } = useAuth();
   const { data } = useFetch(() => getBranches(), []);
   const branches = data?.branches?.length
     ? data.branches
@@ -37,7 +39,7 @@ export default function Footer() {
         </ul>
 
         <div className="mt-10 flex flex-col gap-2 border-t border-ink-600 pt-6 text-2xs text-ink-300 sm:flex-row sm:items-center sm:justify-between">
-          <Link to="/login" className={LINK}>Staff sign-in</Link>
+          {isAuthenticated ? <span /> : <Link to="/login" className={LINK}>Staff sign-in</Link>}
           <p>© {new Date().getFullYear()} SkyNest Hotels</p>
         </div>
       </div>

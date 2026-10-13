@@ -22,6 +22,10 @@ docker compose up --build
 | pgAdmin            | [http://localhost:5050](http://localhost:5050)           |
 | PostgreSQL         | `localhost:5432`                                         |
 
+## Mock Login Credentials
+
+Every mock account uses the password `SkyNest@2026`. The full list of emails and roles is in [docs/MOCK_LOGIN_CREDENTIALS.md](docs/MOCK_LOGIN_CREDENTIALS.md).
+
 ## Team Contributions
 
 | Member       | Contribution                                                                                  |

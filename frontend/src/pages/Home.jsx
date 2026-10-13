@@ -80,8 +80,9 @@ export default function Home() {
           <p className="mt-4 max-w-xl text-lg text-paper-100">
             SkyNest Hotels in Colombo, Kandy and Galle. Check a date and book a room online.
           </p>
-          <div className="card mt-10 max-w-4xl p-4">
-            <StaySearch branches={branchList} value={search} onChange={setSearch} onSubmit={submit} compact />
+          {/* Translucent so the photo shows through; one row from lg up to keep it short. */}
+          <div className="mt-10 max-w-5xl rounded-lg border border-paper-50/25 bg-ink-900/40 p-4 backdrop-blur-sm [&_.input]:bg-paper-50/90 [&_.label]:text-paper-50">
+            <StaySearch branches={branchList} value={search} onChange={setSearch} onSubmit={submit} />
           </div>
         </div>
       </section>
