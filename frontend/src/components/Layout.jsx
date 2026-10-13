@@ -1,6 +1,5 @@
 import { useEffect } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
-import useAuth from '@/hooks/useAuth';
 import ErrorBoundary from './ErrorBoundary';
 import Footer from './Footer';
 import Navbar from './Navbar';
@@ -21,9 +20,6 @@ const TITLES = [
 
 export default function Layout() {
   const { pathname, search } = useLocation();
-  const { user, isAuthenticated } = useAuth();
-  // The footer is for the public site and guests; staff console pages end with the content.
-  const staff = isAuthenticated && user.role !== 'guest';
 
   // Start each page at the top on navigation and keep the tab title meaningful.
   useEffect(() => {
@@ -47,7 +43,8 @@ export default function Layout() {
           <Outlet />
         </ErrorBoundary>
       </main>
-      {!staff && <Footer />}
+      <Footer />
+
     </div>
   );
 }

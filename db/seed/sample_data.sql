@@ -2,19 +2,23 @@
 -- db/seed/sample_data.sql
 -- =============================================================================
 -- Purpose:
---   Populates the database with realistic sample data for development and
---   testing. Run AFTER run_all.sql has built the full schema. This data
---   allows the team to test the API, frontend pages, and reports without
---   needing to manually create records through the UI.
+--   The single mock database for SkyNest: realistic data for development,
+--   testing and demos. Loaded by run_all.sql after the schema is built.
+--
+--   PART 1 (sections 1-13): fixed dates (Sept-Oct 2026) and hardcoded values.
+--           The backend tests depend on it.
+--   PART 2 (sections 14-17): date-relative demo data (relative to CURRENT_DATE
+--           at build time) for manual testing, built through the real triggers
+--           and procedures. Rebuild the database on the day you test.
 --
 -- IMPORTANT:
 --   - Uses hardcoded UUIDs so test scripts and team members can reference
 --     specific rows by ID predictably.
 --   - Passwords are bcrypt-hashed. All test accounts use: SkyNest@2026
 --   - Wrapped in a transaction for atomic insert / clean rollback.
---   - Does NOT depend on any functions, procedures, or triggers.
---     All computed values (rate_at_booking, unit_price, bill totals) are
---     hardcoded so this seed works even before those objects are implemented.
+--   - Part 1 does not depend on any functions, procedures or triggers (all
+--     computed values are hardcoded). Part 2 needs them (fn_get_current_rate,
+--     generate_bill, record_payment, trg_room_status, trg_service_usage).
 --
 -- Data inserted (in FK dependency order):
 --   1. BRANCH           (3 rows)
@@ -30,6 +34,8 @@
 --   11. SERVICE_USAGE   (9 rows — only for Checked-In/Checked-Out bookings)
 --   12. BILL            (4 rows — 3 completed bookings + 1 provisional)
 --   13. PAYMENT         (4 rows — full, partial, and multi-payment)
+--   14-17. Demo data: 21 rooms, 28 guests, 11 accounts, 50 bookings with
+--          services, bills and payments (see PART 2 below)
 -- =============================================================================
 
 BEGIN;
@@ -523,6 +529,354 @@ INSERT INTO payment (payment_id, booking_id, amount, payment_method, paid_at, no
      'Full payment at checkout — Galle branch');
 
 
+
+-- =============================================================================
+-- PART 2 — DATE-RELATIVE DEMO DATA (for manual testing)
+-- =============================================================================
+-- Everything below is dated relative to CURRENT_DATE at build time, written D,
+-- so a fresh build always has arrivals, departures, in-house guests and recent
+-- revenue on the receptionist's Today screen. Rebuild on the day you test.
+-- (Part 1 above uses fixed Sept-Oct 2026 dates and is what the backend tests
+-- rely on.) Walkthrough: docs/work/manual_testing/MANUAL_TESTING_GUIDE.md.
+--
+--   - Purely additive: no Part 1 row is changed, and every demo booking uses
+--     the new rooms x05-x11, so rooms 101-104 / 201-204 / 301-304 and bookings
+--     BK-01..BK-07 are unaffected.
+--   - Bookings are inserted as 'Booked' and moved on with UPDATE, so
+--     trg_room_status sets Occupied/Available itself, and services go through
+--     trg_service_usage (price snapshot, stay-date check).
+--   - Bills and payments go through generate_bill() and record_payment(), so
+--     totals and 15% tax are the system's own figures.
+--   - All accounts use the password SkyNest@2026 (same bcrypt hash as Part 1).
+--
+-- UUID prefixes:
+--   e1000000-...  rooms        f1000000-...  guests
+--   11000000-...  accounts
+--   7XYY0000-...  bookings: X = branch (1 Colombo, 2 Kandy, 3 Galle), YY = case,
+--                 so the UI reference reads e.g. SN-71060000 (Colombo, case F)
+--
+-- Booking matrix per branch (x = 1 Colombo, 2 Kandy, 3 Galle):
+--   case YY  room  dates          status       bill
+--   A    01  x06   D   -> D+2     Booked       -        arrives today
+--   B    02  x07   D-1 -> D+2     Booked       -        overdue arrival, can still check in
+--   C    03  x06   D-3 -> D-1     Booked       -        stay ended, never checked in
+--   E    05  x08   D+5 -> D+8     Booked       -        upcoming
+--   F    06  x08   D-2 -> D       Checked-In   unpaid   departs today, balance due
+--   G    07  x09   D-2 -> D       Checked-In   paid     departs today, ready to check out
+--   H    08  x05   D-4 -> D-1     Checked-In   part     overdue checkout
+--   I    09  x10   D-1 -> D+3     Checked-In   part     staying on, discount + services
+--   K    10  x07   D+10 -> D+14   Booked       -        holds a Double for the 409 test
+--   X    11  x06   D+10 -> D+12   Cancelled    -        cancelled (Colombo: room 111)
+--   U    12  -     Kandy: Nimali 210 D+12 -> D+14; Galle: Kamal 306 D+20 -> D+22 (Booked)
+--   P0   90  x05   D-9 -> D-6     Checked-Out  paid     this month's revenue
+--   P1-5 91-95 x09 day 10-13 of each of the 5 previous months, Checked-Out, paid
+-- =============================================================================
+
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 14. ROOM (demo) — 7 more per branch (x05-x11)
+--     x11 is a free Double in Colombo (an alternative for the 409 test) and a
+--     Maintenance room in Kandy and Galle.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+INSERT INTO room (room_id, branch_id, room_type_id, room_number, status) VALUES
+    -- Colombo
+    ('e1000000-0000-0000-0000-000000000105', 'a0000000-0000-0000-0000-000000000001', 'b0000000-0000-0000-0000-000000000001', '105', 'Available'),   -- Single
+    ('e1000000-0000-0000-0000-000000000106', 'a0000000-0000-0000-0000-000000000001', 'b0000000-0000-0000-0000-000000000002', '106', 'Available'),   -- Double
+    ('e1000000-0000-0000-0000-000000000107', 'a0000000-0000-0000-0000-000000000001', 'b0000000-0000-0000-0000-000000000002', '107', 'Available'),   -- Double
+    ('e1000000-0000-0000-0000-000000000108', 'a0000000-0000-0000-0000-000000000001', 'b0000000-0000-0000-0000-000000000004', '108', 'Available'),   -- Deluxe
+    ('e1000000-0000-0000-0000-000000000109', 'a0000000-0000-0000-0000-000000000001', 'b0000000-0000-0000-0000-000000000003', '109', 'Available'),   -- Suite
+    ('e1000000-0000-0000-0000-000000000110', 'a0000000-0000-0000-0000-000000000001', 'b0000000-0000-0000-0000-000000000001', '110', 'Available'),   -- Single
+    ('e1000000-0000-0000-0000-000000000111', 'a0000000-0000-0000-0000-000000000001', 'b0000000-0000-0000-0000-000000000002', '111', 'Available'),   -- Double
+    -- Kandy
+    ('e1000000-0000-0000-0000-000000000205', 'a0000000-0000-0000-0000-000000000002', 'b0000000-0000-0000-0000-000000000001', '205', 'Available'),   -- Single
+    ('e1000000-0000-0000-0000-000000000206', 'a0000000-0000-0000-0000-000000000002', 'b0000000-0000-0000-0000-000000000002', '206', 'Available'),   -- Double
+    ('e1000000-0000-0000-0000-000000000207', 'a0000000-0000-0000-0000-000000000002', 'b0000000-0000-0000-0000-000000000002', '207', 'Available'),   -- Double
+    ('e1000000-0000-0000-0000-000000000208', 'a0000000-0000-0000-0000-000000000002', 'b0000000-0000-0000-0000-000000000004', '208', 'Available'),   -- Deluxe
+    ('e1000000-0000-0000-0000-000000000209', 'a0000000-0000-0000-0000-000000000002', 'b0000000-0000-0000-0000-000000000003', '209', 'Available'),   -- Suite
+    ('e1000000-0000-0000-0000-000000000210', 'a0000000-0000-0000-0000-000000000002', 'b0000000-0000-0000-0000-000000000001', '210', 'Available'),   -- Single
+    ('e1000000-0000-0000-0000-000000000211', 'a0000000-0000-0000-0000-000000000002', 'b0000000-0000-0000-0000-000000000001', '211', 'Maintenance'), -- Single, under repair
+    -- Galle
+    ('e1000000-0000-0000-0000-000000000305', 'a0000000-0000-0000-0000-000000000003', 'b0000000-0000-0000-0000-000000000001', '305', 'Available'),   -- Single
+    ('e1000000-0000-0000-0000-000000000306', 'a0000000-0000-0000-0000-000000000003', 'b0000000-0000-0000-0000-000000000002', '306', 'Available'),   -- Double
+    ('e1000000-0000-0000-0000-000000000307', 'a0000000-0000-0000-0000-000000000003', 'b0000000-0000-0000-0000-000000000002', '307', 'Available'),   -- Double
+    ('e1000000-0000-0000-0000-000000000308', 'a0000000-0000-0000-0000-000000000003', 'b0000000-0000-0000-0000-000000000004', '308', 'Available'),   -- Deluxe
+    ('e1000000-0000-0000-0000-000000000309', 'a0000000-0000-0000-0000-000000000003', 'b0000000-0000-0000-0000-000000000003', '309', 'Available'),   -- Suite
+    ('e1000000-0000-0000-0000-000000000310', 'a0000000-0000-0000-0000-000000000003', 'b0000000-0000-0000-0000-000000000001', '310', 'Available'),   -- Single
+    ('e1000000-0000-0000-0000-000000000311', 'a0000000-0000-0000-0000-000000000003', 'b0000000-0000-0000-0000-000000000004', '311', 'Maintenance'); -- Deluxe, under repair
+
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 15. GUEST (demo) — 28 profiles. 01-06 get a login below; the rest are
+--     front-desk guests (no login), found through the staff GuestPicker.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+INSERT INTO guest (guest_id, full_name, nic_passport, email, phone, date_of_birth, nationality, gender, guest_type, company_name, company_reg_number, billing_contact_name) VALUES
+    -- With a login (Colombo scenarios + a corporate guest in Galle)
+    ('f1000000-0000-0000-0000-000000000001', 'Ruwan Jayasinghe',      '199112340001', 'ruwan@mail.com',          '+94 77 300 0001', '1991-04-12', 'Sri Lankan', 'Male',   'Individual', NULL, NULL, NULL),
+    ('f1000000-0000-0000-0000-000000000002', 'Sanduni Wickramasinghe','199562340002', 'sanduni@mail.com',        '+94 77 300 0002', '1995-08-03', 'Sri Lankan', 'Female', 'Individual', NULL, NULL, NULL),
+    ('f1000000-0000-0000-0000-000000000003', 'Dilan Gunawardena',     '198812340003', 'dilan@mail.com',          '+94 77 300 0003', '1988-01-27', 'Sri Lankan', 'Male',   'Individual', NULL, NULL, NULL),
+    ('f1000000-0000-0000-0000-000000000004', 'Tharindu Senanayake',   '199312340004', 'tharindu@mail.com',       '+94 77 300 0004', '1993-11-19', 'Sri Lankan', 'Male',   'Individual', NULL, NULL, NULL),
+    ('f1000000-0000-0000-0000-000000000005', 'Kasun Herath',          '199712340005', 'kasun@mail.com',          '+94 77 300 0005', '1997-06-08', 'Sri Lankan', 'Male',   'Individual', NULL, NULL, NULL),
+    ('f1000000-0000-0000-0000-000000000006', 'Ishara Fonseka',        '200062340006', 'ishara@mail.com',         '+94 77 300 0006', NULL,         NULL,         NULL,     'Individual', NULL, NULL, NULL),
+    ('f1000000-0000-0000-0000-000000000025', 'Ceylon Tea Traders',    'PV00067890',   'travel@ceylontea.lk',     '+94 11 300 0025', NULL, 'Sri Lankan', NULL, 'Corporate', 'Ceylon Tea Traders (Pvt) Ltd', 'PV00067890', 'Ranjith Alwis'),
+    -- Colombo, front desk only
+    ('f1000000-0000-0000-0000-000000000007', 'Malith Rodrigo',        '198512340007', 'malith@mail.com',         '+94 77 300 0007', '1985-02-14', 'Sri Lankan', 'Male',   'Individual', NULL, NULL, NULL),
+    ('f1000000-0000-0000-0000-000000000008', 'Chathuri Peiris',       '199962340008', 'chathuri@mail.com',       '+94 77 300 0008', '1999-09-30', 'Sri Lankan', 'Female', 'Individual', NULL, NULL, NULL),
+    ('f1000000-0000-0000-0000-000000000009', 'Ahmed Rizvi',           '198712340009', 'ahmed.rizvi@mail.com',    '+94 77 300 0009', '1987-12-05', 'Sri Lankan', 'Male',   'Individual', NULL, NULL, NULL),
+    ('f1000000-0000-0000-0000-000000000010', 'Sarah Williams',        'P23456710',    'sarah.w@mail.co.uk',      '+44 20 7946 0110', '1990-05-21', 'British',   'Female', 'Individual', NULL, NULL, NULL),
+    -- Kandy, front desk only
+    ('f1000000-0000-0000-0000-000000000011', 'Nuwan Dissanayake',     '198912340011', 'nuwan.d@mail.com',        '+94 77 300 0011', '1989-03-09', 'Sri Lankan', 'Male',   'Individual', NULL, NULL, NULL),
+    ('f1000000-0000-0000-0000-000000000012', 'Hiruni Ekanayake',      '199862340012', 'hiruni@mail.com',         '+94 77 300 0012', '1998-10-11', 'Sri Lankan', 'Female', 'Individual', NULL, NULL, NULL),
+    ('f1000000-0000-0000-0000-000000000013', 'Pradeep Kumara',        '198212340013', 'pradeep@mail.com',        '+94 77 300 0013', '1982-07-17', 'Sri Lankan', 'Male',   'Individual', NULL, NULL, NULL),
+    ('f1000000-0000-0000-0000-000000000014', 'Emma Brown',            'P34567814',    'emma.brown@mail.com',     '+61 2 9374 0114', '1994-01-02', 'Australian','Female', 'Individual', NULL, NULL, NULL),
+    ('f1000000-0000-0000-0000-000000000015', 'Ravi Shankar',          'P45678915',    'ravi.s@mail.in',          '+91 98 4500 0115', '1980-08-25', 'Indian',   'Male',   'Individual', NULL, NULL, NULL),
+    ('f1000000-0000-0000-0000-000000000016', 'Lakmal Bandara',        '198412340016', 'lakmal@mail.com',         '+94 77 300 0016', '1984-04-04', 'Sri Lankan', 'Male',   'Individual', NULL, NULL, NULL),
+    ('f1000000-0000-0000-0000-000000000017', 'Tomas Muller',          'C01234517',    'tomas.m@mail.de',         '+49 30 1234 0117', '1992-12-12', 'German',   'Male',   'Individual', NULL, NULL, NULL),
+    -- Galle, front desk only
+    ('f1000000-0000-0000-0000-000000000018', 'Gayan Weerasinghe',     '199012340018', 'gayan@mail.com',          '+94 77 300 0018', '1990-06-06', 'Sri Lankan', 'Male',   'Individual', NULL, NULL, NULL),
+    ('f1000000-0000-0000-0000-000000000019', 'Dinithi Abeysekara',    '199662340019', 'dinithi@mail.com',        '+94 77 300 0019', '1996-02-28', 'Sri Lankan', 'Female', 'Individual', NULL, NULL, NULL),
+    ('f1000000-0000-0000-0000-000000000020', 'Sunil Rathnayake',      '197812340020', 'sunil.r@mail.com',        '+94 77 300 0020', '1978-09-14', 'Sri Lankan', 'Male',   'Individual', NULL, NULL, NULL),
+    ('f1000000-0000-0000-0000-000000000021', 'Yuki Tanaka',           'TK5678921',    'yuki.t@mail.jp',          '+81 3 1234 0121', '1993-03-03', 'Japanese', 'Female', 'Individual', NULL, NULL, NULL),
+    ('f1000000-0000-0000-0000-000000000022', 'Madushani Perera',      '199462340022', 'madushani@mail.com',      '+94 77 300 0022', '1994-07-07', 'Sri Lankan', 'Female', 'Individual', NULL, NULL, NULL),
+    ('f1000000-0000-0000-0000-000000000023', 'Oliver Grant',          'P56789023',    'oliver.g@mail.co.uk',     '+44 20 7946 0123', '1986-11-11', 'British',  'Male',   'Individual', NULL, NULL, NULL),
+    ('f1000000-0000-0000-0000-000000000024', 'Asela Mendis',          '198312340024', 'asela@mail.com',          '+94 77 300 0024', '1983-05-05', 'Sri Lankan', 'Male',   'Individual', NULL, NULL, NULL),
+    ('f1000000-0000-0000-0000-000000000026', 'Shanika Fernando',      '199162340026', 'shanika@mail.com',        '+94 77 300 0026', '1991-10-10', 'Sri Lankan', 'Female', 'Individual', NULL, NULL, NULL),
+    -- Walk-ins with no bookings (GuestPicker / new booking tests)
+    ('f1000000-0000-0000-0000-000000000027', 'Nadeesha Karunaratne',  '199262340027', 'nadeesha@mail.com',       '+94 77 300 0027', '1992-02-02', 'Sri Lankan', 'Female', 'Individual', NULL, NULL, NULL),
+    ('f1000000-0000-0000-0000-000000000028', 'Kevin Lee',             'S67890128',    'kevin.lee@mail.sg',       '+65 6123 0128',   '1989-09-09', 'Singaporean','Male',  'Individual', NULL, NULL, NULL);
+
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 16. USER_ACCOUNT (demo) — 11 more logins (password SkyNest@2026)
+--     With the 7 in Part 1: 2 admins, a manager and a receptionist at every
+--     branch, two receptionists in Colombo, and 9 guests.
+--     John Smith (f0..03) deliberately keeps no login (backend tests rely on it).
+-- ─────────────────────────────────────────────────────────────────────────────
+
+INSERT INTO user_account (account_id, guest_id, branch_id, email, password_hash, role) VALUES
+    ('11000000-0000-0000-0000-000000000001', NULL, NULL,                                   'admin.ops@skynest.lk',    '$2b$12$W/MMfGNxExUT5c5H5CB4ze/oKc.oDvMpyHd6iJFLO.MefijkUOVS6', 'admin'),
+    ('11000000-0000-0000-0000-000000000002', NULL, 'a0000000-0000-0000-0000-000000000003', 'mgr.galle@skynest.lk',    '$2b$12$W/MMfGNxExUT5c5H5CB4ze/oKc.oDvMpyHd6iJFLO.MefijkUOVS6', 'manager'),
+    ('11000000-0000-0000-0000-000000000003', NULL, 'a0000000-0000-0000-0000-000000000002', 'rec.kandy@skynest.lk',    '$2b$12$W/MMfGNxExUT5c5H5CB4ze/oKc.oDvMpyHd6iJFLO.MefijkUOVS6', 'receptionist'),
+    ('11000000-0000-0000-0000-000000000004', NULL, 'a0000000-0000-0000-0000-000000000001', 'rec2.colombo@skynest.lk', '$2b$12$W/MMfGNxExUT5c5H5CB4ze/oKc.oDvMpyHd6iJFLO.MefijkUOVS6', 'receptionist'),
+    ('11000000-0000-0000-0000-000000000005', 'f1000000-0000-0000-0000-000000000001', NULL, 'ruwan@mail.com',          '$2b$12$W/MMfGNxExUT5c5H5CB4ze/oKc.oDvMpyHd6iJFLO.MefijkUOVS6', 'guest'),
+    ('11000000-0000-0000-0000-000000000006', 'f1000000-0000-0000-0000-000000000002', NULL, 'sanduni@mail.com',        '$2b$12$W/MMfGNxExUT5c5H5CB4ze/oKc.oDvMpyHd6iJFLO.MefijkUOVS6', 'guest'),
+    ('11000000-0000-0000-0000-000000000007', 'f1000000-0000-0000-0000-000000000003', NULL, 'dilan@mail.com',          '$2b$12$W/MMfGNxExUT5c5H5CB4ze/oKc.oDvMpyHd6iJFLO.MefijkUOVS6', 'guest'),
+    ('11000000-0000-0000-0000-000000000008', 'f1000000-0000-0000-0000-000000000004', NULL, 'tharindu@mail.com',       '$2b$12$W/MMfGNxExUT5c5H5CB4ze/oKc.oDvMpyHd6iJFLO.MefijkUOVS6', 'guest'),
+    ('11000000-0000-0000-0000-000000000009', 'f1000000-0000-0000-0000-000000000005', NULL, 'kasun@mail.com',          '$2b$12$W/MMfGNxExUT5c5H5CB4ze/oKc.oDvMpyHd6iJFLO.MefijkUOVS6', 'guest'),
+    ('11000000-0000-0000-0000-000000000010', 'f1000000-0000-0000-0000-000000000006', NULL, 'ishara@mail.com',         '$2b$12$W/MMfGNxExUT5c5H5CB4ze/oKc.oDvMpyHd6iJFLO.MefijkUOVS6', 'guest'),
+    ('11000000-0000-0000-0000-000000000011', 'f1000000-0000-0000-0000-000000000025', NULL, 'travel@ceylontea.lk',     '$2b$12$W/MMfGNxExUT5c5H5CB4ze/oKc.oDvMpyHd6iJFLO.MefijkUOVS6', 'guest');
+
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 17. BOOKING, SERVICE_USAGE, BILL, PAYMENT (demo)
+--     Plain SQL driven by the real triggers and procedures; no helper
+--     functions (see db/seed/demo_helpers.sql for the unused originals).
+-- ─────────────────────────────────────────────────────────────────────────────
+
+DO $$
+DECLARE
+    -- services (Part 1)
+    s_room_svc CONSTANT UUID := '20000000-0000-0000-0000-000000000001';  -- Room Service 1500
+    s_spa      CONSTANT UUID := '20000000-0000-0000-0000-000000000002';  -- Spa Treatment 5000
+    s_laundry  CONSTANT UUID := '20000000-0000-0000-0000-000000000003';  -- Laundry 500
+    s_airport  CONSTANT UUID := '20000000-0000-0000-0000-000000000004';  -- Airport Transfer 3000
+    s_minibar  CONSTANT UUID := '20000000-0000-0000-0000-000000000005';  -- Minibar Restock 2500
+    -- guests (Part 1)
+    g_kamal    CONSTANT UUID := 'f0000000-0000-0000-0000-000000000001';
+    g_nimali   CONSTANT UUID := 'f0000000-0000-0000-0000-000000000002';
+    g_john     CONSTANT UUID := 'f0000000-0000-0000-0000-000000000003';
+    g_anoma    CONSTANT UUID := 'f0000000-0000-0000-0000-000000000004';
+    g_lanka    CONSTANT UUID := 'f0000000-0000-0000-0000-000000000005';
+    g_priya    CONSTANT UUID := 'f0000000-0000-0000-0000-000000000006';
+    m          DATE := date_trunc('month', CURRENT_DATE)::DATE;
+    i          INT;
+    rec        RECORD;
+    v_payment  UUID;
+    b_f        UUID;
+    b_g        UUID;
+    b_h        UUID;
+    b_i        UUID;
+BEGIN
+    -- ── Past stays first (they move rooms Occupied -> Available) ─────────────
+    -- P1-P5: day 10 of each of the last five months, 3 nights, one row per
+    -- branch (Suite x09); P0: this month, D-9 -> D-6 on Single x05.
+    FOR rec IN
+        SELECT ('71' || (90 + n) || '0000-0000-0000-0000-000000000000')::UUID AS id,
+               (ARRAY[g_kamal, g_nimali, 'f1000000-0000-0000-0000-000000000004'::UUID,
+                      'f1000000-0000-0000-0000-000000000003'::UUID, g_priya])[n] AS guest,
+               'e1000000-0000-0000-0000-000000000109'::UUID AS room,
+               (m - make_interval(months => n))::DATE + 9 AS check_in,
+               3 AS nights, 'Credit Card'::VARCHAR AS method,
+               (ARRAY[s_room_svc, s_spa, s_laundry, s_minibar, s_airport])[n] AS service,
+               n AS qty, NULL::NUMERIC AS discount
+          FROM generate_series(1, 5) AS n
+        UNION ALL
+        SELECT ('72' || (90 + n) || '0000-0000-0000-0000-000000000000')::UUID,
+               (ARRAY[g_john, g_lanka, g_anoma, 'f1000000-0000-0000-0000-000000000011'::UUID,
+                      'f1000000-0000-0000-0000-000000000014'::UUID])[n],
+               'e1000000-0000-0000-0000-000000000209'::UUID,
+               (m - make_interval(months => n))::DATE + 9,
+               3, 'Bank Transfer',
+               (ARRAY[s_airport, s_room_svc, s_spa, s_laundry, s_minibar])[n],
+               n, CASE WHEN n = 2 THEN 3000 END                -- corporate discount
+          FROM generate_series(1, 5) AS n
+        UNION ALL
+        SELECT ('73' || (90 + n) || '0000-0000-0000-0000-000000000000')::UUID,
+               (ARRAY[g_priya, 'f1000000-0000-0000-0000-000000000025'::UUID, g_anoma,
+                      'f1000000-0000-0000-0000-000000000018'::UUID,
+                      'f1000000-0000-0000-0000-000000000021'::UUID])[n],
+               'e1000000-0000-0000-0000-000000000309'::UUID,
+               (m - make_interval(months => n))::DATE + 9,
+               3, 'Cash',
+               (ARRAY[s_spa, s_minibar, s_room_svc, s_airport, s_laundry])[n],
+               n, CASE WHEN n = 2 THEN 3000 END                -- corporate discount
+          FROM generate_series(1, 5) AS n
+        UNION ALL
+        SELECT '71900000-0000-0000-0000-000000000000'::UUID, g_nimali,
+               'e1000000-0000-0000-0000-000000000105'::UUID, CURRENT_DATE - 9,
+               3, 'Cash', s_laundry, 2, NULL
+        UNION ALL
+        SELECT '72900000-0000-0000-0000-000000000000'::UUID, 'f1000000-0000-0000-0000-000000000013'::UUID,
+               'e1000000-0000-0000-0000-000000000205'::UUID, CURRENT_DATE - 9,
+               3, 'Credit Card', s_room_svc, 2, NULL
+        UNION ALL
+        SELECT '73900000-0000-0000-0000-000000000000'::UUID, 'f1000000-0000-0000-0000-000000000020'::UUID,
+               'e1000000-0000-0000-0000-000000000305'::UUID, CURRENT_DATE - 9,
+               3, 'Bank Transfer', s_spa, 1, NULL
+    LOOP
+        -- book
+        INSERT INTO booking (booking_id, guest_id, room_id, check_in_date,
+                             check_out_date, rate_at_booking, status, payment_option)
+        SELECT rec.id, rec.guest, r.room_id, rec.check_in, rec.check_in + rec.nights,
+               fn_get_current_rate(r.branch_id, r.room_type_id), 'Booked', rec.method
+          FROM room r
+         WHERE r.room_id = rec.room;
+
+        -- check in
+        UPDATE booking
+           SET status = 'Checked-In',
+               actual_checkin_time = check_in_date + TIME '14:00'
+         WHERE booking_id = rec.id;
+
+        -- one service on day 2 (unit_price is set by trg_service_usage)
+        INSERT INTO service_usage (booking_id, service_id, usage_date, quantity, unit_price)
+        VALUES (rec.id, rec.service, rec.check_in + 1, rec.qty, 0);
+
+        -- bill and settle in full
+        CALL generate_bill(rec.id, rec.discount);
+        CALL record_payment(rec.id, fn_get_outstanding_balance(rec.id), rec.method,
+                            'Settled at check-out', v_payment);
+        UPDATE payment
+           SET paid_at = rec.check_in + rec.nights + TIME '12:30'
+         WHERE payment_id = v_payment;
+
+        -- check out
+        UPDATE booking
+           SET status = 'Checked-Out',
+               actual_checkout_time = check_out_date + TIME '11:00'
+         WHERE booking_id = rec.id;
+    END LOOP;
+
+    -- ── Current bookings: all inserted as 'Booked' ───────────────────────────
+    INSERT INTO booking (booking_id, guest_id, room_id, check_in_date,
+                         check_out_date, rate_at_booking, status, payment_option)
+    SELECT v.id::UUID, v.guest::UUID, r.room_id, CURRENT_DATE + v.d_in, CURRENT_DATE + v.d_out,
+           fn_get_current_rate(r.branch_id, r.room_type_id), 'Booked', v.pay
+      FROM (VALUES
+        -- Colombo (x = 1)
+        ('71010000-0000-0000-0000-000000000000', 'f1000000-0000-0000-0000-000000000001', 'e1000000-0000-0000-0000-000000000106',  0,  2, 'Credit Card'),   -- A Ruwan, arrives today
+        ('71020000-0000-0000-0000-000000000000', 'f1000000-0000-0000-0000-000000000005', 'e1000000-0000-0000-0000-000000000107', -1,  2, 'Cash'),          -- B Kasun, overdue arrival
+        ('71030000-0000-0000-0000-000000000000', 'f1000000-0000-0000-0000-000000000008', 'e1000000-0000-0000-0000-000000000106', -3, -1, 'Cash'),          -- C Chathuri, stay ended without check-in
+        ('71050000-0000-0000-0000-000000000000', 'f1000000-0000-0000-0000-000000000009', 'e1000000-0000-0000-0000-000000000108',  5,  8, 'Bank Transfer'),  -- E Ahmed, upcoming
+        ('71060000-0000-0000-0000-000000000000', 'f1000000-0000-0000-0000-000000000002', 'e1000000-0000-0000-0000-000000000108', -2,  0, 'Cash'),          -- F Sanduni, departs today, balance due
+        ('71070000-0000-0000-0000-000000000000', 'f1000000-0000-0000-0000-000000000003', 'e1000000-0000-0000-0000-000000000109', -2,  0, 'Credit Card'),   -- G Dilan, departs today, paid in full
+        ('71080000-0000-0000-0000-000000000000', 'f1000000-0000-0000-0000-000000000007', 'e1000000-0000-0000-0000-000000000105', -4, -1, 'Cash'),          -- H Malith, overdue checkout
+        ('71090000-0000-0000-0000-000000000000', 'f1000000-0000-0000-0000-000000000004', 'e1000000-0000-0000-0000-000000000110', -1,  3, 'Bank Transfer'),  -- I Tharindu, staying on
+        ('71100000-0000-0000-0000-000000000000', 'f1000000-0000-0000-0000-000000000010', 'e1000000-0000-0000-0000-000000000107', 10, 14, 'Credit Card'),    -- K Sarah, holds Double 107 for the 409 test
+        ('71110000-0000-0000-0000-000000000000', 'f0000000-0000-0000-0000-000000000002', 'e1000000-0000-0000-0000-000000000111', 10, 12, 'Cash'),          -- X Nimali, cancelled
+        -- Kandy (x = 2)
+        ('72010000-0000-0000-0000-000000000000', 'f1000000-0000-0000-0000-000000000011', 'e1000000-0000-0000-0000-000000000206',  0,  2, 'Cash'),          -- A Nuwan
+        ('72020000-0000-0000-0000-000000000000', 'f1000000-0000-0000-0000-000000000012', 'e1000000-0000-0000-0000-000000000207', -1,  2, 'Credit Card'),    -- B Hiruni
+        ('72030000-0000-0000-0000-000000000000', 'f1000000-0000-0000-0000-000000000013', 'e1000000-0000-0000-0000-000000000206', -3, -1, 'Cash'),          -- C Pradeep
+        ('72050000-0000-0000-0000-000000000000', 'f0000000-0000-0000-0000-000000000003', 'e1000000-0000-0000-0000-000000000208',  5,  8, 'Bank Transfer'),  -- E John
+        ('72060000-0000-0000-0000-000000000000', 'f1000000-0000-0000-0000-000000000014', 'e1000000-0000-0000-0000-000000000208', -2,  0, 'Credit Card'),    -- F Emma
+        ('72070000-0000-0000-0000-000000000000', 'f1000000-0000-0000-0000-000000000015', 'e1000000-0000-0000-0000-000000000209', -2,  0, 'Credit Card'),    -- G Ravi
+        ('72080000-0000-0000-0000-000000000000', 'f1000000-0000-0000-0000-000000000016', 'e1000000-0000-0000-0000-000000000205', -4, -1, 'Cash'),          -- H Lakmal
+        ('72090000-0000-0000-0000-000000000000', 'f0000000-0000-0000-0000-000000000005', 'e1000000-0000-0000-0000-000000000210', -1,  3, 'Bank Transfer'),  -- I Lanka Exports
+        ('72100000-0000-0000-0000-000000000000', 'f1000000-0000-0000-0000-000000000017', 'e1000000-0000-0000-0000-000000000207', 10, 14, 'Credit Card'),    -- K Tomas
+        ('72110000-0000-0000-0000-000000000000', 'f0000000-0000-0000-0000-000000000001', 'e1000000-0000-0000-0000-000000000206', 10, 12, 'Cash'),          -- X Kamal (cancelled)
+        ('72120000-0000-0000-0000-000000000000', 'f0000000-0000-0000-0000-000000000002', 'e1000000-0000-0000-0000-000000000210', 12, 14, 'Credit Card'),    -- U Nimali, upcoming
+        -- Galle (x = 3)
+        ('73010000-0000-0000-0000-000000000000', 'f1000000-0000-0000-0000-000000000018', 'e1000000-0000-0000-0000-000000000306',  0,  2, 'Credit Card'),    -- A Gayan
+        ('73020000-0000-0000-0000-000000000000', 'f1000000-0000-0000-0000-000000000019', 'e1000000-0000-0000-0000-000000000307', -1,  2, 'Cash'),          -- B Dinithi
+        ('73030000-0000-0000-0000-000000000000', 'f1000000-0000-0000-0000-000000000020', 'e1000000-0000-0000-0000-000000000306', -3, -1, 'Cash'),          -- C Sunil
+        ('73050000-0000-0000-0000-000000000000', 'f1000000-0000-0000-0000-000000000021', 'e1000000-0000-0000-0000-000000000308',  5,  8, 'Bank Transfer'),  -- E Yuki
+        ('73060000-0000-0000-0000-000000000000', 'f1000000-0000-0000-0000-000000000022', 'e1000000-0000-0000-0000-000000000308', -2,  0, 'Cash'),          -- F Madushani
+        ('73070000-0000-0000-0000-000000000000', 'f1000000-0000-0000-0000-000000000023', 'e1000000-0000-0000-0000-000000000309', -2,  0, 'Credit Card'),    -- G Oliver
+        ('73080000-0000-0000-0000-000000000000', 'f1000000-0000-0000-0000-000000000024', 'e1000000-0000-0000-0000-000000000305', -4, -1, 'Cash'),          -- H Asela
+        ('73090000-0000-0000-0000-000000000000', 'f1000000-0000-0000-0000-000000000025', 'e1000000-0000-0000-0000-000000000310', -1,  3, 'Bank Transfer'),  -- I Ceylon Tea Traders
+        ('73100000-0000-0000-0000-000000000000', 'f1000000-0000-0000-0000-000000000026', 'e1000000-0000-0000-0000-000000000307', 10, 14, 'Credit Card'),    -- K Shanika
+        ('73110000-0000-0000-0000-000000000000', 'f0000000-0000-0000-0000-000000000006', 'e1000000-0000-0000-0000-000000000306', 10, 12, 'Cash'),          -- X Priya (cancelled)
+        ('73120000-0000-0000-0000-000000000000', 'f0000000-0000-0000-0000-000000000001', 'e1000000-0000-0000-0000-000000000306', 20, 22, 'Credit Card')     -- U Kamal, upcoming
+      ) AS v(id, guest, room, d_in, d_out, pay)
+      JOIN room r ON r.room_id = v.room::UUID;
+
+    -- ── Same in-house state at every branch ─────────────────────────────────
+    FOR i IN 1..3 LOOP
+        b_f := ('7' || i || '060000-0000-0000-0000-000000000000')::UUID;
+        b_g := ('7' || i || '070000-0000-0000-0000-000000000000')::UUID;
+        b_h := ('7' || i || '080000-0000-0000-0000-000000000000')::UUID;
+        b_i := ('7' || i || '090000-0000-0000-0000-000000000000')::UUID;
+
+        -- X: cancelled before arrival
+        UPDATE booking SET status = 'Cancelled'
+         WHERE booking_id = ('7' || i || '110000-0000-0000-0000-000000000000')::UUID;
+
+        -- check in F, G, H, I (Occupied via trg_room_status)
+        UPDATE booking
+           SET status = 'Checked-In',
+               actual_checkin_time = check_in_date + TIME '14:00'
+         WHERE booking_id IN (b_f, b_g, b_h, b_i);
+
+        -- services: F two, G spa, H minibar, I two (unit_price from trg_service_usage)
+        INSERT INTO service_usage (booking_id, service_id, usage_date, quantity, unit_price)
+        SELECT b.booking_id, u.service_id, b.check_in_date + u.day, u.qty, 0
+          FROM (VALUES
+                (b_f, s_room_svc, 0, 2),
+                (b_f, s_laundry,  1, 1),
+                (b_g, s_spa,      1, 1),
+                (b_h, s_minibar,  1, 1),
+                (b_i, s_room_svc, 0, 1),
+                (b_i, s_airport,  0, 1)
+               ) AS u(booking_id, service_id, day, qty)
+          JOIN booking b ON b.booking_id = u.booking_id;
+
+        -- bills: F unpaid, G paid in full, H part-paid, I LKR 2,000 discount + part-paid
+        CALL generate_bill(b_f);
+        CALL generate_bill(b_g);
+        CALL generate_bill(b_h);
+        CALL generate_bill(b_i, 2000);
+
+        -- G: paid in full on day 2
+        CALL record_payment(b_g, fn_get_outstanding_balance(b_g), 'Credit Card', 'Paid in full', v_payment);
+        UPDATE payment p SET paid_at = b.check_in_date + 1 + TIME '12:30'
+          FROM booking b WHERE p.payment_id = v_payment AND b.booking_id = b_g;
+
+        -- H: LKR 10,000 at check-in
+        CALL record_payment(b_h, 10000, 'Cash', 'Part payment at check-in', v_payment);
+        UPDATE payment p SET paid_at = b.check_in_date + 0 + TIME '12:30'
+          FROM booking b WHERE p.payment_id = v_payment AND b.booking_id = b_h;
+
+        -- I: LKR 5,000 deposit
+        CALL record_payment(b_i, 5000, 'Bank Transfer', 'Deposit', v_payment);
+        UPDATE payment p SET paid_at = b.check_in_date + 0 + TIME '12:30'
+          FROM booking b WHERE p.payment_id = v_payment AND b.booking_id = b_i;
+    END LOOP;
+END;
+$$;
+
+
 COMMIT;
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -558,4 +912,14 @@ COMMIT;
 --   v_monthly_revenue       -> Sept 2026: Colombo (BK-02 Checked-Out), Kandy (BK-05), Galle (BK-07)
 --   v_top_services          -> Ranked by qty: Laundry(7), Room Service(5), Airport Transfer(2),
 --                              Minibar Restock(2), Spa Treatment(1) — all 5 active services appear
+-- ─────────────────────────────────────────────────────────────────────────────
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Part 2 summary (added on top of Part 1)
+--   ROOM          21  (7 per branch; 211 and 311 in Maintenance; 4 Occupied
+--                      per branch after check-ins: x05, x08, x09, x10)
+--   GUEST         28  (2 corporate with Part 1's Lanka Exports; 2 walk-ins)
+--   USER_ACCOUNT  11  (admin.ops, mgr.galle, rec.kandy, rec2.colombo, 7 guests)
+--   BOOKING       50  (18 Checked-Out, 12 Checked-In, 17 Booked, 3 Cancelled)
+--   BILL          30  (18 paid stays + F unpaid, G paid, H/I part-paid per branch)
 -- ─────────────────────────────────────────────────────────────────────────────

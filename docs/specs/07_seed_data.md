@@ -2,7 +2,7 @@
 
 > Minimum data requirements from the project brief + extras for a convincing demo.
 
-> **Two seed files.** `db/run_all.sql` loads `db/seed/sample_data.sql` (fixed dates, fixed IDs; the backend tests depend on it) and then `db/seed/demo_data.sql` (dates relative to the build day, for manual testing; see [Demo data](#demo-data-demo_datasql) below). Where the tables in the sections before Demo data disagree with `sample_data.sql`, the SQL file is what actually loads.
+> **One seed file.** `db/run_all.sql` loads `db/seed/sample_data.sql`: part 1 has fixed dates and fixed IDs (the backend tests depend on it), part 2 has dates relative to the build day, for manual testing (see [Demo data](#demo-data-demo_datasql) below). The old `pg_temp` helper functions live unused in `db/seed/demo_helpers.sql`. Where the tables in the sections before Demo data disagree with `sample_data.sql`, the SQL file is what actually loads.
 
 ---
 
@@ -201,15 +201,15 @@ Spread across bookings 1, 2, 3, 6 — only checked-in/checked-out bookings.
 
 ---
 
-## Demo data (`demo_data.sql`)
+## Demo data (part 2 of `sample_data.sql`)
 
-Loaded after `sample_data.sql`. It only adds rows; it changes nothing that `sample_data.sql` inserts. Every date is relative to `CURRENT_DATE` on the day the database is built (written **D**), so the receptionist's Today screen always has work on it. **Rebuild the database on the day you test.** The manual test guide is [docs/work/manual_testing/MANUAL_TESTING_GUIDE.md](../work/manual_testing/MANUAL_TESTING_GUIDE.md).
+Sections 14–17 of `sample_data.sql`. They only add rows; they change nothing that part 1 inserts. Every date is relative to `CURRENT_DATE` on the day the database is built (written **D**), so the receptionist's Today screen always has work on it. **Rebuild the database on the day you test.** The manual test guide is [docs/work/manual_testing/MANUAL_TESTING_GUIDE.md](../work/manual_testing/MANUAL_TESTING_GUIDE.md).
 
 Bookings, bills and payments go through the real triggers and procedures (`trg_room_status`, `trg_service_usage`, `generate_bill`, `record_payment`), so room status, prices, tax and balances are the system's own figures.
 
-### Totals after both files
+### Totals after both parts
 
-| Entity | sample_data | + demo_data | Total |
+| Entity | Part 1 | + Demo (part 2) | Total |
 |---|---|---|---|
 | Rooms | 12 | 21 (x05–x11 per branch) | 33 |
 | Guests | 6 | 28 | 34 |

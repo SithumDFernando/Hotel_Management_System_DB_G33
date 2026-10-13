@@ -84,7 +84,7 @@ Every account uses the password **`SkyNest@2026`**. The scenario column tells yo
 
 ## 3. Test data
 
-All of this comes from `db/seed/demo_data.sql`; the full detail is in [spec 07, Demo data](../../specs/07_seed_data.md#demo-data-demo_datasql). The same set of cases exists at each branch. A booking's reference in the UI is `SN-7XYY0000`, where **X** is the branch (1 Colombo, 2 Kandy, 3 Galle) and **YY** is the case code.
+All of this comes from the demo part of `db/seed/sample_data.sql`; the full detail is in [spec 07, Demo data](../../specs/07_seed_data.md#demo-data-part-2-of-sample_datasql). The same set of cases exists at each branch. A booking's reference in the UI is `SN-7XYY0000`, where **X** is the branch (1 Colombo, 2 Kandy, 3 Galle) and **YY** is the case code.
 
 | Case | YY | Dates | Status | Bill | Colombo | Kandy | Galle |
 |---|---|---|---|---|---|---|---|
