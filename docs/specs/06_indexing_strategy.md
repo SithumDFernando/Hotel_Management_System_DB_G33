@@ -23,20 +23,23 @@
 | 13 | `idx_user_branch` | user_account | `branch_id` | B-tree | Staff listing per branch |
 | 14 | `idx_room_rate_branch_type` | room_rate | `branch_id, room_type_id` | B-tree (UNIQUE) | `fn_get_current_rate()` lookup |
 | 15 | `idx_booking_checkout_date` | booking | `check_out_date` | B-tree | `v_monthly_revenue` grouping by month |
+| 16 | `excl_booking_room_overlap` (constraint index) | booking | `room_id, daterange(check_in_date, check_out_date, '[)')` WHERE status IN ('Booked','Checked-In') | GiST (`btree_gist`) | Enforces no overlapping active bookings per room (exclusion constraint); also usable by room-availability overlap queries |
 
 ---
 
 ## Notes
 
-### Why not GIN or GiST?
-- No full-text search columns in the current schema.
-- Date-range overlap queries (`check_in < X AND check_out > Y`) work efficiently with composite B-tree on `(room_id, check_in_date, check_out_date)`.
+### GIN and GiST
+- No full-text search columns in the current schema, so no GIN.
+- One GiST index: the one behind the exclusion constraint `excl_booking_room_overlap`. A B-tree can't enforce "no overlapping ranges", only uniqueness. `btree_gist` adds GiST support for the `room_id WITH =` part.
+- The trigger's overlap query (`check_in < X AND check_out > Y`) still uses the composite B-tree on `(room_id, check_in_date, check_out_date)`, so `idx_booking_room_dates` stays.
 - If we later add search on guest name or address, a GIN index with `pg_trgm` could be considered.
 
 ### Indexes created implicitly by constraints
 These do NOT need explicit `CREATE INDEX`:
 - All PRIMARY KEYs → automatic unique B-tree index
-- `UNIQUE` constraints on `guest.nic_passport`, `user_account.email`, `bill.booking_id`, `room_rate(branch_id, room_type_id)` → automatic indexes
+- `EXCLUDE` constraint `excl_booking_room_overlap` → automatic GiST index
+- `UNIQUE` constraints on `guest.nic_passport`, `user_account.email`, `user_account.guest_id`, `bill.booking_id`, `room_rate(branch_id, room_type_id)` → automatic indexes
 
 ### Performance impact
 - Write overhead is minimal — most tables have ≤ 2 additional indexes.

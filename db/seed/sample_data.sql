@@ -334,7 +334,14 @@ INSERT INTO booking (booking_id, guest_id, room_id, check_in_date, check_out_dat
 --       - quantity > 1 (bulk usage)
 --       - Services on both Checked-In and Checked-Out bookings
 --       - Service usages across all 3 branches (Colombo, Kandy, Galle)
+--
+--     trg_service_usage only allows usage on Checked-In bookings. These rows
+--     are historical (recorded while BK-02/05/07 were still checked in), so the
+--     trigger is disabled for this insert only. Without this, the error aborts
+--     the whole seed transaction and every seed row is rolled back.
 -- ─────────────────────────────────────────────────────────────────────────────
+
+ALTER TABLE service_usage DISABLE TRIGGER trg_service_usage;
 
 INSERT INTO service_usage (usage_id, booking_id, service_id, usage_date, quantity, unit_price) VALUES
     -- Services for BK-01 (Kamal, Checked-In, Suite 101 Colombo) — 3 services
@@ -385,6 +392,8 @@ INSERT INTO service_usage (usage_id, booking_id, service_id, usage_date, quantit
      '30000000-0000-0000-0000-000000000007',   -- BK-07
      '20000000-0000-0000-0000-000000000004',   -- Airport Transfer
      '2026-09-10', 1, 3000.00);                -- 1x Airport Transfer = 3000.00
+
+ALTER TABLE service_usage ENABLE TRIGGER trg_service_usage;
 
 
 -- ─────────────────────────────────────────────────────────────────────────────

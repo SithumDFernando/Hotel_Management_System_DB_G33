@@ -36,43 +36,21 @@ Database table used:
 Dependencies:
     - app.db            (get_db)
     - app.dependencies  (get_current_user, require_role)
-    - app.schemas.guest (GuestCreate, GuestUpdate, GuestOut)
+    - app.schemas.guest (GuestCreate, GuestUpdate, GuestOut, GuestDetailOut, BookingSummary)
 """
 
 from datetime import date
 from typing import Optional
 from uuid import UUID
 
+import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel
 
 from app.db import get_db
-from app.dependencies import get_current_user, require_role
-from app.schemas.guest import GuestCreate, GuestOut, GuestUpdate
+from app.dependencies import get_current_user, require_guest_id, require_role
+from app.schemas.guest import BookingSummary, GuestCreate, GuestDetailOut, GuestOut, GuestUpdate
 
 router = APIRouter()
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Response model for booking history embedded in GET /guests/{guest_id}
-# ─────────────────────────────────────────────────────────────────────────────
-
-class BookingSummary(BaseModel):
-    booking_id: UUID
-    room_id: UUID
-    room_number: str
-    check_in_date: date
-    check_out_date: date
-    rate_at_booking: float
-    status: str
-    payment_option: str
-    actual_checkin_time: Optional[str] = None
-    actual_checkout_time: Optional[str] = None
-
-
-class GuestDetailOut(GuestOut):
-    """Full guest profile including their booking history."""
-    bookings: list[BookingSummary] = []
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -144,7 +122,7 @@ async def get_guest(
 
     # Guests may only view their own profile
     if role == "guest":
-        if str(current_user.get("guest_id")) != str(guest_id):
+        if require_guest_id(current_user) != str(guest_id):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Guests can only view their own profile.",
@@ -227,7 +205,7 @@ async def create_guest(
 
     The Pydantic GuestCreate model already validates that company_name is
     supplied when guest_type is 'Corporate'. A unique-constraint violation
-    on nic_passport or email will be caught and surfaced as HTTP 409.
+    on nic_passport or email is surfaced as HTTP 409.
     """
     try:
         row = await db.fetchrow(
@@ -257,17 +235,10 @@ async def create_guest(
             body.company_reg_number,
             body.billing_contact_name,
         )
-    except Exception as exc:
-        # Surface DB-level constraint violations (duplicate NIC/email) as 409
-        error_msg = str(exc).lower()
-        if "unique" in error_msg or "duplicate" in error_msg:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="A guest with this NIC/passport or email already exists.",
-            )
+    except asyncpg.exceptions.UniqueViolationError:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Database error: {exc}",
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A guest with this NIC/passport or email already exists.",
         )
 
     return GuestOut(**dict(row))
@@ -328,16 +299,10 @@ async def update_guest(
             """,
             *params,
         )
-    except Exception as exc:
-        error_msg = str(exc).lower()
-        if "unique" in error_msg or "duplicate" in error_msg:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="A guest with this NIC/passport or email already exists.",
-            )
+    except asyncpg.exceptions.UniqueViolationError:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Database error: {exc}",
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A guest with this NIC/passport or email already exists.",
         )
 
     if row is None:

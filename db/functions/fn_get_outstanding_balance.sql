@@ -1,6 +1,7 @@
 -- Amount still owed on a booking's bill: GREATEST(total - paid, 0.00).
 -- Raises if the bill has not been generated yet.
--- Also used by check_out() (checkin_checkout.sql).
+-- Also used by perform_checkout() (checkin_checkout.sql), right after it
+-- refreshes the bill with generate_bill.
 
 CREATE OR REPLACE FUNCTION fn_get_outstanding_balance(p_booking_id UUID)
 RETURNS NUMERIC
