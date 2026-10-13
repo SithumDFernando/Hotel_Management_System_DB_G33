@@ -13,6 +13,12 @@ export const OPENING_IMAGE = {
   alt: 'People walking on the Galle Fort ramparts beside the sea',
 };
 
+// Home hero background. A hotel room, warm light; shown behind the headline and search.
+export const HERO_IMAGE = {
+  image: u('photo-1618773928121-c32242e63f39', 2000),
+  alt: 'A hotel room with a made bed, bedside lamps and curtained window',
+};
+
 export const BRANCH_MEDIA = {
   Colombo: {
     // unsplash.com/photos/a-grassy-field-in-front-of-tall-buildings-at-night-o26zCEltocw

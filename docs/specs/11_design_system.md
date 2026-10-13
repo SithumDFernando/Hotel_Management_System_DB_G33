@@ -143,7 +143,7 @@ Pages: `Home`, `RoomsBrowse`, `Login`, `Register` (and guest pages `MyBookings`,
 
 ### 7.1 Home structure
 
-1. **Opening:** the name, one plain sentence of what SkyNest is (three hotels: Colombo, Kandy, Galle), and the **availability search** (`StaySearch`) as the clearest control on the page. One photograph beside or below the text, **not** behind it with a dark gradient overlay.
+1. **Opening:** the name, one plain sentence of what SkyNest is (three hotels: Colombo, Kandy, Galle), and the **availability search** (`StaySearch`) as the clearest control on the page. A hotel-room photograph sits behind the text (owner's decision, 2026-10-13) under a left-to-right ink scrim for legibility. Keep the headline left-aligned, the search a solid `card` (no glass), and no second button.
 2. **Three branches:** each with a photo, city, address and phone (from `GET /admin/branches` / seed), "Rooms from LKR …" (from the API), and a link "See rooms in Kandy". Same layout for all three; only the photo, sentence and line drawing differ.
 3. **Room types:** Single, Double, Deluxe, Suite as a compact list: capacity, from-rate, amenities as text. No "Most popular" ribbons, no star ratings.
 4. **During your stay:** services as a plain list (name and what it is), only if the data is publicly available; otherwise omit.

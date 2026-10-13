@@ -7,7 +7,7 @@ import Photo from '@/components/Photo';
 import StaySearch from '@/components/StaySearch';
 import Icon from '@/components/ui/Icon';
 import { ErrorState, Skeleton } from '@/components/ui/States';
-import { branchMedia, OPENING_IMAGE } from '@/lib/media';
+import { branchMedia, HERO_IMAGE } from '@/lib/media';
 import { addDays, formatCurrency, todayISO } from '@/utils/formatters';
 
 // Job: a visitor sees SkyNest is three real hotels (Colombo, Kandy, Galle) and checks
@@ -18,6 +18,26 @@ const amenityText = (amenities = []) => {
   if (names.length <= 4) return names.join(', ');
   return `${names.slice(0, 4).join(', ')} and ${names.length - 4} more`;
 };
+
+// Background photo with an ink scrim so the white text stays readable. If the image fails,
+// the section's flat ink background remains.
+function HeroPhoto() {
+  const [failed, setFailed] = useState(false);
+  if (failed) return null;
+  return (
+    <>
+      <img
+        src={HERO_IMAGE.image}
+        alt=""
+        aria-hidden="true"
+        decoding="async"
+        onError={() => setFailed(true)}
+        className="absolute inset-0 -z-10 h-full w-full object-cover"
+      />
+      <div aria-hidden="true" className="absolute inset-0 -z-10 bg-gradient-to-r from-ink-900/85 via-ink-900/60 to-ink-900/30" />
+    </>
+  );
+}
 
 export default function Home() {
   const navigate = useNavigate();
@@ -50,18 +70,20 @@ export default function Home() {
 
   return (
     <>
-      {/* Opening: name, one plain sentence, the availability search; photo beside, never behind. */}
-      <section className="mx-auto grid max-w-7xl gap-8 px-4 pb-16 pt-10 sm:px-6 lg:grid-cols-[1.15fr_1fr] lg:items-center lg:gap-12 lg:pt-16">
-        <div>
-          <h1 className="font-display text-[36px] font-semibold leading-tight text-ink-900 sm:text-[48px]">SkyNest Hotels</h1>
-          <p className="mt-3 max-w-xl text-lg text-ink-600">
-            Three hotels in Colombo, Kandy and Galle. Check a date and book a room online.
+      {/* Opening: hotel photo behind left-aligned text; the availability search is a solid card. */}
+      <section className="relative isolate overflow-hidden bg-ink-900">
+        <HeroPhoto />
+        <div className="relative mx-auto max-w-7xl px-4 pb-16 pt-16 sm:px-6 lg:pb-24 lg:pt-28">
+          <h1 className="max-w-2xl font-display text-[36px] font-semibold leading-tight text-paper-50 sm:text-[52px]">
+            A quiet room, wherever you land in Sri Lanka.
+          </h1>
+          <p className="mt-4 max-w-xl text-lg text-paper-100">
+            SkyNest Hotels in Colombo, Kandy and Galle. Check a date and book a room online.
           </p>
-          <div className="card mt-8 p-4">
+          <div className="card mt-10 max-w-4xl p-4">
             <StaySearch branches={branchList} value={search} onChange={setSearch} onSubmit={submit} compact />
           </div>
         </div>
-        <Photo src={OPENING_IMAGE.image} alt={OPENING_IMAGE.alt} aspect="4/3" eager className="rounded-lg" />
       </section>
 
       {/* Three branches: same layout for each; only photo and sentence differ. */}

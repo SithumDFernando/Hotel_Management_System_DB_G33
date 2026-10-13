@@ -94,7 +94,7 @@ Source: full-stack audit run on **2026-10-12** (backend API probes, DB-level con
 
 ## Phase 9: Manual testing
 
-- [ ] **20.** Demo data dated from the build day (`db/seed/demo_data.sql`, loaded by `run_all.sql`) plus the click-by-click guide [docs/work/manual_testing/MANUAL_TESTING_GUIDE.md](../manual_testing/MANUAL_TESTING_GUIDE.md), grouped by login
+- [ ] **20.** Demo data dated from the build day (now part 2 of `db/seed/sample_data.sql`, loaded by `run_all.sql`) plus the click-by-click guide [docs/work/manual_testing/MANUAL_TESTING_GUIDE.md](../manual_testing/MANUAL_TESTING_GUIDE.md), grouped by login
   - ✅ Scratch build `skynest_demo`: clean under `ON_ERROR_STOP`, row counts per branch/status match the matrix, room states correct, only BK-05 is Checked-Out with a balance. Backend suite **253 passed** on that build. Report figures in the guide (overview tiles, balances, top services, room counts) were read from the API on that build.
   - ⏳ Not yet done: headless-browser pass over the guide's expected values (Docker Desktop stopped mid-run), dev DB rebuild and the live `test_phase4` run.
   - ⚠ Found while writing the guide (logged as KI-13 to KI-15): the overview occupancy tile undercounts (Colombo "1 of 7" with 5 of 11 rooms occupied); an overdue guest's room is offered as free; the seven fixed-seed bookings share the reference `SN-30000000`.
