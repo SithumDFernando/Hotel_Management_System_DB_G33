@@ -1,6 +1,6 @@
-# Local Development Setup Guide
+# Setup & Deployment Guide
 
-Full setup instructions to get SkyNest running on your machine.  
+Full instructions to get SkyNest running on your local machine or deployed to AWS EC2.  
 ← Back to [README](../README.md)
 
 ---
@@ -285,3 +285,152 @@ npm run dev
 ```
 
 Open: [`http://localhost:5173`](http://localhost:5173)
+
+---
+
+## 5. Cloud Deployment Guide (AWS EC2 + Docker)
+
+Step-by-step instructions for deploying the containerized SkyNest stack onto a fresh **AWS EC2 instance** (Ubuntu 24.04 LTS, `t3.small`, 20GB SSD).
+
+### A. AWS Security Group Configuration (Port 8080)
+
+By default, an EC2 instance only permits inbound traffic on port 22 (SSH). SkyNest serves its React frontend and reverse-proxies `/api` via Nginx on port `8080`:
+
+1. In the **AWS Management Console**, navigate to **EC2** → **Instances**.
+2. Select your running instance and open the **Security** tab.
+3. Click your **Security group ID** link (e.g. `sg-xxxxxxxx`).
+4. Under **Inbound rules**, click **Edit inbound rules** and add:
+   - **Type**: `Custom TCP`
+   - **Port range**: `8080`
+   - **Source**: `Anywhere-IPv4` (`0.0.0.0/0`)
+   - **Description**: `SkyNest Web UI (Frontend/Nginx)`
+5. *(Optional)* Add **Port 8000** if you wish to inspect the FastAPI Swagger documentation (`/docs`) directly.
+6. Ensure **SSH (Port 22)** is present, then click **Save rules**.
+
+---
+
+### B. Connect via SSH from Windows PowerShell
+
+OpenSSH requires restricted permissions on the `.pem` key file.
+
+1. Open **PowerShell** in the repository root (where `skynest-key.pem` is located):
+   ```powershell
+   # Reset ACLs and grant read access exclusively to your Windows user:
+   icacls.exe .\skynest-key.pem /reset
+   icacls.exe .\skynest-key.pem /grant:r "$($env:USERNAME):(R)"
+   icacls.exe .\skynest-key.pem /inheritance:r
+   ```
+   *(Note: `*.pem` is already included in `.gitignore`, protecting your private key from accidental git commits).*
+
+2. Connect to your instance using the default `ubuntu` username and your EC2 Public IPv4:
+   ```powershell
+   ssh -i .\skynest-key.pem ubuntu@<YOUR_EC2_PUBLIC_IP>
+   ```
+   Type `yes` when prompted to verify the host authenticity fingerprint.
+
+---
+
+### C. Configure 2GB Swap Space
+
+The `t3.small` instance has 2GB RAM. Adding a 2GB swap file prevents the Linux Out-Of-Memory (OOM) killer from halting Docker and Vite during image builds:
+
+```bash
+# Allocate and enable a 2GB swap file:
+sudo fallocate -l 2G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+
+# Make swap persistent across reboots:
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+
+# Confirm swap is active (~2.0Gi):
+free -h
+```
+
+---
+
+### D. Install Docker & Docker Compose
+
+Install Docker Engine and the Compose plugin via the official Docker installer script:
+
+```bash
+# Update packages and install prerequisites
+sudo apt-get update
+sudo apt-get install -y curl git ca-certificates
+
+# Run official Docker installation script
+curl -fsSL https://get.docker.com -o get-docker.sh
+sudo sh get-docker.sh
+
+# Grant non-root Docker execution permissions to the ubuntu user
+sudo usermod -aG docker $USER
+newgrp docker
+
+# Verify Docker version
+docker --version
+docker compose version
+```
+
+---
+
+### E. Clone Repo, Configure `.env`, and Launch Stack
+
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/SithumDFernando/Hotel_Management_System_DB_G33.git skynest
+   cd skynest
+   ```
+
+2. **Generate a cryptographically secure JWT secret**:
+   ```bash
+   python3 -c "import secrets; print(secrets.token_hex(32))"
+   ```
+
+3. **Configure environment settings**:
+   ```bash
+   cp .env.example .env
+   nano .env
+   ```
+   - Update `POSTGRES_PASSWORD` with a strong password.
+   - Paste the generated hex string into `SECRET_KEY`.
+   - Ensure `FRONTEND_PORT=8080`.
+   - Save and exit (`Ctrl + O`, `Enter`, `Ctrl + X`).
+
+4. **Build and start all containers in detached mode**:
+   ```bash
+   docker compose up --build -d
+   ```
+
+5. **Verify running containers**:
+   ```bash
+   docker compose ps
+   ```
+   All services (`db`, `backend`, `frontend`, `pgadmin`) will report `Up` or `Up (healthy)`.
+
+---
+
+### F. Verification & Useful Operations
+
+1. **Access the Web Application**:  
+   Open your browser and navigate to `http://<YOUR_EC2_PUBLIC_IP>:8080`.
+2. **API Health Check**:  
+   Visit `http://<YOUR_EC2_PUBLIC_IP>:8080/api/health` — should return `{"status":"ok"}`.
+3. **Common Server Management Commands**:
+   ```bash
+   # Follow live system logs:
+   docker compose logs -f
+
+   # Follow only backend logs:
+   docker compose logs -f backend
+
+   # Restart all services:
+   docker compose restart
+
+   # Update code from GitHub and redeploy:
+   git pull && docker compose up --build -d
+
+   # Reset database and re-seed from scratch:
+   docker compose down -v && docker compose up --build -d
+   ```
+

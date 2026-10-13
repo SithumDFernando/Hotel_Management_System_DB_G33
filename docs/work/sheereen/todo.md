@@ -28,6 +28,7 @@
   - [x] Execute atomic UPSERT into `bill` table (`ON CONFLICT (booking_id) DO UPDATE`)
 - [x] **Payment Recording Stored Procedure** (`db/procedures/payments.sql`)
   - [x] Implement `record_payment(p_booking_id UUID, p_amount NUMERIC(10,2), p_payment_method VARCHAR(50), p_notes VARCHAR(255) DEFAULT NULL)`
+  - [x] `payment_method` limited to `Credit Card` / `Cash` / `Bank Transfer` (CHECK `chk_payment_method` + `PaymentMethod` Literal) (ISSUE-08)
   - [x] Return the inserted payment's ID (`OUT p_payment_id UUID`; `p_notes` no longer has a default) so `POST /api/payments` returns its own payment (ISSUE-12)
   - [x] Verify bill exists for the booking (raise exception if not found)
   - [x] Insert payment record into `payment` table
@@ -56,11 +57,11 @@
 
 ## Phase 4: Testing & Verification
 
-- [ ] **Database Level Verification**
-  - [ ] Test calculation functions (`fn_calculate_nights`, `fn_calculate_tax`, charges) with sample arguments in psql
-  - [ ] Test `generate_bill` initial insertion and subsequent re-generation (UPSERT)
-  - [ ] Test `record_payment` partial and full payment scenarios; verify `balance_flag` transitions (`Unpaid` → `Partially_Paid` → `Paid`)
-- [ ] **API Level Verification**
-  - [ ] Verify endpoints in FastAPI Swagger UI (`http://localhost:8000/docs`)
-  - [ ] Verify bill calculation matches expected arithmetic across room and service charges
-  - [ ] Verify payment recording prevents negative or zero payment amounts
+- [x] **Database Level Verification**
+  - [x] Test calculation functions (`fn_calculate_nights`, `fn_calculate_tax`, charges) with sample arguments in psql: 3 nights, same-day → 1, tax 15% of 1000 = 150, seed booking 60,000 + 9,000
+  - [x] Test `generate_bill` initial insertion and subsequent re-generation (UPSERT): first call creates the bill, a call after adding a service updates the same row (one bill, service charges 0 → 3,000)
+  - [x] Test `record_payment` partial and full payment scenarios; verify `balance_flag` transitions: `balance_flag` is a boolean, TRUE after a 1,000 partial payment, FALSE once the rest is paid (outstanding 0.00)
+- [x] **API Level Verification**
+  - [x] Verify endpoints in FastAPI Swagger UI (`http://localhost:8000/docs`): `/docs` loads; billing and payment endpoints exercised over HTTP in task 16
+  - [x] Verify bill calculation matches expected arithmetic across room and service charges: 16,000 + 2,500 = 18,500, tax 2,775 (15%), total 21,275
+  - [x] Verify payment recording prevents negative or zero payment amounts: API 422 for 0 and -5; procedure raises 'Amount must be positive'

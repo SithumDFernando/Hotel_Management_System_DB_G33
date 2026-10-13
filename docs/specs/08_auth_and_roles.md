@@ -51,13 +51,37 @@ Client                          Server
 - `sub` — account_id (subject)
 - `branch_id` — NULL for admin and guest roles
 - `guest_id` — set only for guest role (links to guest table)
-- `exp` — token expiry (24 hours from issue)
+- `exp` — token expiry: `ACCESS_TOKEN_EXPIRE_MINUTES` after issue (1440 = 24 hours in `docker-compose.yml` and `.env.example`; the code default in `config.py` is 60 minutes)
 
 ### Password Hashing
 
 - Algorithm: **bcrypt** with 12 salt rounds
-- Library: `passlib[bcrypt]` (Python backend)
+- Library: `bcrypt` (Python backend, `app/auth.py`)
 - Passwords are never stored in plain text
+
+### Password policy (ISSUE-10)
+
+One rule for every endpoint that sets a password: `POST /auth/signup`, `POST /auth/register` and `POST /admin/users`. It's applied by `validate_new_password` in `app/auth.py` through the `NewPassword` field type, and the API returns **422** when it fails.
+
+- At least **8 characters**.
+- At most **72 bytes** in UTF-8. bcrypt ignores anything past 72 bytes, so a longer password would silently match its own prefix.
+- No character-class rules (letters/digits) for now. The frontend shows the same rule ("8 to 72 characters", `passwordError()` in `utils/formatters.js`).
+- At login, an input over 72 bytes always fails (no account can have one), so `prefix + anything` can't log in.
+
+### Email normalisation
+
+- Emails are **trimmed and lower-cased** on input (`NormEmail` / `LoginEmail` in `app/schemas/fields.py`). This covers signup, register, admin-created users, guest profiles and login.
+- The DB enforces case-insensitive uniqueness with the unique index `uq_user_account_email_ci ON user_account (LOWER(email))`. Lookups use `LOWER(email) = $1`.
+- So `Kamal@mail.com` can't sign up next to `kamal@mail.com` (409), and `KAMAL@MAIL.COM` logs in.
+
+### Login hardening and rate limits
+
+- **Timing:** an unknown email is checked against a dummy bcrypt hash, so "no such user" takes as long as "wrong password". Both return `401 Invalid credentials`.
+- **Failed logins:** 10 per (client IP, email) in 5 minutes. The 11th attempt, even with the right password, gets `429 Too many attempts. Try again later.` with a `Retry-After` header. Only failures count, and a successful login clears the counter.
+- **Sign-ups:** 10 per client IP per hour, then 429.
+- The limiters (`app/rate_limit.py`) live in process memory. That's fine for the single uvicorn process in docker-compose; with several workers or hosts, use a shared store (e.g. slowapi + Redis).
+- The client IP comes from nginx's `X-Forwarded-For`: uvicorn runs with `--proxy-headers --forwarded-allow-ips=*`. That trusts any caller's header, so in production only nginx should reach the backend port (don't publish `8000` publicly).
+- **Accepted leak:** signup still returns `409` for an email that's already registered, so anyone can check whether an email has an account. That's normal for sign-up flows, and the rate limit slows down bulk probing.
 
 ---
 
@@ -66,8 +90,8 @@ Client                          Server
 | Setting | Value |
 |---------|-------|
 | Algorithm | HS256 |
-| Secret | `JWT_SECRET` env var (min 32 chars) |
-| Expiry | 24 hours |
+| Secret | `SECRET_KEY` env var (min 32 chars) |
+| Expiry | `ACCESS_TOKEN_EXPIRE_MINUTES`: 24 hours as deployed (code default 60 minutes); no refresh token |
 | Storage (client) | `localStorage` under key `skynest_token` |
 | Header | `Authorization: Bearer <token>` |
 
@@ -78,14 +102,20 @@ Client                          Server
 | Endpoint | admin | manager | receptionist | guest | public |
 |----------|:-----:|:-------:|:------------:|:-----:|:------:|
 | `POST /auth/login` | — | — | — | — | ✓ |
-| `POST /auth/register` | ✓ | — | — | ✓¹ | — |
+| `POST /auth/signup` | — | — | — | — | ✓¹ |
+| `POST /auth/register` | ✓ | — | — | — | — |
+| `GET /auth/me` | ✓ | ✓ | ✓ | ✓ | — |
+| `GET /auth/profile` | ✓ | ✓ | ✓ | ✓ | — |
+| `PATCH /auth/profile` | — | — | — | ✓ (own) | — |
+| `POST /auth/change-password` | ✓ (own) | ✓ (own) | ✓ (own) | ✓ (own) | — |
+| `GET /branches` | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `GET /rooms` | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `GET /rooms/:id` | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `PATCH /rooms/:id/status` | ✓ | ✓² | — | — | — |
 | `GET /guests` | ✓ | ✓⁵ | ✓⁵ | — | — |
-| `POST /guests` | ✓ | ✓⁵ | ✓⁵ | — | — |
+| `POST /guests` | ✓ | — | ✓⁵ | — | — |
 | `GET /guests/:id` | ✓ | ✓⁵ | ✓⁵ | own³ | — |
-| `PUT /guests/:id` | ✓ | ✓⁵ | ✓⁵ | — | — |
+| `PUT /guests/:id` | ✓ | — | ✓⁵ | — | — |
 | `POST /bookings` | ✓ | ✓² | ✓² | ✓⁴ | — |
 | `GET /bookings` | ✓ | ✓² | ✓² | own³ | — |
 | `GET /bookings/:id` | ✓ | ✓² | ✓² | own³ | — |
@@ -94,33 +124,35 @@ Client                          Server
 | `PATCH /bookings/:id/cancel` | ✓ | ✓² | ✓² | own³ | — |
 | `POST /services/:bid/usage` | ✓ | ✓² | ✓² | — | — |
 | `GET /services/:bid/usage` | ✓ | ✓² | ✓² | own³ | — |
-| `GET /services` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `GET /services` | ✓ | ✓ | ✓ | ✓ | — |
+| `POST /services`, `PATCH /services/:id` | ✓ | ✓⁶ | — | — | — |
 | `POST /billing/:bid/generate` | ✓ | ✓² | ✓² | — | — |
 | `GET /billing/:bid` | ✓ | ✓² | ✓² | own³ | — |
 | `POST /payments` | ✓ | ✓² | ✓² | — | — |
 | `GET /payments/:bid` | ✓ | ✓² | ✓² | own³ | — |
 | `GET /reports/*` | ✓ | ✓² | — | — | — |
-| `GET /admin/*` | ✓ | — | — | — | — |
-| `POST /admin/*` | ✓ | — | — | — | — |
+| `GET/POST /admin/branches`, `PUT /admin/branches/:id` | ✓ | — | — | — | — |
+| `GET/POST /admin/users`, `PATCH /admin/users/:id` | ✓ | — | — | — | — |
 
 **Legend:**
-- ¹ Guest self-registration only (role forced to `guest`)
+- ¹ Guest self-registration (role forced to `guest`; a `role` field in the body is ignored). Staff accounts are created by an admin through `POST /auth/register` or `POST /admin/users`; anyone else gets `403`.
 - ² Scoped to own `branch_id`: for a booking, the branch of its room; for `POST /bookings`, the branch of `room_id`. Another branch → `403`.
 - ³ Own records only (matched by `guest_id` from JWT); another guest's → `403`
 - ⁴ Can only book for self (any branch)
 - ⁵ Hotel-wide: guest profiles are shared across branches (see §4.1)
+- ⁶ The service catalogue is shared by all branches, so a manager's edit applies hotel-wide.
 
 ### 4.1 Branch-scoping decisions
 
 - **Existence before access.** A missing booking/room is `404` for everyone; an existing one in another branch is `403`. Staff can tell that an ID exists, but IDs are random UUIDs, so this leaks nothing useful.
 - **Guest directory is global.** A guest can stay at any branch, and the front desk must find returning guests and book them, so `GET/POST/PUT /guests` and `GET /guests/:id` (including the guest's booking history across branches) are not branch-scoped for staff.
+- **Managers read guests but don't register or edit them.** `POST /guests` and `PUT /guests/:id` are receptionist and admin only (managers get `403`), in line with the SRS's read-heavy manager role. Managers still see guests in reports and `GET /guests`.
 - **All reports are branch-scoped for managers**, including `top-services` (`v_top_services_by_branch`, ranked within the branch). The `branch_id` query param is ignored for managers.
 - **Admins are global** on every endpoint above, including check-in/out, service usage, billing and payments.
 - **Branch staff always have a branch.** `POST /admin/users`, `POST /auth/register` and `PATCH /admin/users/:id` reject a manager/receptionist without a branch (`422`), backed by the DB CHECK `chk_user_account_role_links`. If such an account exists anyway, it fails closed: every branch-scoped endpoint returns `403 Your account is not assigned to a branch.`, never all branches' data.
 - **Guests always have exactly one guest profile.** A guest account needs a `guest_id` (`422`), a guest profile can back only one login (`409`, UNIQUE `uq_user_account_guest`), and staff accounts never have one. A guest token without a profile fails closed with `403 This account has no guest profile.`
 - **No self-demotion.** An admin can't remove their own admin role (`409`). Only admins can change roles, so this also keeps at least one admin.
-
----
+- **Verified (task 16):** 42 cross-branch, cross-guest, role-escalation and forged-token requests (`alg: none`, the compose default key, garbage, expired) were all refused; none returned 2xx.
 
 ---
 
@@ -180,7 +212,7 @@ State:
   - isAuthenticated: boolean
 
 Methods:
-  - login(email, password) → calls API, stores token in localStorage
+  - login(email, password) → calls API, stores token in localStorage (`skynest_token`)
   - logout() → clears token from localStorage and state
   - getToken() → returns current token for API calls
 
@@ -195,7 +227,8 @@ Auto:
 Props: allowedRoles: string[]
 
 Logic:
-  - If not authenticated → redirect to /login
-  - If role not in allowedRoles → redirect to / (or 403 page)
+  - If not authenticated → /login?next=<path>, back to <path> after login
+  - If role not in allowedRoles → redirect to the user's own home
+    (homeForRole: admin/manager/receptionist dashboards, guest → /rooms)
   - Else → render children
 ```

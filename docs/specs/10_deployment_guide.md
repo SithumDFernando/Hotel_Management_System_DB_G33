@@ -66,6 +66,15 @@ psql -U skynest_user -d skynest -c "SELECT COUNT(*) FROM guest;"
 # Should return 6
 ```
 
+### 2.4 After a schema change in `db/`
+
+`run_all.sql` is the only way the schema is built; there are no migrations. Any change under `db/` (procedure, constraint, trigger, index, view) needs a rebuild **on every machine**:
+
+- **Docker:** `docker compose down -v && docker compose up --build`. The Postgres image runs `db/docker/init.sh` only when the `pgdata` volume is empty, so without `-v` the old schema is kept. This wipes local data.
+- **Native:** drop and recreate the database, then run `run_all.sql` again (§2.1–2.2).
+
+If you skip it, the API logs `DATABASE SCHEMA IS OUT OF DATE` at startup, `GET /api/health` returns 503 listing the missing objects, and every other `/api` request returns 503 (ISSUE-15). When you add a DB object the API depends on, add it to `backend/app/schema_check.py` too.
+
 ---
 
 ## 3. Backend Setup
@@ -113,6 +122,7 @@ uvicorn app.main:app --reload --port 8000
 
 Server runs at: `http://localhost:8000`
 API docs at: `http://localhost:8000/docs` (Swagger UI)
+Schema check: `http://localhost:8000/api/health` (200 `ok`, or 503 with the missing DB objects; see §2.4)
 
 ---
 

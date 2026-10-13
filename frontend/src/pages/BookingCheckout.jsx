@@ -5,33 +5,30 @@ import { createBooking } from '@/api/bookings';
 import { getGuest } from '@/api/guests';
 import useAuth from '@/hooks/useAuth';
 import useFetch from '@/hooks/useFetch';
+import { homeForRole } from '@/context/AuthContext';
 import GuestPicker from '@/components/GuestPicker';
 import Photo from '@/components/Photo';
-import { amenityIcon } from '@/components/RoomCard';
+import { amenityList } from '@/components/RoomCard';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
-import Icon from '@/components/ui/Icon';
 import { ErrorState, InlineAlert, Skeleton } from '@/components/ui/States';
 import { useToast } from '@/components/ui/Toast';
 import { roomImage } from '@/lib/media';
 import {
-  TAX_RATE, addDays, bookingRef, calculateNights, errorMessage, formatCurrency, formatDate, todayISO,
+  MAX_STAY_NIGHTS, addDays, bookingRef, calculateNights, errorMessage, formatCurrency, formatNumericDate, formatStayRange, todayISO,
 } from '@/utils/formatters';
 
-const PAYMENT_OPTIONS = [
-  { value: 'Credit Card', icon: 'card', hint: 'Visa, Mastercard, Amex' },
-  { value: 'Cash', icon: 'cash', hint: 'Pay at the front desk' },
-  { value: 'Bank Transfer', icon: 'bank', hint: 'Slips / CEFT reference' },
-];
+// Job: a guest (or staff for a guest) confirms one room, dates and payment method and sees
+// a labelled estimate. The database decides the final price (spec 11 §1.4, spec 09 §4).
 
-function Section({ n, title, children, aside }) {
+// Values are sent to the API exactly as written.
+const PAYMENT_OPTIONS = ['Cash', 'Credit Card', 'Bank Transfer'];
+
+function Section({ title, aside, children }) {
   return (
-    <section className="card p-5 sm:p-6">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <h2 className="flex items-center gap-3 font-serif text-xl font-semibold">
-          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-navy-900 text-xs font-bold text-gold-200">{n}</span>
-          {title}
-        </h2>
+    <section className="px-5 py-5 sm:px-6">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h2 className="text-base font-semibold text-ink-900">{title}</h2>
         {aside}
       </div>
       {children}
@@ -62,21 +59,29 @@ export default function BookingCheckout() {
 
   const nights = calculateNights(checkIn, checkOut);
   const today = todayISO();
+  // Mirrors the checks in create_booking (db/procedures/booking.sql).
   const dateError = !checkIn || !checkOut
     ? 'Choose check-in and check-out dates.'
     : checkIn < today
-      ? 'Check-in cannot be in the past.'
+      ? 'Check-in can’t be in the past. Choose today or a later date.'
       : nights < 1
-        ? 'Check-out must be after check-in.'
-        : '';
+        ? 'Choose a check-out date after check-in.'
+        : nights > MAX_STAY_NIGHTS
+          ? `Stays are limited to ${MAX_STAY_NIGHTS} nights. For a longer stay, contact the front desk.`
+          : '';
 
   const r = room.data;
-  const subtotal = r ? r.daily_rate * nights : 0;
-  const tax = Math.round(subtotal * TAX_RATE * 100) / 100;
-  const total = subtotal + tax;
+  // The only browser arithmetic allowed: a labelled rate × nights estimate. Tax and
+  // services are added by the database on the bill.
+  const estimate = r && nights > 0 ? r.daily_rate * nights : 0;
   const roomUnavailable = r && r.status === 'Maintenance';
   const guestMissing = isGuest ? !user.guest_id : !pickedGuest;
   const canSubmit = r && !roomUnavailable && !dateError && !guestMissing && !busy;
+  const blockedReason = roomUnavailable
+    ? 'This room is under maintenance. Choose another room.'
+    : guestMissing
+      ? (isGuest ? 'Your guest profile is missing. Contact the front desk.' : 'Choose a guest to continue.')
+      : dateError;
 
   // Suggest alternates only after the API reports an overlap.
   const alternates = useFetch(
@@ -88,6 +93,8 @@ export default function BookingCheckout() {
     () => (alternates.data || []).filter((x) => x.room_id !== roomId && x.status !== 'Maintenance').slice(0, 3),
     [alternates.data, roomId],
   );
+
+  const roomTitle = r ? `${r.room_type.type_name} · Room ${r.room_number}` : '';
 
   const submit = async () => {
     setBusy(true);
@@ -102,10 +109,10 @@ export default function BookingCheckout() {
         payment_option: payment,
       });
       setDone(booking);
-      toast.success('Booking confirmed');
+      toast.success(`Booked: ${r.room_type.type_name} Room ${r.room_number}, ${formatStayRange(booking.check_in_date, booking.check_out_date)}`);
     } catch (err) {
       if (err.response?.status === 409) {
-        setConflict(errorMessage(err, 'This room is already booked for the selected dates.'));
+        setConflict(errorMessage(err, 'This room is already booked for those dates.'));
       } else {
         setError(errorMessage(err));
       }
@@ -115,34 +122,30 @@ export default function BookingCheckout() {
   };
 
   const altLink = (id) => `/booking/${id}?check_in=${checkIn}&check_out=${checkOut}`;
+  const roomsLink = `/rooms?${new URLSearchParams({ check_in: checkIn, check_out: checkOut, ...(isGuest ? {} : { mode: 'booking' }) })}`;
 
   // ── Confirmation ──────────────────────────────────────────────
   if (done) {
+    const n = calculateNights(done.check_in_date, done.check_out_date);
     return (
-      <div className="mx-auto max-w-2xl px-4 py-14">
-        <div className="card p-8 text-center">
-          <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
-            <Icon name="check" className="h-7 w-7" strokeWidth={2.5} />
-          </span>
-          <h1 className="mt-4 text-3xl font-semibold">Booking confirmed</h1>
-          <p className="mt-1 text-navy-500">Reference <strong className="text-navy-900">{bookingRef(done.booking_id)}</strong></p>
+      <div className="mx-auto max-w-2xl px-4 py-14 sm:px-6">
+        <h1 className={isGuest ? 'font-display text-[32px] font-semibold leading-tight' : 'text-xl font-semibold'}>
+          Booked: {roomTitle}, {r.branch.name}
+        </h1>
+        <p className="mt-2 text-sm tabular text-ink-600">
+          {formatNumericDate(done.check_in_date)} → {formatNumericDate(done.check_out_date)} · {n} night{n === 1 ? '' : 's'} · Booking{' '}
+          <span className="font-medium text-ink-900">{bookingRef(done.booking_id)}</span>
+        </p>
+        {guest?.full_name && <p className="mt-1 text-sm text-ink-600">Guest: {guest.full_name}</p>}
+        <p className="mt-4 text-sm text-ink-600">The hotel calculates the final bill, including tax and any services used, when the guest checks out.</p>
 
-          <dl className="mt-6 grid grid-cols-2 gap-4 rounded-xl bg-navy-50 p-5 text-left text-sm">
-            <div><dt className="text-[11px] uppercase tracking-wider text-navy-400">Room</dt><dd className="font-semibold">{r.room_type.type_name} {r.room_number} · {r.branch.name}</dd></div>
-            <div><dt className="text-[11px] uppercase tracking-wider text-navy-400">Guest</dt><dd className="font-semibold">{guest?.full_name}</dd></div>
-            <div><dt className="text-[11px] uppercase tracking-wider text-navy-400">Stay</dt><dd className="font-semibold">{formatDate(done.check_in_date)} → {formatDate(done.check_out_date)}</dd></div>
-            <div><dt className="text-[11px] uppercase tracking-wider text-navy-400">Estimated total</dt><dd className="font-semibold">{formatCurrency(total)}</dd></div>
-          </dl>
-          <p className="mt-3 text-xs text-navy-500">Your final bill is generated at check-out and includes any services used during the stay.</p>
-
-          <div className="mt-6 flex flex-wrap justify-center gap-3">
-            {isGuest ? (
-              <Button to="/my-bookings">View my bookings</Button>
-            ) : (
-              <Button to={user.role === 'manager' ? '/dashboard/manager' : '/dashboard/receptionist'}>Back to dashboard</Button>
-            )}
-            <Button variant="outline" to="/rooms">Book another room</Button>
-          </div>
+        <div className="mt-8 flex flex-wrap items-center gap-3">
+          {isGuest ? (
+            <Button to="/my-bookings">View my bookings</Button>
+          ) : (
+            <Button to={homeForRole(user.role)}>{user.role === 'receptionist' ? 'Back to Today' : 'Back to dashboard'}</Button>
+          )}
+          <Button variant="ghost" to={isGuest ? '/rooms' : '/rooms?mode=booking'}>Book another room</Button>
         </div>
       </div>
     );
@@ -151,154 +154,168 @@ export default function BookingCheckout() {
   if (room.error) {
     return (
       <div className="mx-auto max-w-3xl px-4 py-14">
-        <ErrorState message={room.error.includes('404') || /not found/i.test(room.error) ? 'This room could not be found.' : room.error} onRetry={room.refetch} />
-        <div className="mt-4 text-center"><Button variant="outline" to="/rooms">Back to rooms</Button></div>
+        <ErrorState message={room.error.includes('404') || /not found/i.test(room.error) ? 'This room no longer exists. Go back to the room list.' : room.error} onRetry={room.refetch} />
+        <div className="mt-4 text-center"><Button variant="secondary" to="/rooms">Back to rooms</Button></div>
       </div>
     );
   }
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
-      <nav className="mb-4 text-xs text-navy-500" aria-label="Breadcrumb">
-        <Link to="/rooms" className="hover:text-gold-700">Rooms</Link> / <span>Booking</span>
+      <nav className="mb-3 text-[13px] text-ink-600" aria-label="Breadcrumb">
+        <Link to={roomsLink} className="rounded-sm hover:text-ink-900 hover:underline">Rooms</Link> / <span>Booking</span>
       </nav>
-      <h1 className="text-4xl font-semibold">Complete your booking</h1>
+      {r ? (
+        <h1 className={isGuest ? 'font-display text-[32px] font-semibold leading-tight' : 'text-xl font-semibold'}>
+          Book {roomTitle}, {r.branch.name}
+        </h1>
+      ) : (
+        <Skeleton className="h-9 w-2/3" />
+      )}
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_380px]">
-        <div className="space-y-6">
-          <Section n="1" title="Selected room" aside={<Link to={`/rooms?${new URLSearchParams({ check_in: checkIn, check_out: checkOut })}`} className="text-xs font-semibold text-gold-700 hover:underline">Change room</Link>}>
+      <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_360px]">
+        <div className="divide-y divide-ink-100 rounded-lg border border-ink-100 bg-paper-50">
+          <Section title="Room" aside={<Link to={roomsLink} className="rounded-sm text-[13px] font-medium text-tea-700 hover:underline">Change room</Link>}>
             {room.isLoading || !r ? (
               <div className="flex gap-4"><Skeleton className="h-28 w-40" /><div className="flex-1 space-y-2"><Skeleton className="h-6 w-2/3" /><Skeleton className="h-4 w-1/2" /></div></div>
             ) : (
               <div className="flex flex-col gap-4 sm:flex-row">
-                <Photo src={roomImage(r.room_type.type_name)} alt="" className="h-36 w-full shrink-0 rounded-xl sm:w-52" />
-                <div>
+                <Photo src={roomImage(r.room_type.type_name)} alt="" aspect="3/2" className="w-full shrink-0 rounded-md sm:w-48" />
+                <div className="text-sm">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-xl font-semibold">{r.room_type.type_name} Room {r.room_number}</h3>
-                    <Badge status={r.status} />
+                    <p className="text-base font-semibold text-ink-900">{roomTitle}</p>
+                    {roomUnavailable && <Badge status="Maintenance" />}
                   </div>
-                  <p className="mt-1 text-sm text-navy-500"><Icon name="mapPin" className="mr-1 inline h-3.5 w-3.5" />{r.branch.name}, {r.branch.city}</p>
-                  <p className="text-sm text-navy-500"><Icon name="users" className="mr-1 inline h-3.5 w-3.5" />Up to {r.room_type.capacity} guests</p>
-                  <ul className="mt-3 flex flex-wrap gap-1.5">
-                    {r.amenities.map((a) => (
-                      <li key={a.amenity_name} className="inline-flex items-center gap-1 rounded-lg bg-navy-50 px-2 py-1 text-[11px] font-semibold text-navy-700">
-                        <Icon name={amenityIcon(a.amenity_name)} className="h-3 w-3" />{a.amenity_name}
-                      </li>
-                    ))}
-                  </ul>
-                  <p className="mt-3 font-serif text-lg font-semibold">{formatCurrency(r.daily_rate)} <span className="font-sans text-xs font-normal text-navy-500">/ night</span></p>
+                  <p className="mt-0.5 text-ink-600">{r.branch.name}, {r.branch.city} · Sleeps {r.room_type.capacity}</p>
+                  {r.amenities.length > 0 && <p className="mt-2 text-ink-600">{amenityList(r.amenities)}</p>}
+                  <p className="mt-2">
+                    <span className="font-semibold tabular text-ink-900">{formatCurrency(r.daily_rate)}</span>
+                    <span className="text-ink-600"> / night</span>
+                  </p>
                 </div>
               </div>
             )}
-            {roomUnavailable && <div className="mt-4"><InlineAlert>This room is under maintenance and cannot be booked.</InlineAlert></div>}
+            {roomUnavailable && <div className="mt-4"><InlineAlert>This room is under maintenance and can’t be booked. Choose another room.</InlineAlert></div>}
           </Section>
 
-          <Section n="2" title={isGuest ? 'Guest' : 'Guest profile'}>
+          <Section title="Guest">
             {isGuest ? (
               me.isLoading ? <Skeleton className="h-12 w-full" /> : guest ? (
-                <div className="rounded-xl bg-navy-50 p-4 text-sm">
-                  <p className="font-semibold">{guest.full_name}</p>
-                  <p className="text-xs text-navy-500">{guest.email} · {guest.phone}</p>
+                <div className="text-sm">
+                  <p className="font-medium text-ink-900">{guest.full_name}</p>
+                  <p className="text-ink-600">{guest.email} · {guest.phone}</p>
                 </div>
-              ) : <InlineAlert>We couldn’t load your guest profile. Please sign in again.</InlineAlert>
+              ) : <InlineAlert>Your guest profile couldn’t be loaded. Sign out and sign in again; if it still fails, contact the front desk.</InlineAlert>
             ) : (
               <GuestPicker value={pickedGuest} onChange={setPickedGuest} />
             )}
           </Section>
 
-          <Section n="3" title="Stay dates" aside={nights > 0 && <Badge tone="amber">{nights} night{nights > 1 ? 's' : ''}</Badge>}>
+          <Section title="Dates">
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="block">
                 <span className="label">Check-in</span>
                 <input type="date" className="input" min={today} value={checkIn}
+                  aria-invalid={dateError ? true : undefined} aria-describedby={dateError ? 'date-error' : undefined}
                   onChange={(e) => { setCheckIn(e.target.value); setConflict(''); if (checkOut <= e.target.value) setCheckOut(addDays(e.target.value, 1)); }} />
               </label>
               <label className="block">
                 <span className="label">Check-out</span>
                 <input type="date" className="input" min={addDays(checkIn || today, 1)} value={checkOut}
+                  aria-invalid={dateError ? true : undefined} aria-describedby={dateError ? 'date-error' : undefined}
                   onChange={(e) => { setCheckOut(e.target.value); setConflict(''); }} />
               </label>
             </div>
-            {dateError && <p role="alert" className="mt-2 text-xs text-red-600">{dateError}</p>}
+            {dateError ? (
+              <p id="date-error" role="alert" className="mt-2 text-[13px] text-signal-700">{dateError}</p>
+            ) : (
+              <p className="mt-2 text-sm tabular text-ink-600">{nights} night{nights > 1 ? 's' : ''}</p>
+            )}
           </Section>
 
-          <Section n="4" title="Payment method">
-            <div role="radiogroup" aria-label="Payment method" className="grid gap-3 sm:grid-cols-3">
-              {PAYMENT_OPTIONS.map((o) => {
-                const on = payment === o.value;
-                return (
-                  <button
-                    key={o.value}
-                    type="button"
-                    role="radio"
-                    aria-checked={on}
-                    onClick={() => setPayment(o.value)}
-                    className={`rounded-xl border p-4 text-left transition ${on ? 'border-gold-600 bg-gold-50 ring-1 ring-gold-600' : 'border-navy-100 hover:border-navy-300'}`}
-                  >
-                    <Icon name={o.icon} className={`h-5 w-5 ${on ? 'text-gold-700' : 'text-navy-500'}`} />
-                    <p className="mt-2 text-sm font-semibold">{o.value}</p>
-                    <p className="text-[11px] text-navy-500">{o.hint}</p>
-                  </button>
-                );
-              })}
-            </div>
-            <p className="mt-3 text-xs text-navy-500">No payment is taken now. Partial payments are accepted at the front desk, and the bill must be settled before check-out.</p>
+          <Section title="Payment method">
+            <fieldset>
+              <legend className="sr-only">Payment method</legend>
+              <div className="divide-y divide-ink-100 overflow-hidden rounded-md border border-ink-100">
+                {PAYMENT_OPTIONS.map((o) => {
+                  const on = payment === o;
+                  return (
+                    <label
+                      key={o}
+                      className={`flex cursor-pointer items-center gap-3 px-4 py-2.5 text-sm ${on ? 'bg-tea-100 text-tea-900' : 'text-ink-900 hover:bg-paper-200'}`}
+                    >
+                      <input
+                        type="radio"
+                        name="payment"
+                        value={o}
+                        checked={on}
+                        onChange={() => setPayment(o)}
+                        className="h-4 w-4 accent-tea-700"
+                      />
+                      {o}
+                    </label>
+                  );
+                })}
+              </div>
+            </fieldset>
+            <p className="mt-3 text-sm text-ink-600">No payment is taken now. Pay at the front desk during the stay; the bill must be settled before check-out.</p>
           </Section>
         </div>
 
-        {/* Summary */}
-        <aside className="lg:sticky lg:top-24 lg:self-start">
-          <div className="card p-6">
-            <h2 className="font-serif text-xl font-semibold">Booking summary</h2>
-            <dl className="mt-4 space-y-2.5 text-sm">
-              <div className="flex justify-between"><dt className="text-navy-500">Stay</dt><dd className="font-medium">{nights > 0 ? `${formatDate(checkIn)} → ${formatDate(checkOut)}` : '—'}</dd></div>
-              <div className="flex justify-between"><dt className="text-navy-500">Rate</dt><dd className="font-medium">{r ? `${formatCurrency(r.daily_rate)} × ${Math.max(nights, 0)}` : '—'}</dd></div>
-              <div className="flex justify-between"><dt className="text-navy-500">Room subtotal</dt><dd className="font-medium">{formatCurrency(subtotal)}</dd></div>
-              <div className="flex justify-between"><dt className="text-navy-500">Tax ({TAX_RATE * 100}%)</dt><dd className="font-medium">{formatCurrency(tax)}</dd></div>
+        {/* Summary: below the form on phones, sticky beside it on desktop. */}
+        <aside className="lg:sticky lg:top-20 lg:self-start">
+          <div className="rounded-lg border border-ink-100 bg-paper-50 p-5">
+            <h2 className="text-base font-semibold text-ink-900">Summary</h2>
+            <dl className="mt-3 space-y-2 text-sm">
+              {r && <div className="flex justify-between gap-3"><dt className="text-ink-600">Room</dt><dd className="text-right font-medium">{roomTitle}</dd></div>}
+              <div className="flex justify-between gap-3"><dt className="text-ink-600">Dates</dt><dd className="text-right font-medium tabular">{nights > 0 ? `${formatNumericDate(checkIn)} → ${formatNumericDate(checkOut)}` : '—'}</dd></div>
+              <div className="flex justify-between gap-3"><dt className="text-ink-600">Rate</dt><dd className="text-right font-medium tabular">{r && nights > 0 ? `${formatCurrency(r.daily_rate)} × ${nights}` : '—'}</dd></div>
             </dl>
-            <div className="mt-4 border-t border-navy-100 pt-4">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-navy-400">Estimated total</p>
-              <p className="font-serif text-3xl font-semibold">{formatCurrency(total)}</p>
-              <p className="mt-1 text-[11px] text-navy-400">Excludes services (spa, laundry, etc.). The final bill is generated at check-out.</p>
+            <div className="mt-3 border-t border-ink-100 pt-3">
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="text-sm font-medium text-ink-900">Estimate</span>
+                <span className="text-lg font-semibold tabular text-ink-900">{formatCurrency(estimate)}</span>
+              </div>
+              <p className="mt-1 text-2xs text-ink-600">Before tax and services. The hotel calculates the final bill at check-out.</p>
             </div>
 
             {conflict && (
               <div className="mt-4 space-y-3">
                 <InlineAlert>
-                  <p className="font-semibold">Room not available</p>
-                  <p>{conflict}</p>
+                  {conflict.replace(/\.?\s*$/, '.')} Choose other dates or another room.
                 </InlineAlert>
                 {alternates.isLoading ? <Skeleton className="h-12 w-full" /> : alternateList.length > 0 ? (
                   <div>
-                    <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-navy-500">Available alternatives</p>
-                    <ul className="space-y-2">
+                    <p className="mb-1.5 text-[13px] font-medium text-ink-900">Free on these dates</p>
+                    <ul className="divide-y divide-ink-100 rounded-md border border-ink-100">
                       {alternateList.map((a) => (
                         <li key={a.room_id}>
-                          <Link to={altLink(a.room_id)} onClick={() => setConflict('')} className="flex items-center justify-between rounded-xl border border-navy-100 px-3 py-2 text-sm hover:bg-navy-50">
-                            <span>{a.room_type.type_name} {a.room_number}</span>
-                            <span className="text-xs font-semibold text-gold-700">{formatCurrency(a.daily_rate)} →</span>
+                          <Link to={altLink(a.room_id)} onClick={() => setConflict('')} className="flex items-center justify-between px-3 py-2 text-sm hover:bg-paper-200">
+                            <span>{a.room_type.type_name} · Room {a.room_number}</span>
+                            <span className="tabular text-tea-700">{formatCurrency(a.daily_rate)}</span>
                           </Link>
                         </li>
                       ))}
                     </ul>
                   </div>
                 ) : (
-                  <p className="text-xs text-navy-500">No similar rooms are free on those dates. Try different dates.</p>
+                  <p className="text-sm text-ink-600">
+                    No similar rooms are free on those dates.{' '}
+                    <Link to={roomsLink} className="rounded-sm font-medium text-tea-700 hover:underline">See all rooms for these dates</Link>
+                  </p>
                 )}
               </div>
             )}
             {error && <div className="mt-4"><InlineAlert>{error}</InlineAlert></div>}
 
-            <Button size="lg" className="mt-5 w-full" onClick={submit} loading={busy} disabled={!canSubmit}>
-              Confirm booking
+            <Button className="mt-5 w-full" onClick={submit} loading={busy} disabled={!canSubmit} aria-describedby={!canSubmit && blockedReason ? 'book-blocked' : undefined}>
+              Book this room
             </Button>
-            {!canSubmit && !busy && r && (
-              <p className="mt-2 text-center text-[11px] text-navy-400">
-                {guestMissing ? 'Select a guest to continue.' : dateError || ''}
-              </p>
+            {!canSubmit && !busy && r && blockedReason && (
+              <p id="book-blocked" className="mt-2 text-center text-2xs text-ink-600">{blockedReason}</p>
             )}
-            <button type="button" onClick={() => navigate(-1)} className="mt-3 w-full text-center text-xs font-semibold text-navy-500 hover:text-navy-800">
-              Cancel and go back
+            <button type="button" onClick={() => navigate(-1)} className="mt-3 w-full rounded-sm text-center text-[13px] text-ink-600 hover:text-ink-900 hover:underline">
+              Go back
             </button>
           </div>
         </aside>

@@ -10,7 +10,8 @@
 
 - All IDs are UUID strings.
 - Dates are `YYYY-MM-DD`, timestamps are ISO 8601.
-- Pagination: `?page=1&per_page=20` (default 20, max 100).
+- Pagination (`GET /bookings` only): `?page=1&per_page=20` (default 20, max 100).
+- `401` without a valid token on any non-public endpoint; `403` when the role isn't allowed (see the matrix in `08_auth_and_roles.md`).
 - Error responses: `{ "detail": "message" }` with appropriate HTTP status.
 - A guest token whose account has no guest profile gets `403 This account has no guest profile. Contact the front desk.` on every guest-scoped endpoint.
 - Branch scoping: managers and receptionists may only act on bookings and rooms of their own branch; guests only on their own bookings; admins on everything (see `08_auth_and_roles.md`). Every endpoint that takes a `booking_id` (path or body) or acts on a room checks existence first (`404`), then access (`403 Not authorised for bookings of another branch.` / `403 Guests can only access their own bookings.`).
@@ -25,6 +26,30 @@
   | foreign-key violation | 404 | A referenced record does not exist. |
   | check / not-null violation | 422 | The request violates a data rule. / A required field is missing. |
   | value too long / numeric overflow / other data error | 422 | A value is too long. / A numeric value is out of range. / Invalid input. |
+  | undefined function / table / object (DB older than `run_all.sql`) | 503 | The database is out of date. Ask the system admin to rebuild it. |
+
+- **Out-of-date schema (ISSUE-15).** At startup the API checks the DB for every procedure, function, view, trigger, named constraint and index it depends on (`app/schema_check.py`). If any is missing it logs one error block with the list and the fix command, and every `/api/*` request except `GET /api/health` returns `503 { "detail": "The database is out of date. Ask the system admin to rebuild it." }` until the DB is rebuilt and the API restarted. `GET /` (liveness) is unaffected.
+
+---
+
+## 0. Health
+
+### GET `/`
+Liveness. Always `200 { "status": "ok", "service": "SkyNest API" }` while the process is up.
+
+### GET `/api/health`
+Readiness (public). `200 { "status": "ok" }` when the DB schema matches what the API needs, otherwise:
+
+```json
+503
+{
+  "status": "schema_out_of_date",
+  "missing": { "procedures": ["cancel_booking"], "constraints": ["chk_payment_method"] },
+  "fix": "docker compose down -v && docker compose up --build"
+}
+```
+
+`missing` keys are any of `procedures`, `functions`, `views`, `triggers`, `constraints`, `indexes`; only kinds with missing objects appear. The result is computed once at startup.
 
 ---
 
@@ -52,7 +77,9 @@
 }
 ```
 
-**Errors:** `401 Invalid credentials`
+Email is matched case-insensitively (trimmed + lower-cased).
+
+**Errors:** `401 Invalid credentials` (unknown email and wrong password look the same, timing included) · `429 Too many attempts. Try again later.` after 10 failed logins for one IP + email in 5 minutes (`Retry-After` header)
 
 ---
 
@@ -74,7 +101,7 @@
 
 **Response (201):** `{ "account_id": "uuid-...", "guest_id": "uuid-..." }`
 
-**Errors:** `409` email already registered / NIC or passport already exists; `422` validation (invalid email, password < 8 chars).
+**Errors:** `409` email already registered (case-insensitive) / NIC or passport already exists; `422` validation (invalid email, password under 8 characters or over 72 bytes); `429` more than 10 sign-ups from one IP in an hour.
 
 ---
 
@@ -95,7 +122,46 @@
 
 **Response (201):** `{ "account_id": "uuid-..." }`
 
-**Errors:** `403` caller not admin · `400 Invalid role` · `409` email exists, or `This guest profile is already linked to another account.` · `404` referenced branch/guest doesn't exist · `422` invalid role ↔ link combination (same rules as `POST /api/admin/users`)
+**Errors:** `403` caller not admin · `400 Invalid role` · `422` password under 8 characters or over 72 bytes · `409` email exists (case-insensitive), or `This guest profile is already linked to another account.` · `404` referenced branch/guest doesn't exist · `422` invalid role ↔ link combination (same rules as `POST /api/admin/users`)
+
+### GET `/api/auth/profile`
+> Any signed-in user. Backs the `/profile` page.
+
+**Response (200):**
+```json
+{
+  "account_id": "uuid-...",
+  "email": "kamal@mail.com",
+  "role": "guest",
+  "branch_id": null,
+  "branch_name": null,
+  "guest": { "guest_id": "uuid-...", "full_name": "Kamal Perera", "nic_passport": "200012345678", "email": "kamal@mail.com", "phone": "+94 77 123 4567", "date_of_birth": "2000-03-15", "nationality": "Sri Lankan", "gender": "Male", "guest_type": "Individual", "company_name": null, "company_reg_number": null, "billing_contact_name": null }
+}
+```
+Staff accounts get `branch_name` (manager/receptionist) and `guest: null`.
+
+**Errors:** `401` not signed in
+
+### PATCH `/api/auth/profile`
+> Guest only. Updates the caller's own guest profile; only fields sent (not null) change.
+
+**Request:** any of `full_name` (2–150), `phone` (7–20), `date_of_birth`, `nationality` (≤50), `gender` (≤10)
+```json
+{ "phone": "+94 77 000 1111", "nationality": "Sri Lankan" }
+```
+
+**Response (200):** the updated guest (same shape as `guest` above)
+
+**Errors:** `400 No fields provided for update.` · `403` staff caller, or a guest account with no guest profile · `422` invalid value, or any other field (`email` and `nic_passport` are changed by the front desk via `PUT /api/guests/:id`)
+
+### POST `/api/auth/change-password`
+> Any signed-in user changes their own password.
+
+**Request:** `{ "current_password": "...", "new_password": "min8chars" }`
+
+**Response (200):** `{ "detail": "Password changed." }`. Existing tokens stay valid until they expire.
+
+**Errors:** `400 Current password is incorrect.` · `400 The new password must be different from the current one.` · `422` new password under 8 characters or over 72 bytes · `429 Too many attempts. Try again later.` after 5 wrong current passwords for one account in 15 minutes (`Retry-After` header)
 
 ---
 
@@ -198,7 +264,7 @@
 ```
 
 ### POST `/api/guests`
-> Receptionist, Manager, Admin
+> Receptionist, Admin (managers get `403`)
 
 **Request:**
 ```json
@@ -241,16 +307,16 @@
 > Receptionist, Manager, Admin, or the guest themselves
 
 ### PUT `/api/guests/:guest_id`
-> Receptionist, Manager, Admin
+> Receptionist, Admin (managers get `403`)
 
 ---
 
 ## 4. Bookings — `/api/bookings`
 
 ### POST `/api/bookings`
-> Receptionist, Manager, Guest
+> Receptionist, Manager, Admin, Guest (for themselves)
 
-Calls `create_booking()` stored procedure (SERIALIZABLE).
+Calls `create_booking()` stored procedure at the default READ COMMITTED level. Overlaps are prevented by the room-row lock in `trg_double_booking` plus the exclusion constraint `excl_booking_room_overlap` (20 parallel requests → one 201, nineteen 409).
 
 **Request:**
 ```json
@@ -280,7 +346,9 @@ Calls `create_booking()` stored procedure (SERIALIZABLE).
 }
 ```
 
-**Errors:** `403` room belongs to another branch (manager/receptionist) or guest booking for someone else · `404 Guest not found` / `404 Room not found` · `409 Room is not available for selected dates (double-booking)` · `422` malformed IDs/dates, `payment_option` longer than 50
+Business rules (enforced in `create_booking()`): check-in today or later; at most **30 nights**; the room must not be under Maintenance; `payment_option` is one of `Credit Card`, `Cash`, `Bank Transfer`.
+
+**Errors:** `400 Check-in date cannot be in the past` · `400 Stays longer than 30 nights must be arranged with the front desk` · `403` room belongs to another branch (manager/receptionist) or guest booking for someone else · `404 Guest not found` / `404 Room not found` · `409 Room ... is already booked for the selected dates.` / `409 Room is not available for the selected dates.` (double booking) · `409 Room is under maintenance and cannot be booked` · `422` malformed IDs/dates, `payment_option` not one of the three values
 
 ### GET `/api/bookings`
 > Receptionist (own branch), Manager (own branch), Admin (all), Guest (own bookings)
@@ -332,7 +400,7 @@ Calls `cancel_booking()` stored procedure (locks the booking, so a cancel racing
 ### PATCH `/api/bookings/:booking_id/checkin`
 > Receptionist, Manager, Admin
 
-Calls `perform_checkin()` stored procedure, which locks the booking row, so of several simultaneous check-ins exactly one succeeds.
+Calls `perform_checkin()` stored procedure, which locks the booking row, so of several simultaneous check-ins exactly one succeeds. Check-in is only allowed from the arrival date (`check_in_date`) until the day before `check_out_date`; there is no early check-in.
 
 **Response (200):**
 ```json
@@ -343,7 +411,7 @@ Calls `perform_checkin()` stored procedure, which locks the booking row, so of s
 }
 ```
 
-**Errors:** `400 Only Booked bookings can be checked in` · `403` booking of another branch · `404 Booking not found`
+**Errors:** `400 Only Booked bookings can be checked in` · `400 Check-in is not allowed before 2026-10-15` · `400 This booking's stay period has already ended` · `403` booking of another branch · `404 Booking not found` · `409 Room is under maintenance`
 
 ### PATCH `/api/bookings/:booking_id/checkout`
 > Receptionist, Manager, Admin
@@ -372,7 +440,7 @@ Calls `perform_checkout()` stored procedure, which first recalculates the bill w
 ## 6. Services — `/api/services`
 
 ### GET `/api/services`
-> Receptionist, Manager, Admin, Guest (Public catalogue)
+> Any signed-in role: Receptionist, Manager, Admin, Guest (anonymous → `401`)
 
 **Response (200):** Array of service categories with their active services:
 ```json
@@ -447,7 +515,9 @@ Records chargeable service order. Trigger checks that booking is 'Checked-In' an
 }
 ```
 
-**Errors:** `403` booking of another branch · `404` booking or active service not found · `422 Unprocessable Entity (Booking is not Checked-In)` · `422` `quantity` outside 1–1000
+`usage_date` must fall inside the stay: from `check_in_date` to `check_out_date` inclusive, or up to today for a guest still in house after `check_out_date`.
+
+**Errors:** `403` booking of another branch · `404` booking or active service not found · `422 Unprocessable Entity (Booking is not Checked-In)` · `422 Service date 2001-01-01 is outside the stay (2026-10-12 to 2026-10-15)` · `422` `quantity` outside 1–1000
 
 ### GET `/api/services/:booking_id/usage`
 > Receptionist (own branch), Manager (own branch), Admin, owning Guest
@@ -540,7 +610,9 @@ Calls `record_payment()` stored procedure, which returns the new `payment_id`; t
 }
 ```
 
-**Errors:** `400 Amount exceeds outstanding balance or <= 0` · `403` booking of another branch · `404 Booking not found`
+`payment_method` is one of `Credit Card`, `Cash`, `Bank Transfer`.
+
+**Errors:** `400 Amount exceeds outstanding balance or <= 0` · `403` booking of another branch · `404 Booking not found` · `422` `payment_method` not one of the three values
 
 ### GET `/api/payments/:booking_id`
 > Receptionist, Manager, Admin, owning Guest
@@ -569,7 +641,7 @@ Calls `record_payment()` stored procedure, which returns the new `payment_id`; t
 **Params:** `?branch_id=uuid`
 
 ### GET `/api/reports/monthly-revenue`
-**Params:** `?year=2026&month=2&branch_id=uuid`
+**Params:** `?year=2026&month=2&branch_id=uuid`. `year` is required (2000–2100); `month` is optional (1–12, omit for the whole year). Missing or out-of-range → `422`.
 
 ### GET `/api/reports/top-services`
 **Params:** `?limit=10&branch_id=uuid` (`limit` 1–100)
@@ -607,7 +679,7 @@ Creates a new user account with hashed password, assigned role, and branch.
 | `manager` / `receptionist` | **required** | must be empty |
 | `guest` | must be empty | **required** |
 
-**Errors:** `400` invalid role · `404` branch/guest not found · `409` email exists, or `This guest profile is already linked to another account.` (one login per guest profile) · `422` invalid role ↔ link combination (e.g. `A manager account must be assigned to a branch.`)
+**Errors:** `400` invalid role · `404` branch/guest not found · `422` password under 8 characters or over 72 bytes, or invalid email · `409` email exists (case-insensitive), or `This guest profile is already linked to another account.` (one login per guest profile) · `422` invalid role ↔ link combination (e.g. `A manager account must be assigned to a branch.`)
 
 ### PATCH `/api/admin/users/:account_id`
 Updates a user account's role and/or branch assignment:

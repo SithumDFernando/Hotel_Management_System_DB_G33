@@ -113,5 +113,30 @@ def validate_new_password(pw: str) -> str:
 
 ## Acceptance criteria
 
-- [ ] Items a–e are fixed and covered by tests.
-- [ ] `docs/specs/08_auth_and_roles.md` documents the password policy, email normalisation and rate limits.
+- [x] Items a–e are fixed and covered by tests.
+- [x] `docs/specs/08_auth_and_roles.md` documents the password policy, email normalisation and rate limits.
+
+## Resolution (2026-10-12)
+
+- **a. Timing:** `DUMMY_PASSWORD_HASH` in `app/auth.py`. Login always runs bcrypt, against the dummy hash when the email is unknown. Pre-fix the medians were 181 ms vs 1.4 ms; now they're within the test's 30%.
+- **b. Rate limits:** `app/rate_limit.py` (`SlidingWindowLimiter`, as planned), with one change from the plan. **Only failed logins count** (10 per IP + email in 5 minutes, and a success clears the counter); counting every login would throttle staff and the test suite. Sign-up is limited to 10 per IP per hour.
+  - `backend/Dockerfile` runs uvicorn with `--proxy-headers --forwarded-allow-ips=*`, so `request.client.host` is the real client behind nginx.
+  - `Login.jsx` already shows non-401 errors via `errorMessage()`, so the 429 text appears.
+  - The spec notes the per-process limitation, and that the published backend port `8000` shouldn't be public (the forwarded header is trusted).
+  - Tests reset the limiters with an autouse fixture in `conftest.py`.
+- **c. Case-insensitive emails:**
+  - `NormEmail` (trim + lower + EmailStr, ≤ 100) in `app/schemas/fields.py` is used by `SignupRequest`, `RegisterRequest` (was plain `str`), `UserCreate` and `GuestEmail`. `LoginRequest` uses `LoginEmail` (trim + lower, no format check, so a typo is a 401).
+  - `uq_user_account_email` was replaced with the unique index `uq_user_account_email_ci ON user_account (LOWER(email))`. Every lookup (login, signup, register, admin create) uses `LOWER(email) = $1`.
+  - The seed emails are already lower-case, and a fresh build passes.
+- **d + e. Password policy:** `validate_new_password` (8 characters to 72 bytes) through the `NewPassword` type on signup, register and admin create → 422. This replaces the manual check in `signup`.
+  - Login also rejects input over 72 bytes, so a correct 72-byte prefix plus extra text gets 401 (the `[:72]` slice stays as a safety net).
+  - No letter/digit rule (left optional).
+  - Frontend: `passwordError()` in `utils/formatters.js` is used by `Register.jsx` (hint "8 to 72 characters") and `admin/UsersTab.jsx`.
+- **Tests:** `tests/test_auth_hardening.py` (27 tests).
+  - Covers timing, the 11th failure → 429 (also with the right password, other emails unaffected), success clearing the counter, successful logins never limited, the signup limit, case variants on signup/login/admin/DB, lower-case storage, the policy on all three endpoints (`""`, 7 characters, 73 bytes, 74 bytes of `é`), the accepted edges (8 characters, 72 bytes) and the long-input prefix.
+  - The timing test passed 5 times in a row.
+  - 20 fail on the pre-fix code; the 7 that pass are the accepted cases and the signup minimum length, which already existed.
+  - `test_phase4_api_mock.py`'s stub now matches `WHERE LOWER(email)`.
+- **Specs:** `08_auth_and_roles.md` (policy, normalisation, rate limits, the signup-409 note), `02_api_contract.md` (login/signup/register/admin users errors), `01_database_design.md`, `06_indexing_strategy.md`.
+- ⏳ Browser check pending: Register with a long password; 11 bad logins on the Login page show the 429 message.
+- **Dev DB:** an existing dev DB with mixed-case duplicates would block the new index. A rebuild from `run_all.sql` doesn't have any.

@@ -8,12 +8,14 @@ Purpose:
 from typing import Literal, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field
+
+from app.schemas.fields import NewPassword, NormEmail
 
 
 class UserCreate(BaseModel):
-    email: EmailStr = Field(max_length=100)
-    password: str
+    email: NormEmail
+    password: NewPassword
     role: str                        # 'admin' | 'manager' | 'receptionist' | 'guest'
     branch_id: Optional[UUID] = None
     guest_id: Optional[UUID] = None

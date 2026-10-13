@@ -10,6 +10,7 @@ from typing import Optional
 import asyncpg
 
 from app.db import get_db
+from app.db_errors import raise_error_to_http
 from app.dependencies import (
     assert_booking_access, assert_room_access, require_branch, require_guest_id, require_role,
 )
@@ -48,12 +49,11 @@ async def create_booking(
         return BookingOut(**dict(booking))
         
     except asyncpg.exceptions.RaiseError as e:
-        msg = str(e)
-        if "already booked" in msg or "Double booking" in msg or "not available" in msg:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=msg)
-        if "not found" in msg.lower():
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=msg)
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg)
+        # Past check-in / stay too long -> 400 (default)
+        raise raise_error_to_http(e, (
+            ("already booked", status.HTTP_409_CONFLICT),
+            ("under maintenance", status.HTTP_409_CONFLICT),
+        ))
 
 
 # GET /api/bookings
@@ -227,10 +227,8 @@ async def checkin_booking(
             actual_checkin_time=row["actual_checkin_time"]
         )
     except asyncpg.exceptions.RaiseError as e:
-        msg = str(e)
-        if "not found" in msg.lower():
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=msg)
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg)
+        # Not Booked / before check-in date / stay ended -> 400 (default)
+        raise raise_error_to_http(e, (("under maintenance", status.HTTP_409_CONFLICT),))
 
 # PATCH /api/bookings/{booking_id}/checkout
 @router.patch("/{booking_id}/checkout", response_model=BookingCheckOutResponse)
@@ -268,12 +266,7 @@ async def checkout_booking(
             )
         )
     except asyncpg.exceptions.RaiseError as e:
-        msg = str(e)
-        if "not found" in msg.lower():
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=msg)
-        elif "outstanding balance" in msg.lower():
-            raise HTTPException(status_code=status.HTTP_402_PAYMENT_REQUIRED, detail=msg)
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg)
+        raise raise_error_to_http(e, (("outstanding balance", status.HTTP_402_PAYMENT_REQUIRED),))
 
 # PATCH /api/bookings/{booking_id}/cancel
 @router.patch("/{booking_id}/cancel", response_model=BookingCancelResponse)
@@ -290,9 +283,6 @@ async def cancel_booking(
     try:
         await db.execute("CALL cancel_booking($1::UUID)", booking_id)
     except asyncpg.exceptions.RaiseError as e:
-        msg = str(e)
-        if "not found" in msg.lower():
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=msg)
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg)
+        raise raise_error_to_http(e)
 
     return BookingCancelResponse(status="Cancelled")

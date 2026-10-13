@@ -31,4 +31,8 @@ EXPOSE 8000
 HEALTHCHECK --interval=10s --timeout=5s --start-period=10s --retries=5 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/openapi.json')" || exit 1
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# --proxy-headers / --forwarded-allow-ips: take the client IP from nginx's
+# X-Forwarded-For, so the login/signup rate limits see real clients rather
+# than the nginx container (app/rate_limit.py). Only nginx on the compose
+# network should reach this port in production.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips=*"]

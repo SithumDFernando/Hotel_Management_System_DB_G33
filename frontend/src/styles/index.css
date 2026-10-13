@@ -4,24 +4,33 @@
 
 @layer base {
   html { scroll-behavior: smooth; }
-  body {
-    @apply bg-surface font-sans text-navy-900 antialiased;
+  body { @apply bg-paper-100 font-sans text-[14px] leading-6 text-ink-900 antialiased; }
+  /* No global serif on headings: public pages opt in with font-display (spec 11 §3). */
+  :focus-visible { @apply outline-none ring-2 ring-tea-500 ring-offset-2 ring-offset-paper-100; }
+  .tabular { font-variant-numeric: tabular-nums; }
+
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after {
+      animation-duration: .01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: .01ms !important;
+    }
   }
-  h1, h2, h3 { @apply font-serif; }
-  :focus-visible { @apply outline-none ring-2 ring-gold-500 ring-offset-2; }
 }
 
 @layer components {
-  .card { @apply rounded-2xl border border-navy-100 bg-white shadow-card; }
-  .eyebrow { @apply text-[11px] font-semibold uppercase tracking-[0.14em] text-gold-700; }
-  .label { @apply mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-navy-600; }
+  .card { @apply rounded-lg border border-ink-100 bg-paper-50; }
+  .label { @apply mb-1.5 block text-[13px] font-medium text-ink-900; }
   .input {
-    @apply w-full rounded-xl border border-navy-100 bg-navy-50 px-3.5 py-2.5 text-sm text-navy-900
-      placeholder:text-navy-300 transition focus:border-gold-500 focus:bg-white disabled:opacity-60;
+    @apply w-full rounded-md border border-ink-300 bg-paper-50 px-3 py-2 text-sm text-ink-900
+      placeholder:text-ink-600/70 focus:border-tea-500 disabled:bg-paper-200 disabled:text-ink-300;
   }
-  .th { @apply px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-navy-500; }
-  .td { @apply px-4 py-3.5 text-sm; }
-  .skeleton { @apply animate-pulse rounded-lg bg-navy-100; }
+  .th { @apply px-4 py-2.5 text-left text-[13px] font-medium text-ink-600; }
+  .td { @apply px-4 py-2.5 text-sm; }
+  .skeleton { @apply animate-pulse rounded-md bg-paper-200; }
+  /* Diagonal hatch for the Maintenance chip (spec 11 §5). */
+  .hatch { background-image: repeating-linear-gradient(135deg, transparent 0 4px, rgba(74, 85, 79, .12) 4px 5px); }
 }
 
 @media print {

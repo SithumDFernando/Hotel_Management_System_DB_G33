@@ -72,7 +72,7 @@ async def run_tests():
     }
 
     async def mock_fetchrow(query, *args):
-        if "SELECT account_id FROM user_account WHERE email" in query:
+        if "SELECT account_id FROM user_account WHERE LOWER(email)" in query:
             return None # no conflict
         if "SELECT account_id, role, branch_id FROM user_account" in query:
             return {"account_id": args[0], "role": "receptionist", "branch_id": branch_id}

@@ -21,9 +21,11 @@
   - [x] Look up `branch_id` and `room_type_id` from `room` table
   - [x] Snapshot rate via `v_rate := fn_get_current_rate(v_branch_id, v_room_type_id)`
   - [x] Insert booking record with status `'Booked'` and return `booking_id`
+  - [x] Business rules: check-in not in the past, at most 30 nights, room not under Maintenance (ISSUE-08)
 - [x] **Check-In & Check-Out Stored Procedures** (`db/procedures/checkin_checkout.sql`)
   - [x] Implement `perform_checkin(p_booking_id UUID)`
   - [x] Lock the booking row (`FOR UPDATE`) in `perform_checkin` so concurrent check-ins can't both succeed (ISSUE-12)
+  - [x] Check-in only from the arrival date until the stay ends, and not while the room is under Maintenance (ISSUE-08)
   - [x] `cancel_booking(p_booking_id UUID)` procedure in `db/procedures/booking.sql` (locks the booking, only `Booked`) (ISSUE-12)
   - [x] Validate booking status is `'Booked'`, raise exception if invalid
   - [x] Update `booking.status = 'Checked-In'`, `actual_checkin_time = NOW()`, `room.status = 'Occupied'` (room part now done by `trg_room_status`, ISSUE-09)
@@ -44,6 +46,7 @@
 
 - [x] **Booking Pydantic Schemas** (`backend/app/schemas/booking.py`)
   - [x] Define `BookingCreate` schema (`guest_id`, `room_id`, `check_in_date`, `check_out_date`, `payment_option`)
+  - [x] `payment_option` is a `PaymentMethod` Literal (`Credit Card` / `Cash` / `Bank Transfer`), matching CHECK `chk_booking_payment_option` (ISSUE-08)
   - [x] Add validator to enforce `check_out_date > check_in_date`
   - [x] Define `BookingStatusUpdate` schema (`reason: str | None = None`). Removed in ISSUE-12: the reason was never stored or shown, and cancel takes no body now.
   - [x] Define `BookingOut` schema with all fields, dates, rates, and timestamps (`from_attributes = True`)
@@ -64,11 +67,11 @@
 
 ## Phase 4: Testing & Verification
 
-- [ ] **Database Level Verification**
+- [x] **Database Level Verification**
   - [x] Test double-booking trigger with overlapping date ranges in psql (ensure exception is raised): covered by `backend/tests/test_double_booking.py`, incl. two concurrent sessions
-  - [ ] Test booking creation and verify `rate_at_booking` is locked
+  - [x] Test booking creation and verify `rate_at_booking` is locked: raising the room rate by 5,000 after `create_booking` left `rate_at_booking` at 8,000 and the room charges unchanged
   - [x] Verify check-in and check-out procedures update both `booking` and `room` statuses: covered by `backend/tests/test_room_status.py` (room via the trigger)
-- [ ] **API Level Verification**
-  - [ ] Verify endpoints in FastAPI Swagger UI (`http://localhost:8000/docs`)
-  - [ ] Verify 409 Conflict returned when booking already reserved room
-  - [ ] Verify 403 Forbidden returned when unauthorized role attempts check-in/out
+- [x] **API Level Verification**
+  - [x] Verify endpoints in FastAPI Swagger UI (`http://localhost:8000/docs`): `/docs` loads; booking endpoints exercised over HTTP in task 16
+  - [x] Verify 409 Conflict returned when booking already reserved room: 20 parallel requests → one 201, nineteen 409
+  - [x] Verify 403 Forbidden returned when unauthorized role attempts check-in/out: guest check-in/out → 403, other-branch receptionist → 403

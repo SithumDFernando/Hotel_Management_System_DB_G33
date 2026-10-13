@@ -52,6 +52,19 @@ def pytest_collection_modifyitems(items):
             item.add_marker(pytest.mark.live_api)
 
 
+@pytest.fixture(autouse=True)
+def _reset_rate_limits():
+    """The suite logs in from one client address; start each test fresh."""
+    from app.rate_limit import login_failures, password_failures, signup_attempts
+
+    limiters = (login_failures, signup_attempts, password_failures)
+    for limiter in limiters:
+        limiter.reset()
+    yield
+    for limiter in limiters:
+        limiter.reset()
+
+
 @pytest.fixture
 async def db_conn():
     """One real connection; everything done through it is rolled back."""
@@ -79,6 +92,22 @@ async def api(db_conn):
             yield client
     finally:
         app.dependency_overrides.pop(get_db, None)
+
+
+async def arrive_today(conn, booking_id, nights=3):
+    """
+    Move a seed booking's stay to start today. perform_checkin refuses early
+    check-in and stays that have ended (ISSUE-08), so tests that check in a
+    seed booking (fixed dates) call this first to stay valid on any date.
+    """
+    await conn.execute(
+        """
+        UPDATE booking SET check_in_date = CURRENT_DATE,
+                           check_out_date = CURRENT_DATE + $2::INT
+         WHERE booking_id = $1::UUID
+        """,
+        booking_id, nights,
+    )
 
 
 def _login_with(client):

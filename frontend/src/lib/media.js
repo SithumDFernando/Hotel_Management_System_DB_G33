@@ -1,26 +1,42 @@
-// Static imagery + copy. The API has no photos, so we map branch city and
-// room type to curated images. Every <img> using these must fall back to a
-// gradient on error (see <Photo/>).
+// Static imagery + one plain sentence per branch. The API has no photos, so we map branch
+// city and room type to Unsplash images (Unsplash License). Every <img> using these must
+// fall back to a flat wash on error (see <Photo/>).
+//
+// Copy rule (spec 11 §7.2, §9): only facts from the seed addresses or the photo itself.
 
 const u = (id, w = 1200) => `https://images.unsplash.com/${id}?auto=format&fit=crop&w=${w}&q=70`;
 
-export const HERO_IMAGE = u('photo-1566073771259-6a8506099945', 1800);
+// Home opening photo. Galle Fort rampart walk, daytime.
+// unsplash.com/photos/a-group-of-people-walking-on-a-sidewalk-next-to-a-body-of-water-jh-y6AONhF8
+export const OPENING_IMAGE = {
+  image: u('photo-1654561773591-57b9413c45c0', 1400),
+  alt: 'People walking on the Galle Fort ramparts beside the sea',
+};
+
+// Home hero background. A hotel room, warm light; shown behind the headline and search.
+export const HERO_IMAGE = {
+  image: u('photo-1618773928121-c32242e63f39', 2000),
+  alt: 'A hotel room with a made bed, bedside lamps and curtained window',
+};
 
 export const BRANCH_MEDIA = {
   Colombo: {
-    image: u('photo-1566073771259-6a8506099945'),
-    tag: 'Oceanfront urban oasis',
-    blurb: 'Panoramic views of the Indian Ocean and city skyline, framed by teak finishing and curated art.',
+    // unsplash.com/photos/a-grassy-field-in-front-of-tall-buildings-at-night-o26zCEltocw
+    image: u('photo-1706954532520-e46c19ce6749'),
+    alt: 'Galle Face Green at night, with Colombo’s towers behind',
+    blurb: 'On Galle Face Terrace, beside Galle Face Green.',
   },
   Kandy: {
-    image: u('photo-1520250497591-112f2f40a3f4'),
-    tag: 'Highland tea sanctuary',
-    blurb: 'Perched above emerald tea slopes and sacred river valleys, offering crisp mountain air and quiet.',
+    // unsplash.com/photos/a-large-white-building-sitting-on-top-of-a-lake-FZ6RTpiYi6w
+    image: u('photo-1705730428836-b54e12aa8ea5'),
+    alt: 'Kandy Lake with the wooded hills behind',
+    blurb: 'On Temple Road, in Kandy.',
   },
   Galle: {
-    image: u('photo-1582719508461-905c673771fd'),
-    tag: 'UNESCO colonial gem',
-    blurb: 'Dutch vaulted archways, candle-lit stone courtyards and sea breezes inside the Fort walls.',
+    // unsplash.com/photos/a-lighthouse-and-buildings-overlook-the-ocean-YaOhW7uZKE4
+    image: u('photo-1743585826344-aea35e952642'),
+    alt: 'Galle Fort ramparts, the lighthouse and the sea',
+    blurb: 'On Lighthouse Street, inside the walls of Galle Fort.',
   },
 };
 
@@ -31,15 +47,9 @@ export const ROOM_TYPE_MEDIA = {
   Deluxe: u('photo-1618773928121-c32242e63f39'),
 };
 
-export const ROOM_TYPE_BLURB = {
-  Single: 'Compact and calm — ideal for solo travellers.',
-  Double: 'A comfortable retreat for two with refined furnishings.',
-  Suite: 'Spacious signature suite with premium amenities.',
-  Deluxe: 'Elevated comfort with a king bed and private balcony.',
-};
-
-export const FALLBACK_GRADIENT = 'linear-gradient(135deg,#12233a 0%,#2a4161 60%,#7a5c00 140%)';
+// Flat paper → tea wash shown only when a photo fails to load.
+export const FALLBACK_GRADIENT = 'linear-gradient(135deg,#EEEBE3 0%,#E3EEE7 100%)';
 
 export const branchMedia = (city) =>
-  BRANCH_MEDIA[city] || { image: HERO_IMAGE, tag: 'SkyNest boutique stay', blurb: '' };
+  BRANCH_MEDIA[city] || { image: OPENING_IMAGE.image, alt: '', blurb: '' };
 export const roomImage = (typeName) => ROOM_TYPE_MEDIA[typeName] || ROOM_TYPE_MEDIA.Double;

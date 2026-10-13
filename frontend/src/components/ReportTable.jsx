@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Button from '@/components/ui/Button';
 import Icon from '@/components/ui/Icon';
 import Pagination from '@/components/ui/Pagination';
-import { EmptyState, ErrorState, Skeleton } from '@/components/ui/States';
+import { ErrorState, Skeleton } from '@/components/ui/States';
 import { downloadCSV } from '@/utils/formatters';
 
 // columns: [{ key, label, align?: 'right', format?(value,row)->string, render?(row)->node, sortable?: false }]
@@ -54,18 +54,16 @@ export default function ReportTable({
     );
 
   return (
-    <div className="card overflow-hidden">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-navy-100 p-4">
-        {title ? <h3 className="font-serif text-lg font-semibold">{title}</h3> : <span />}
-        <div className="flex flex-wrap items-center gap-2">
+    <div className="card min-w-0 overflow-hidden">
+      <div className="flex flex-wrap items-end justify-between gap-3 border-b border-ink-100 p-4">
+        {title ? <h2 className="text-base font-semibold text-ink-900">{title}</h2> : <span />}
+        <div className="flex flex-wrap items-end gap-2">
           {toolbar}
           <div className="relative">
-            <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-navy-400" />
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search…" aria-label="Search report" className="input w-48 pl-9" />
+            <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-600" />
+            <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search rows" aria-label={`Search ${title || 'report'}`} className="input w-48 pl-9" />
           </div>
-          <Button variant="outline" onClick={exportCSV} disabled={!rows.length}>
-            <Icon name="download" /> Export CSV
-          </Button>
+          <Button variant="secondary" onClick={exportCSV} disabled={!rows.length}>Export CSV</Button>
         </div>
       </div>
 
@@ -74,22 +72,24 @@ export default function ReportTable({
       ) : isLoading ? (
         <div className="space-y-2 p-4">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
       ) : rows.length === 0 ? (
-        <div className="p-6"><EmptyState icon="chart" title="Nothing to show" message={q ? 'No rows match your search.' : emptyMessage} /></div>
+        <p className="px-4 py-6 text-sm text-ink-600">{q ? `No rows match “${q.trim()}”.` : emptyMessage}</p>
       ) : (
         <>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px]">
-              <thead className="bg-navy-50">
-                <tr>
+            <table className="w-full min-w-[640px]" aria-label={title || 'Report'}>
+              <thead className="sticky top-0">
+                <tr className="bg-paper-200">
                   {columns.map((c) => {
-                    const active = sort?.key === c.key;
+                    // Action columns have no key; without this, undefined === undefined
+                    // marks them sorted while nothing is, and sort.dir throws.
+                    const active = Boolean(c.key) && sort?.key === c.key;
                     const sortable = c.key && c.sortable !== false;
                     return (
-                      <th key={c.key || c.label} className={`th ${c.align === 'right' ? 'text-right' : ''}`} aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}>
+                      <th key={c.key || c.label} scope="col" className={`th whitespace-nowrap ${c.align === 'right' ? 'text-right' : ''}`} aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}>
                         {sortable ? (
-                          <button onClick={() => toggleSort(c.key)} className="inline-flex items-center gap-1 uppercase tracking-wider hover:text-navy-900">
+                          <button type="button" onClick={() => toggleSort(c.key)} className="inline-flex items-center gap-1 rounded-sm hover:text-ink-900">
                             {c.label}
-                            <span className="text-[9px]">{active ? (sort.dir === 'asc' ? '▲' : '▼') : ''}</span>
+                            <span className="text-[10px]" aria-hidden="true">{active ? (sort.dir === 'asc' ? '▲' : '▼') : ''}</span>
                           </button>
                         ) : c.label}
                       </th>
@@ -97,12 +97,12 @@ export default function ReportTable({
                   })}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-navy-100">
+              <tbody className="divide-y divide-ink-100">
                 {rows.slice((page - 1) * pageSize, page * pageSize).map((r, i) => (
-                  <tr key={i} className="hover:bg-navy-50/50">
+                  <tr key={i} className="hover:bg-paper-100">
                     {columns.map((c) => (
-                      <td key={c.key || c.label} className={`td ${c.align === 'right' ? 'text-right tabular-nums' : ''}`}>
-                        {c.render ? c.render(r) : c.format ? c.format(r[c.key], r) : (r[c.key] ?? '—')}
+                      <td key={c.key || c.label} className={`td ${c.align === 'right' ? 'whitespace-nowrap text-right tabular' : ''}`}>
+                        {c.render ? c.render(r) : c.format ? c.format(r[c.key], r) : (r[c.key] ?? '–')}
                       </td>
                     ))}
                   </tr>
@@ -110,8 +110,8 @@ export default function ReportTable({
               </tbody>
             </table>
           </div>
-          {summary && <div className="border-t border-navy-100 bg-navy-50 px-4 py-3 text-xs text-navy-600">{summary(rows)}</div>}
-          <div className="border-t border-navy-100"><Pagination page={page} pageSize={pageSize} total={rows.length} onChange={setPage} /></div>
+          {summary && <div className="border-t border-ink-100 px-4 py-3 text-[13px] tabular text-ink-600">{summary(rows)}</div>}
+          <div className="border-t border-ink-100"><Pagination page={page} pageSize={pageSize} total={rows.length} onChange={setPage} /></div>
         </>
       )}
     </div>

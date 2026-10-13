@@ -19,8 +19,10 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from app import db as app_db
 from app.config import settings
 from app.db import init_db, close_db
+from app.schema_check import FIX_COMMAND, missing_schema_objects, out_of_date_body
 from app.routers import auth, rooms, guests, bookings, services, billing, reports, admin, branches
 
 
@@ -30,19 +32,33 @@ from app.routers import auth, rooms, guests, bookings, services, billing, report
 async def lifespan(app: FastAPI):
     """
     Manages application lifecycle events:
-    - On startup: initialise the asyncpg connection pool.
+    - On startup: initialise the asyncpg connection pool and check the
+      schema is current (ISSUE-15). A stale DB is logged loudly but does not
+      stop the server, so /api/health can report it.
     - On shutdown: close all database connections gracefully.
     """
     # --- STARTUP PHASE ---
     await init_db()
-    print("✅ Database connection pool initialised")
+    print("Database connection pool initialised")
+
+    async with app_db.pool.acquire() as conn:
+        app.state.schema_missing = await missing_schema_objects(conn)
+    if app.state.schema_missing:
+        lines = "\n".join(f"  {kind}: {', '.join(names)}"
+                          for kind, names in app.state.schema_missing.items())
+        log.error(
+            "\n%s\nDATABASE SCHEMA IS OUT OF DATE: it does not match db/run_all.sql.\n"
+            "Missing objects:\n%s\n"
+            "Every /api request will return 503 until it is rebuilt. Fix (wipes local data):\n"
+            "  %s\n%s", "=" * 72, lines, FIX_COMMAND, "=" * 72,
+        )
 
     # --- APPLICATION RUNNING PHASE ---
     yield
 
     # --- SHUTDOWN PHASE ---
     await close_db()
-    print("🛑 Database connection pool closed")
+    print("Database connection pool closed")
 
 
 # ── Create App ────────────────────────────────────────────────────────────────
@@ -76,8 +92,23 @@ _PG_ERROR_MAP = (
 )
 
 
+# A routine, table or object the code expects is not in the DB: the schema is
+# older than db/run_all.sql (ISSUE-15). 503 tells the caller it's not their input.
+_PG_SCHEMA_ERRORS = (
+    asyncpg.exceptions.UndefinedFunctionError,
+    asyncpg.exceptions.UndefinedTableError,
+    asyncpg.exceptions.UndefinedObjectError,
+)
+SCHEMA_OUT_OF_DATE_DETAIL = "The database is out of date. Ask the system admin to rebuild it."
+
+
 @app.exception_handler(asyncpg.PostgresError)
 async def postgres_error_handler(request: Request, exc: asyncpg.PostgresError):
+    if isinstance(exc, _PG_SCHEMA_ERRORS):
+        log.error("Database schema is out of date; rebuild with run_all.sql (%s). "
+                  "%s on %s %s: %s", FIX_COMMAND, type(exc).__name__,
+                  request.method, request.url.path, exc)
+        return JSONResponse(status_code=503, content={"detail": SCHEMA_OUT_OF_DATE_DETAIL})
     for cls, code, message in _PG_ERROR_MAP:
         if isinstance(exc, cls):
             log.warning("%s on %s %s: %s", type(exc).__name__,
@@ -92,6 +123,21 @@ async def postgres_error_handler(request: Request, exc: asyncpg.PostgresError):
 async def value_error_handler(request: Request, exc: ValueError):
     log.warning("ValueError on %s %s: %s", request.method, request.url.path, exc)
     return JSONResponse(status_code=422, content={"detail": "Invalid input."})
+
+
+# ── Stale Schema Guard ────────────────────────────────────────────────────────
+# Decision (ISSUE-15): while the startup check finds missing objects, every
+# /api request except /api/health gets the same clear 503, rather than most
+# pages working and one button failing with a 500. Registered before CORS so
+# the 503 still carries CORS headers.
+
+@app.middleware("http")
+async def stale_schema_guard(request: Request, call_next):
+    missing = getattr(request.app.state, "schema_missing", None)
+    path = request.url.path
+    if missing and path.startswith("/api/") and path != "/api/health":
+        return JSONResponse(status_code=503, content={"detail": SCHEMA_OUT_OF_DATE_DETAIL})
+    return await call_next(request)
 
 
 # ── CORS Middleware ───────────────────────────────────────────────────────────
@@ -128,3 +174,15 @@ app.include_router(admin.router,    prefix="/api/admin",    tags=["Admin"])
 async def health_check():
     """Simple health check — returns OK if the server is running."""
     return {"status": "ok", "service": "SkyNest API"}
+
+
+@app.get("/api/health", tags=["Health"])
+async def api_health(request: Request):
+    """
+    Readiness: 200 when the DB schema has every object the API needs,
+    503 with the missing objects and the fix command when it is stale.
+    """
+    missing = getattr(request.app.state, "schema_missing", None)
+    if missing:
+        return JSONResponse(status_code=503, content=out_of_date_body(missing))
+    return {"status": "ok"}

@@ -12,7 +12,9 @@
 --     6. Install all stored procedures (db/procedures/).
 --     7. Install all triggers (db/triggers/).
 --     8. Create all reporting views (db/views/).
---     9. (Optional) Load seed data (db/seed/).
+--     9. (Optional) Load seed data: db/seed/sample_data.sql, the single mock
+--        database (fixed-date rows used by the backend tests, plus demo rows
+--        dated relative to CURRENT_DATE for manual testing).
 --
 -- Usage:
 --   psql -U <user> -d skynest -f db/run_all.sql

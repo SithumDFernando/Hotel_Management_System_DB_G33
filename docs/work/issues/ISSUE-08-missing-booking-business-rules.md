@@ -135,5 +135,37 @@ One negative test per row (a–g) → expected 4xx, plus positive tests: book to
 
 ## Acceptance criteria
 
-- [ ] All seven scenarios are rejected by the API **and** by a direct `CALL`/`INSERT` in psql.
-- [ ] Error messages are human-readable and map to the documented status codes.
+- [x] All seven scenarios are rejected by the API **and** by a direct `CALL`/`INSERT` in psql.
+- [x] Error messages are human-readable and map to the documented status codes.
+
+## Resolution (2026-10-12)
+
+| # | Rule | Where | API |
+|---|---|---|---|
+| a | check-in not in the past (today OK) | `create_booking` | 400 |
+| b | room not under Maintenance | `create_booking` | 409 |
+| c | at most **30 nights** | `create_booking` (`c_max_nights`) | 400 |
+| d | payment option/method ∈ `Credit Card` / `Cash` / `Bank Transfer` | CHECKs `chk_booking_payment_option`, `chk_payment_method` + `PaymentMethod` Literal | 422 |
+| e | no check-in before `check_in_date`, none once `check_out_date` is reached | `perform_checkin` | 400 |
+| f | usage date inside the stay | `trg_validate_service_usage` | 422 |
+| g | no check-in while the room is Maintenance | `perform_checkin` | 409 |
+
+Decisions:
+- **30-night cap** as proposed. It's recorded in `03_stored_procedures_functions.md`, and the frontend has `MAX_STAY_NIGHTS`. **No advance-booking cap**: it was optional, and several suites book 2030/2031 dates on purpose.
+- **No early check-in** (strict `CURRENT_DATE >= check_in_date`).
+- **Usage upper bound is `GREATEST(check_out_date, CURRENT_DATE)`**, not just `check_out_date`. `ServiceRequest.jsx` always charges today's date and has no date picker, so a strict bound would block charging an overdue in-house guest (seed BK-01 is one). Plan step 6's picker limits therefore don't apply.
+
+Code:
+- `perform_checkin` reads the room status through a join with `FOR UPDATE OF b`.
+- New `app/db_errors.py` → `raise_error_to_http(exc, rules)`: "not found" → 404 is always applied, default 400. It's used by every booking route, `billing._db_error_to_http` and the service-usage route, so each router only lists its own message → status rules.
+- Frontend:
+  - `ReceptionistDashboard.jsx` already disabled early check-in. It now also disables check-in once the stay has ended, with the tooltip "Arrives on …" / "The stay period has ended".
+  - `BookingCheckout.jsx` adds the 30-night cap to `dateError`.
+
+Tests:
+- `tests/test_booking_rules.py` (17 tests): each scenario a–g is checked through the API **and** a direct `CALL`/`INSERT`, plus the positive edges (book today, exactly 30 nights, all three payment values, check in on the arrival day, a charge on the check-out day, and a charge today for an overdue guest). All 10 negative tests fail on the pre-fix code (the request was accepted); the 7 positive ones pass either way.
+- Existing tests that checked in seed bookings with fixed dates now call the new `arrive_today()` helper in `conftest.py`, so they don't start failing as those dates pass. `test_business_logic.py` dates its own usages inside the stay it builds.
+
+Specs updated: `01` (payment CHECKs), `02` (bookings, check-in, usage and payment errors), `03` (`create_booking` rewritten to match the code, plus `check_in` rules), `04` §3 (usage date), `09` (checkout form, Quick Actions).
+
+⏳ Browser check pending: BookingCheckout with a 31-night stay; Receptionist dashboard check-in button for an upcoming and for an ended booking.

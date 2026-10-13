@@ -8,7 +8,7 @@
 
 | Property | Value |
 |----------|-------|
-| **Name** | `trg_prevent_double_booking` |
+| **Name** | `trg_double_booking` (function `trg_check_double_booking()`, `db/triggers/double_booking_trigger.sql`) |
 | **Table** | `booking` |
 | **Timing** | BEFORE INSERT OR UPDATE |
 | **Fires on** | Each row |
@@ -17,16 +17,16 @@
 
 ```
 IF NEW.status NOT IN ('Cancelled', 'Checked-Out') THEN
-  PERFORM 1 FROM room WHERE room_id = NEW.room_id FOR UPDATE;  -- serialize per room
+  SELECT room_number INTO v_room_number FROM room WHERE room_id = NEW.room_id FOR UPDATE;  -- serialize per room
   IF EXISTS (
     SELECT 1 FROM booking
     WHERE room_id = NEW.room_id
-      AND booking_id != NEW.booking_id  -- exclude self on UPDATE
+      AND (TG_OP = 'INSERT' OR booking_id <> NEW.booking_id)  -- exclude self on UPDATE
       AND status NOT IN ('Cancelled', 'Checked-Out')
       AND check_in_date < NEW.check_out_date
       AND check_out_date > NEW.check_in_date
   ) THEN
-    RAISE EXCEPTION 'Double booking: Room % is already reserved for overlapping dates', NEW.room_id;
+    RAISE EXCEPTION 'Room % is already booked for the selected dates.', v_room_number;  -- API 409, e.g. "Room 103 is already…"
   END IF;
 END IF;
 RETURN NEW;
@@ -36,7 +36,8 @@ RETURN NEW;
 - **Concurrency:** the trigger locks the room row first, so two concurrent bookings for the same room run one after another; the second waits for the first to commit, then sees it and gets this error. Without the lock both `EXISTS` checks would pass under READ COMMITTED, because neither sees the other's uncommitted insert.
 - The guarantee is the exclusion constraint `excl_booking_room_overlap` (see `01_database_design.md` §2.9). It also catches anything that skips the trigger; the API maps its error to 409.
 - The trigger catches edge cases like direct SQL INSERTs or status UPDATEs that reactivate a cancelled booking.
-- Does NOT fire for Cancelled/Checked-Out status transitions (those free up the room).
+- Skips the check when the new status is Cancelled/Checked-Out (those free up the room).
+- Verified (task 16): 20 parallel requests for the same room and dates → exactly one 201, nineteen 409.
 
 ---
 
@@ -44,9 +45,9 @@ RETURN NEW;
 
 | Property | Value |
 |----------|-------|
-| **Name** | `trg_update_room_status` |
+| **Name** | `trg_room_status` (function `trg_sync_room_status()`, `db/triggers/room_status_trigger.sql`) |
 | **Table** | `booking` |
-| **Timing** | AFTER UPDATE |
+| **Timing** | AFTER UPDATE OF status |
 | **Fires on** | Each row — only when `status` column changes |
 
 ### Logic
@@ -97,7 +98,7 @@ RETURN NEW;
 
 | Property | Value |
 |----------|-------|
-| **Name** | `trg_validate_service_usage` |
+| **Name** | `trg_service_usage` (function `trg_validate_service_usage()`, `db/triggers/service_usage_trigger.sql`) |
 | **Table** | `service_usage` |
 | **Timing** | BEFORE INSERT |
 | **Fires on** | Each row |
@@ -106,8 +107,8 @@ RETURN NEW;
 
 ```
 -- 1. Booking must be Checked-In
-IF (SELECT status FROM booking WHERE booking_id = NEW.booking_id) != 'Checked-In' THEN
-  RAISE EXCEPTION 'Services can only be added to Checked-In bookings';
+IF (SELECT status FROM booking WHERE booking_id = NEW.booking_id) <> 'Checked-In' THEN
+  RAISE EXCEPTION 'Services can only be added to a Checked-In booking. Current status: %', ...;
 END IF;
 
 -- 2. Service must be active
@@ -115,21 +116,31 @@ IF (SELECT is_active FROM service WHERE service_id = NEW.service_id) = FALSE THE
   RAISE EXCEPTION 'Service % is inactive', NEW.service_id;
 END IF;
 
--- 3. Snapshot the unit_price from service catalogue
-NEW.unit_price := (SELECT base_price FROM service WHERE service_id = NEW.service_id);
+-- 3. Usage date must fall inside the stay (ISSUE-08)
 NEW.usage_date := COALESCE(NEW.usage_date, CURRENT_DATE);
+IF NEW.usage_date < check_in_date
+   OR NEW.usage_date > GREATEST(check_out_date, CURRENT_DATE) THEN
+  RAISE EXCEPTION 'Service date % is outside the stay (% to %)', ...;
+END IF;
+
+-- 4. Snapshot the unit_price from the service catalogue when none is given
+IF NEW.unit_price IS NULL OR NEW.unit_price = 0 THEN
+  NEW.unit_price := (SELECT base_price FROM service WHERE service_id = NEW.service_id);
+  -- missing service → RAISE 'Service with ID % does not exist'
+END IF;
 
 RETURN NEW;
 ```
 
 ### Notes
-- **Auto-snapshots** `unit_price` from the service catalogue — the API layer doesn't need to pass it.
+- **Auto-snapshots** `unit_price` from the service catalogue when the insert doesn't set it. The API never takes a price from the client: the router snapshots `base_price` itself, so the trigger's snapshot covers direct SQL inserts.
 - Defaults `usage_date` to today if not provided.
 - Prevents adding services to bookings that aren't currently checked in.
+- The check-out day itself is inside the stay (late checkout, breakfast). A guest still in house after `check_out_date` (overdue checkout) can be charged up to today, which is why the upper bound is `GREATEST(check_out_date, CURRENT_DATE)`. The staff UI always charges today's date.
 
 ---
 
-## 4. Payment Validation Trigger (Optional)
+## 4. Payment Validation Trigger (Not implemented)
 
 | Property | Value |
 |----------|-------|
@@ -153,8 +164,8 @@ END IF;
 ```
 
 ### Notes
-- This is a **defense-in-depth** trigger — `record_payment()` procedure already validates, but this catches direct INSERTs.
-- Marked as optional: if all payments always go through `record_payment()`, this is redundant.
+- **Decision: not built.** Every payment goes through `record_payment()`, which locks the bill row, validates the amount and recalculates the bill; the API has no other path that inserts into `payment`. The logic above is kept as a design option for defence in depth against direct SQL inserts.
+- `CHECK chk_payment_method` and `payment_amount_check` (amount > 0) still apply to direct inserts.
 
 ---
 
@@ -162,7 +173,7 @@ END IF;
 
 | # | Trigger Name | Table | Timing | Purpose |
 |---|-------------|-------|--------|---------|
-| 1 | `trg_prevent_double_booking` | booking | BEFORE INSERT/UPDATE | Prevents overlapping reservations |
-| 2 | `trg_update_room_status` | booking | AFTER UPDATE (status) | Sole owner of room Available ↔ Occupied; never overrides Maintenance |
-| 3 | `trg_validate_service_usage` | service_usage | BEFORE INSERT | Validates booking status, snapshots price |
-| 4 | `trg_validate_payment` | payment | BEFORE INSERT | Validates bill exists, amount ≤ balance |
+| 1 | `trg_double_booking` | booking | BEFORE INSERT/UPDATE | Prevents overlapping reservations (backed by `excl_booking_room_overlap`) |
+| 2 | `trg_room_status` | booking | AFTER UPDATE OF status | Sole owner of room Available ↔ Occupied; never overrides Maintenance |
+| 3 | `trg_service_usage` | service_usage | BEFORE INSERT | Validates booking status, service, usage date; snapshots price |
+| — | `trg_validate_payment` | payment | — | Not implemented; `record_payment()` does this |

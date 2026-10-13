@@ -10,11 +10,11 @@ Without helper functions, the following logic gets duplicated:
 
 | Duplicated Logic | Appears In |
 |-----------------|------------|
-| `rate × nights` calculation | `calculate_bill()`, `check_out()` |
-| SUM of service charges | `calculate_bill()`, bill queries |
-| Tax computation | `calculate_bill()`, any billing display |
-| Outstanding balance check | `check_out()`, `record_payment()` |
-| Room rate lookup | `create_booking()`, `calculate_bill()` |
+| `rate × nights` calculation | `generate_bill()`, `perform_checkout()` |
+| SUM of service charges | `generate_bill()`, bill queries |
+| Tax computation | `generate_bill()`, any billing display |
+| Outstanding balance check | `perform_checkout()`, `record_payment()` |
+| Room rate lookup | `create_booking()`, `generate_bill()` |
 
 ### Solution: Dependency Graph
 
@@ -22,13 +22,12 @@ Without helper functions, the following logic gets duplicated:
 create_booking()
   └── fn_get_current_rate()      ← snapshots rate_at_booking
 
-calculate_bill()
-  ├── fn_calculate_nights()
+generate_bill()
   ├── fn_get_room_charges()      ← calls fn_calculate_nights() internally
   ├── fn_get_service_charges()
   └── fn_calculate_tax()
 
-check_out()
+perform_checkout()
   ├── generate_bill()            ← recalculates the bill first (ISSUE-04)
   └── fn_get_outstanding_balance()
 
@@ -43,8 +42,8 @@ record_payment()
 ### `fn_calculate_nights(p_check_in DATE, p_check_out DATE) → INT`
 
 ```
-RETURNS: check_out - check_in (integer days)
-NOTES:   Pure calculation, no DB access.
+RETURNS: GREATEST(check_out - check_in, 1) (integer days)
+NOTES:   Pure calculation, no DB access (IMMUTABLE).
          Returns 1 minimum (same-day ≠ 0 nights).
 ```
 
@@ -85,6 +84,8 @@ RETURNS: Total service charges (0 if none)
 RETURNS: ROUND(p_amount * p_tax_rate, 2)
 NOTES:   15% default tax rate (Sri Lanka standard).
          Tax is applied on (room_charges + service_charges - discount).
+         Open decision: the SRS (§2.5, REQ-6.3) specifies 16% (15% VAT + 1%
+         Tourism Levy); the implementation and UI use 15%.
 ```
 
 ---
@@ -101,41 +102,54 @@ RETURNS: Outstanding balance amount
 
 ## Part B: Business Procedures
 
-### `create_booking(p_guest_id, p_room_id, p_check_in, p_check_out, p_payment_option) → UUID`
+### `create_booking(p_guest_id UUID, p_room_id UUID, p_check_in_date DATE, p_check_out_date DATE, p_payment_option VARCHAR, OUT p_booking_id UUID)`
+
+Procedure: `CALL create_booking(guest, room, check_in, check_out, option, NULL)` → one row `{p_booking_id}`.
 
 ```
-ISOLATION:  SERIALIZABLE
-LOCKING:    SELECT ... FOR UPDATE on the target room's bookings
-
 LOGIC:
   1. Validate guest exists
-  2. Validate room exists, get branch_id and room_type_id
-  3. Lock: SELECT 1 FROM booking
-       WHERE room_id = p_room_id
-         AND status NOT IN ('Cancelled', 'Checked-Out')
-         AND check_in_date < p_check_out
-         AND check_out_date > p_check_in
-       FOR UPDATE
-     → If any rows: RAISE 'Room not available for selected dates'
+  2. Validate room exists, get branch_id, room_type_id and status
+  3. Business rules (ISSUE-08):
+       p_check_in < CURRENT_DATE            → RAISE 'Check-in date cannot be in the past'
+       p_check_out - p_check_in > 30        → RAISE 'Stays longer than 30 nights must be
+                                               arranged with the front desk'
+       room status = 'Maintenance'          → RAISE 'Room is under maintenance and cannot
+                                               be booked'
   4. Snapshot rate: rate := fn_get_current_rate(branch_id, room_type_id)
-  5. INSERT INTO booking (...) VALUES (...) RETURNING booking_id
-  6. RETURN booking_id
+  5. INSERT INTO booking (...) VALUES (...) RETURNING booking_id INTO OUT p_booking_id
+     → trg_check_double_booking locks the room row and checks overlaps;
+       excl_booking_room_overlap is the guarantee (ISSUE-05)
+
+CONSTANTS:
+  - Max stay: 30 nights (c_max_nights in booking.sql; MAX_STAY_NIGHTS in the
+    frontend). Agreed business value; change both together.
+  - No limit on how far ahead a booking can be made.
 
 ERRORS:
-  - 'Guest not found'
-  - 'Room not found'
-  - 'Room not available for selected dates'
-  - 'Check-out date must be after check-in date'
+  - 'Guest not found' / 'Room not found'                     → 404
+  - 'Check-in date cannot be in the past'                    → 400
+  - 'Stays longer than 30 nights must be arranged ...'       → 400
+  - 'Room is under maintenance and cannot be booked'         → 409
+  - 'Room % is already booked for the selected dates.'       → 409
+  - payment_option outside the list: CHECK chk_booking_payment_option
+  - check-out not after check-in: CHECK chk_booking_dates
 ```
 
 ---
 
-### `check_in(p_booking_id UUID) → VOID`
+### `perform_checkin(p_booking_id UUID)`
+
+Procedure (`db/procedures/checkin_checkout.sql`), no return value.
 
 ```
 LOGIC:
-  1. SELECT status FROM booking WHERE booking_id = p_booking_id FOR UPDATE
+  1. SELECT booking status/dates + room status
+       FROM booking JOIN room ... WHERE booking_id = p_booking_id FOR UPDATE OF booking
   2. Validate status = 'Booked' → else RAISE 'Only Booked bookings can be checked in'
+     CURRENT_DATE < check_in_date      → RAISE 'Check-in is not allowed before %'   (no early check-in)
+     CURRENT_DATE >= check_out_date    → RAISE 'This booking''s stay period has already ended'
+     room status = 'Maintenance'       → RAISE 'Room is under maintenance'          (API 409)
   3. UPDATE booking SET status = 'Checked-In', actual_checkin_time = NOW()
   4. Room -> 'Occupied' is done by trg_room_status (the procedure does not
      update the room table; see 04_triggers.md)
@@ -143,6 +157,9 @@ LOGIC:
 ERRORS:
   - 'Booking not found'
   - 'Only Booked bookings can be checked in'
+  - 'Check-in is not allowed before YYYY-MM-DD'
+  - 'This booking''s stay period has already ended'
+  - 'Room is under maintenance'
 
 CONCURRENCY:
   - The FOR UPDATE in step 1 makes a concurrent second check-in wait, then
@@ -151,7 +168,9 @@ CONCURRENCY:
 
 ---
 
-### `cancel_booking(p_booking_id UUID) → VOID`
+### `cancel_booking(p_booking_id UUID)`
+
+Procedure (`db/procedures/booking.sql`), no return value.
 
 ```
 LOGIC:
@@ -173,7 +192,9 @@ NOTES:
 
 ---
 
-### `check_out(p_booking_id UUID) → VOID`
+### `perform_checkout(p_booking_id UUID)`
+
+Procedure (`db/procedures/checkin_checkout.sql`), no return value.
 
 ```
 LOGIC:
@@ -199,28 +220,32 @@ ERRORS:
 
 ---
 
-### `calculate_bill(p_booking_id UUID, p_discount NUMERIC DEFAULT 0) → UUID`
+### `generate_bill(p_booking_id UUID, p_discount_amount NUMERIC DEFAULT NULL)`
+
+Procedure (`db/procedures/billing.sql`), no return value: `CALL generate_bill(id, NULL)`; the API reads the bill back afterwards.
 
 ```
 LOGIC:
-  1. Validate booking exists and status IN ('Checked-In', 'Checked-Out')
+  1. SELECT status FROM booking WHERE booking_id = p_booking_id FOR UPDATE
+     Validate status IN ('Checked-In', 'Checked-Out')
   2. room_charges   := fn_get_room_charges(p_booking_id)
   3. svc_charges    := fn_get_service_charges(p_booking_id)
-  4. subtotal       := room_charges + svc_charges - p_discount
-  5. tax            := fn_calculate_tax(subtotal)
-  6. total          := subtotal + tax
-  7. paid           := COALESCE((SELECT SUM(amount) FROM payment WHERE booking_id = p_booking_id), 0)
-  8. outstanding    := total - paid
-  9. INSERT INTO bill (booking_id, room_charges, service_charges, discount_amount,
-                       tax_amount, total_amount, amount_paid, outstanding_balance, balance_flag)
-     VALUES (p_booking_id, room_charges, svc_charges, p_discount,
-             tax, total, paid, outstanding, outstanding > 0)
-     ON CONFLICT (booking_id) DO UPDATE SET ...   ← recalculates if bill already exists
-  10. RETURN bill_id
+  4. discount       := COALESCE(p_discount_amount, existing bill.discount_amount, 0)
+                       (NULL keeps the discount already on the bill)
+     0 <= discount <= room_charges + svc_charges, else RAISE
+  5. subtotal       := room_charges + svc_charges - discount
+  6. tax            := fn_calculate_tax(subtotal)
+  7. total          := subtotal + tax   (>= 100,000,000 → RAISE)
+  8. paid           := COALESCE((SELECT SUM(amount) FROM payment WHERE booking_id = p_booking_id), 0)
+  9. outstanding    := GREATEST(total - paid, 0)
+  10. INSERT INTO bill (...) VALUES (...)
+      ON CONFLICT (booking_id) DO UPDATE SET ...   ← recalculates if bill already exists
 
 NOTES:
   - Uses ON CONFLICT to allow re-generation (e.g., after adding more services).
   - All monetary math uses fn_ helpers — zero duplication.
+  - Known gap (ISSUE-13 §13.1, not yet done): a discount applied after full
+    payment can leave amount_paid > total_amount with outstanding 0.
 
 ERRORS:
   - 'Booking not found'
@@ -231,41 +256,44 @@ ERRORS:
 
 ---
 
-### `record_payment(p_booking_id UUID, p_amount NUMERIC, p_method VARCHAR, p_notes VARCHAR, OUT p_payment_id UUID)`
+### `record_payment(p_booking_id UUID, p_amount NUMERIC, p_payment_method VARCHAR, p_notes VARCHAR, OUT p_payment_id UUID)`
 
 Call with all five arguments; the last `NULL` is the OUT placeholder:
 `CALL record_payment(id, amount, 'Cash', notes_or_NULL, NULL)` → one row `{p_payment_id}`.
 
 ```
 LOGIC:
-  1. SELECT total_amount FROM bill WHERE booking_id = p_booking_id FOR UPDATE
+  1. p_amount must be > 0 and have at most 2 decimal places
+  2. SELECT total_amount FROM bill WHERE booking_id = p_booking_id FOR UPDATE
      → serializes concurrent payments on one bill
-  2. balance := fn_get_outstanding_balance(p_booking_id)
-  3. IF p_amount > balance THEN RAISE 'Amount exceeds outstanding balance'
-  4. INSERT INTO payment (booking_id, amount, payment_method, notes)
+  3. balance := fn_get_outstanding_balance(p_booking_id)
+  4. IF p_amount > balance THEN RAISE 'Amount exceeds outstanding balance of LKR %'
+  5. INSERT INTO payment (booking_id, amount, payment_method, notes)
      VALUES (...) RETURNING payment_id INTO p_payment_id
-  5. UPDATE bill SET amount_paid / outstanding_balance / balance_flag
+     → payment_method must pass CHECK chk_payment_method
+  6. UPDATE bill SET amount_paid / outstanding_balance / balance_flag
      recalculated from SUM(payment.amount)
 
 NOTES:
   - Supports partial payments (multiple calls).
-  - Uses fn_get_outstanding_balance() — same function as check_out().
+  - Uses fn_get_outstanding_balance() — same function as perform_checkout().
+  - Concurrency verified: 10 parallel payments of total/4 → 4 succeed, the
+    rest get 400, and amount_paid never exceeds total_amount.
 
 ERRORS:
+  - 'Amount must be positive'
+  - 'Amount can have at most 2 decimal places'
   - 'Bill not yet generated for this booking'
   - 'Amount exceeds outstanding balance of LKR X'
-  - 'Amount must be positive'
 ```
 
 ---
 
-## Part C: Recommended DB File Layout
-
-Given the helper function pattern, update `db/procedures/` to:
+## Part C: DB File Layout
 
 ```
 db/
-├── functions/                          ← NEW: pure helper functions
+├── functions/                          ← pure helper functions
 │   ├── fn_calculate_nights.sql
 │   ├── fn_get_current_rate.sql
 │   ├── fn_get_room_charges.sql
@@ -274,9 +302,12 @@ db/
 │   └── fn_get_outstanding_balance.sql
 ├── procedures/
 │   ├── booking.sql                     # create_booking(), cancel_booking()
-│   ├── checkin_checkout.sql            # check_in(), check_out()
-│   ├── billing.sql                     # calculate_bill()
+│   ├── checkin_checkout.sql            # perform_checkin(), perform_checkout()
+│   ├── billing.sql                     # generate_bill()
 │   └── payments.sql                    # record_payment()
 ```
+
+All business routines are PROCEDUREs called with `CALL`; OUT parameters
+(`create_booking`, `record_payment`) come back as a one-row result.
 
 > `run_all.sql` must load `functions/` BEFORE `procedures/` since procedures depend on them.

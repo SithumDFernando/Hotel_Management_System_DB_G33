@@ -11,55 +11,81 @@ Endpoints:
     POST /api/auth/signup    — Public.  Guest self-registration (profile + account).
     POST /api/auth/register  — Admin only. Creates staff/any-role accounts.
     GET  /api/auth/me        — Protected. Returns current user info.
+    GET  /api/auth/profile   — Protected. Account + linked guest profile.
+    PATCH /api/auth/profile  — Guest. Update own contact details.
+    POST /api/auth/change-password — Protected. Change own password.
 """
 
 import asyncpg
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
-from app.auth import verify_password, hash_password, create_access_token
+from app.auth import (
+    DUMMY_PASSWORD_HASH, PASSWORD_MAX_BYTES, create_access_token, hash_password, verify_password,
+)
 from app.db import get_db
+from app.rate_limit import client_ip, login_failures, password_failures, signup_attempts
 from app.dependencies import (
-    assert_guest_profile_free, assert_role_links, get_current_user, get_optional_user, require_role,
+    assert_guest_profile_free, assert_role_links, get_current_user, get_optional_user,
+    require_guest_id, require_role,
 )
 from app.schemas.auth import (
+    ChangePasswordRequest,
     LoginRequest,
     LoginResponse,
     MeResponse,
+    ProfileResponse,
+    ProfileUpdate,
     RegisterRequest,
     SignupRequest,
 )
+from app.schemas.guest import GuestOut
 
 router = APIRouter()
+
+# Emails are stored lower-cased (NormEmail); LOWER(email) also matches any
+# older mixed-case rows and uses the unique index uq_user_account_email_ci
+EMAIL_TAKEN_SQL = "SELECT account_id FROM user_account WHERE LOWER(email) = $1"
+
+GUEST_COLUMNS = (
+    "guest_id, full_name, nic_passport, email, phone, date_of_birth, nationality, "
+    "gender, guest_type, company_name, company_reg_number, billing_contact_name"
+)
 
 
 
 # ── POST /api/auth/login ─────────────────────────────────────────────────────
 
 @router.post("/login", response_model=LoginResponse)
-async def login(body: LoginRequest, db=Depends(get_db)):
+async def login(body: LoginRequest, request: Request, db=Depends(get_db)):
     """
     Authenticate a user with email + password.
     Returns a JWT access token on success.
+    After 10 failed attempts for one IP + email in 5 minutes: 429.
     """
-    # 1. Find the user by email
+    limit_key = f"{client_ip(request)}:{body.email}"
+    login_failures.check(limit_key)
+
+    # 1. Find the user by email (already trimmed + lower-cased)
     user = await db.fetchrow(
         "SELECT account_id, email, password_hash, role, branch_id, guest_id "
-        "FROM user_account WHERE email = $1",
+        "FROM user_account WHERE LOWER(email) = $1",
         body.email,
     )
 
-    if user is None:
+    # 2. Verify the password. Unknown emails are checked against a dummy
+    #    hash so both failures take the same bcrypt time (no email probing).
+    hashed = user["password_hash"] if user else DUMMY_PASSWORD_HASH
+    password_ok = verify_password(body.password, hashed)  # always runs bcrypt
+    # bcrypt only reads 72 bytes; no account can have a longer password
+    # (validate_new_password), so a longer input can't be the right one
+    password_ok = password_ok and len(body.password.encode("utf-8")) <= PASSWORD_MAX_BYTES
+    if user is None or not password_ok:
+        login_failures.hit(limit_key)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials",
         )
-
-    # 2. Verify password against stored bcrypt hash
-    if not verify_password(body.password, user["password_hash"]):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid credentials",
-        )
+    login_failures.reset(limit_key)
 
     # 3. Build JWT payload and issue token
     token_data = {
@@ -81,20 +107,17 @@ async def login(body: LoginRequest, db=Depends(get_db)):
 # ── POST /api/auth/signup ────────────────────────────────────────────────────
 
 @router.post("/signup", status_code=status.HTTP_201_CREATED)
-async def signup(body: SignupRequest, db=Depends(get_db)):
+async def signup(body: SignupRequest, request: Request, db=Depends(get_db)):
     """
     Public guest self-registration: creates the guest profile and the login
     account atomically (both rows or neither). Role is always 'guest'.
     """
-    if len(body.password) < 8:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Password must be at least 8 characters",
-        )
+    # Password policy (NewPassword) and email normalisation run in SignupRequest
+    ip = client_ip(request)
+    signup_attempts.check(ip)
+    signup_attempts.hit(ip)
 
-    exists = await db.fetchval(
-        "SELECT account_id FROM user_account WHERE email = $1", body.email
-    )
+    exists = await db.fetchval(EMAIL_TAKEN_SQL, body.email)
     if exists:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -166,10 +189,7 @@ async def register(
     assert_role_links(body.role, body.branch_id, body.guest_id)
 
     # Check if email already exists
-    existing = await db.fetchval(
-        "SELECT account_id FROM user_account WHERE email = $1",
-        body.email,
-    )
+    existing = await db.fetchval(EMAIL_TAKEN_SQL, body.email)
     if existing:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -212,3 +232,117 @@ async def get_me(current_user: dict = Depends(get_current_user)):
         branch_id=str(current_user["branch_id"]) if current_user.get("branch_id") else None,
         guest_id=str(current_user["guest_id"]) if current_user.get("guest_id") else None,
     )
+
+
+# ── GET /api/auth/profile ─────────────────────────────────────────────────────
+
+@router.get("/profile", response_model=ProfileResponse)
+async def get_profile(db=Depends(get_db), current_user: dict = Depends(get_current_user)):
+    """
+    The caller's account (email, role, branch) and, for a guest account with
+    a linked profile, that guest profile. Staff get `guest: null`.
+    """
+    branch_name = None
+    if current_user.get("branch_id"):
+        branch_name = await db.fetchval(
+            "SELECT name FROM branch WHERE branch_id = $1", current_user["branch_id"],
+        )
+
+    guest = None
+    if current_user.get("guest_id"):
+        row = await db.fetchrow(
+            f"SELECT {GUEST_COLUMNS} FROM guest WHERE guest_id = $1", current_user["guest_id"],
+        )
+        guest = GuestOut(**dict(row)) if row else None
+
+    return ProfileResponse(
+        account_id=str(current_user["account_id"]),
+        email=current_user["email"],
+        role=current_user["role"],
+        branch_id=str(current_user["branch_id"]) if current_user.get("branch_id") else None,
+        branch_name=branch_name,
+        guest=guest,
+    )
+
+
+# ── PATCH /api/auth/profile ───────────────────────────────────────────────────
+
+@router.patch("/profile", response_model=GuestOut)
+async def update_profile(
+    body: ProfileUpdate,
+    db=Depends(get_db),
+    current_user: dict = Depends(require_role("guest")),
+):
+    """
+    A guest updates their own contact details. Only fields sent (not null)
+    change. Email and NIC/passport are not accepted here (422).
+    """
+    guest_id = require_guest_id(current_user)
+    updates = body.model_dump(exclude_none=True)
+    if not updates:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No fields provided for update.",
+        )
+
+    # Column names come from the ProfileUpdate model, never from the client
+    set_sql = ", ".join(f"{field} = ${i}" for i, field in enumerate(updates, start=1))
+    row = await db.fetchrow(
+        f"""
+        UPDATE guest SET {set_sql}
+         WHERE guest_id = ${len(updates) + 1}::UUID
+        RETURNING {GUEST_COLUMNS}
+        """,
+        *updates.values(), guest_id,
+    )
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Guest profile not found.",
+        )
+    return GuestOut(**dict(row))
+
+
+# ── POST /api/auth/change-password ────────────────────────────────────────────
+
+@router.post("/change-password")
+async def change_password(
+    body: ChangePasswordRequest,
+    db=Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Change the caller's own password. The current password is required, so
+    an unattended session can't lock the owner out. After 5 wrong current
+    passwords in 15 minutes: 429.
+    """
+    limit_key = str(current_user["account_id"])
+    password_failures.check(limit_key)
+
+    stored = await db.fetchval(
+        "SELECT password_hash FROM user_account WHERE account_id = $1",
+        current_user["account_id"],
+    )
+    current_ok = (
+        stored is not None
+        and len(body.current_password.encode("utf-8")) <= PASSWORD_MAX_BYTES
+        and verify_password(body.current_password, stored)
+    )
+    if not current_ok:
+        password_failures.hit(limit_key)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect.",
+        )
+    if body.new_password == body.current_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The new password must be different from the current one.",
+        )
+
+    await db.execute(
+        "UPDATE user_account SET password_hash = $1 WHERE account_id = $2",
+        hash_password(body.new_password), current_user["account_id"],
+    )
+    password_failures.reset(limit_key)
+    return {"detail": "Password changed."}

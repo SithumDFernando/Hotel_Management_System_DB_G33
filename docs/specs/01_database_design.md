@@ -119,7 +119,7 @@
 | `account_id` | UUID | PK, DEFAULT gen_random_uuid() |
 | `guest_id` | UUID | NULL, UNIQUE, FK → guest (ON DELETE RESTRICT) |
 | `branch_id` | UUID | NULL, FK → branch (ON DELETE RESTRICT) |
-| `email` | VARCHAR(100) | NOT NULL, UNIQUE |
+| `email` | VARCHAR(100) | NOT NULL, unique ignoring case (`uq_user_account_email_ci` on `LOWER(email)`); stored lower-cased |
 | `password_hash` | VARCHAR(255) | NOT NULL |
 | `role` | user_role | NOT NULL |
 
@@ -142,7 +142,7 @@
 | `check_out_date` | DATE | NOT NULL |
 | `rate_at_booking` | NUMERIC(10,2) | NOT NULL |
 | `status` | booking_status | NOT NULL, DEFAULT 'Booked' |
-| `payment_option` | VARCHAR(50) | NOT NULL |
+| `payment_option` | VARCHAR(50) | NOT NULL, CHECK IN ('Credit Card', 'Cash', 'Bank Transfer') |
 | `actual_checkin_time` | TIMESTAMP | NULL |
 | `actual_checkout_time` | TIMESTAMP | NULL |
 
@@ -207,7 +207,7 @@
 | `payment_id` | UUID | PK, DEFAULT gen_random_uuid() |
 | `booking_id` | UUID | NOT NULL, FK → booking |
 | `amount` | NUMERIC(10,2) | NOT NULL, CHECK (amount > 0) |
-| `payment_method` | VARCHAR(50) | NOT NULL |
+| `payment_method` | VARCHAR(50) | NOT NULL, CHECK IN ('Credit Card', 'Cash', 'Bank Transfer') |
 | `paid_at` | TIMESTAMP | NOT NULL, DEFAULT NOW() |
 | `notes` | VARCHAR(255) | |
 

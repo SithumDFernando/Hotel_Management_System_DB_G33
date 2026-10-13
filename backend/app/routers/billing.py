@@ -17,6 +17,7 @@ import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.db import get_db
+from app.db_errors import raise_error_to_http
 from app.dependencies import assert_booking_access, require_role
 from app.schemas.billing import BillOut, PaymentCreate, PaymentOut
 
@@ -28,14 +29,8 @@ STAFF_ROLES = ("admin", "manager", "receptionist")
 # Helpers
 
 def _db_error_to_http(exc: asyncpg.exceptions.RaiseError) -> HTTPException:
-    """Map RAISE EXCEPTION messages from the SQL functions to HTTP errors."""
-    msg = exc.message
-    lowered = msg.lower()
-    if "not found" in lowered or "not yet generated" in lowered:
-        code = status.HTTP_404_NOT_FOUND
-    else:
-        code = status.HTTP_400_BAD_REQUEST
-    return HTTPException(status_code=code, detail=msg)
+    """Map RAISE EXCEPTION messages from the billing procedures to HTTP errors."""
+    return raise_error_to_http(exc, (("not yet generated", status.HTTP_404_NOT_FOUND),))
 
 
 def _bill_from_row(row) -> BillOut:

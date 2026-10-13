@@ -52,17 +52,18 @@
   - [x] `PUT /api/admin/branches/{branch_id}`: Update branch metadata
   - [x] `GET /api/admin/users`: List staff accounts with their roles and branch assignments
   - [x] `POST /api/admin/users`: Create staff account, hashing password with `auth.hash_password`
+  - [x] Password policy (422) and case-insensitive email check on `POST /api/admin/users` (ISSUE-10)
   - [x] `PATCH /api/admin/users/{account_id}`: Update user role or branch assignment
 
 ---
 
 ## Phase 4: Testing & Verification
 
-- [ ] **Database Level Verification**
-  - [ ] Verify that all 5 views compile and query successfully in psql
-  - [ ] Verify `RANK()` calculations in `v_top_services`
-  - [ ] Verify grouping logic in `v_monthly_revenue`
-- [ ] **API Level Verification**
-  - [ ] Log in as admin and verify access to reports and admin management routes
-  - [ ] Verify non-admin / non-manager users receive `403 Forbidden` on protected report endpoints
-  - [ ] Confirm JSON output structures match frontend contract requirements
+- [x] **Database Level Verification**
+  - [x] Verify that all 5 views compile and query successfully in psql: all 5 plus `v_top_services_by_branch` build from `run_all.sql` and return rows
+  - [x] Verify `RANK()` calculations in `v_top_services`: ranked by total quantity, ties share a rank (3, 3, then 5)
+  - [x] Verify grouping logic in `v_monthly_revenue`: one row per branch per month (seed: Colombo, Galle, Kandy for 2026-09)
+- [x] **API Level Verification**
+  - [x] Log in as admin and verify access to reports and admin management routes: all 5 reports, `/admin/users` and `/admin/branches` → 200
+  - [x] Verify non-admin / non-manager users receive `403 Forbidden` on protected report endpoints: receptionist and guest → 403 on all 5; manager → 403 on `/admin/users`
+  - [x] Confirm JSON output structures match frontend contract requirements: manager and admin Overview/Reports tabs render in a headless browser with no console errors or failed calls. Bugs found: the occupancy report drops rooms whose active booking doesn't cover the date, and the Top services panel says "By revenue" but ranks by quantity

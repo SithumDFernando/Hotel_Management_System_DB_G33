@@ -102,10 +102,12 @@ ALTER TABLE guest
     ADD CONSTRAINT uq_guest_nic_passport
         UNIQUE (nic_passport);
 
--- Email is the login identifier — must be unique across all accounts
-ALTER TABLE user_account
-    ADD CONSTRAINT uq_user_account_email
-        UNIQUE (email);
+-- Email is the login identifier — unique across all accounts, ignoring case
+-- (ISSUE-10: Kamal@mail.com and kamal@mail.com are one account). A unique
+-- index rather than a constraint because it is on an expression; the API
+-- also lower-cases emails on input and looks them up with LOWER(email).
+CREATE UNIQUE INDEX uq_user_account_email_ci
+    ON user_account (LOWER(email));
 
 -- One login per guest profile (NULLs, i.e. staff accounts, are not compared)
 ALTER TABLE user_account
@@ -126,6 +128,16 @@ ALTER TABLE bill
 ALTER TABLE booking
     ADD CONSTRAINT chk_booking_dates
         CHECK (check_out_date > check_in_date);
+
+-- Fixed payment vocabulary, so reports can group by it (same list in the
+-- API's PaymentMethod Literal and the frontend's payment options)
+ALTER TABLE booking
+    ADD CONSTRAINT chk_booking_payment_option
+        CHECK (payment_option IN ('Credit Card', 'Cash', 'Bank Transfer'));
+
+ALTER TABLE payment
+    ADD CONSTRAINT chk_payment_method
+        CHECK (payment_method IN ('Credit Card', 'Cash', 'Bank Transfer'));
 
 -- Each role has exactly the links it needs: branch staff belong to a branch,
 -- guests to a guest profile, admins to neither (they are global)

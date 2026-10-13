@@ -33,6 +33,7 @@
   - [x] Implement `get_db()` and `get_connection()` context managers for transactional execution
 - [x] **Security & Cryptography** (`backend/app/auth.py`)
   - [x] Implement bcrypt password hashing (`hash_password`) and verification (`verify_password`)
+  - [x] One password policy `validate_new_password` (8 characters to 72 bytes) + `DUMMY_PASSWORD_HASH` for timing-safe login (ISSUE-10)
   - [x] Implement JWT token creation (`create_access_token`) and verification (`decode_access_token`)
 - [x] **Authentication & RBAC Dependencies** (`backend/app/dependencies.py`)
   - [x] Implement `get_current_user` OAuth2 Bearer token extractor
@@ -48,6 +49,7 @@
 
 - [x] **Auth Router** (`backend/app/routers/auth.py`)
   - [x] `POST /api/auth/login` (credential validation, JWT token return)
+  - [x] Case-insensitive emails (`NormEmail`, unique `LOWER(email)` index) and failed-login / signup rate limits → 429 (ISSUE-10)
   - [x] `POST /api/auth/register` (account creation with role handling)
   - [x] `GET /api/auth/me` (current authenticated profile retrieval)
 - [x] **Golden Template Room Router** (`backend/app/routers/rooms.py`)
@@ -69,7 +71,7 @@
   - [x] Review Sheereen's PR: Rate/tax functions, bill UPSERT & payments
   - [x] Review Chamika's PR: Service catalog, guest CRUD & price snapshot trigger
   - [x] Review Sadeepa's PR: 5 management views & reporting endpoints
-- [ ] **System Verification & Smoke Tests**
-  - [ ] Execute `db/run_all.sql` cleanly against local PostgreSQL instance
-  - [ ] Validate complete OpenAPI contract at `/docs`
-  - [ ] Verify frontend authentication flow and role guard integration
+- [x] **System Verification & Smoke Tests** (TASKLIST tasks 15–16, 2026-10-12)
+  - [x] Execute `db/run_all.sql` cleanly against local PostgreSQL instance: fresh builds with `ON_ERROR_STOP=1`, 225 tests + `test_phase4` pass
+  - [x] Validate complete OpenAPI contract at `/docs`: `/docs` serves OpenAPI 3.1 with 39 operations; roles and error codes checked against `02_api_contract.md` (task 17)
+  - [x] Verify frontend authentication flow and role guard integration: headless-browser login as every role; wrong-role routes redirect to the role's home, signed-out users go to `/login?next=`

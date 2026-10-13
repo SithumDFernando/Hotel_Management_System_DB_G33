@@ -15,6 +15,9 @@
 --      Steps:
 --        a. Lock the booking row (FOR UPDATE) so concurrent check-ins run one
 --           after another; validate status = 'Booked'. Raise exception otherwise.
+--           Also (ISSUE-08): not before check_in_date (no early check-in),
+--           not once check_out_date is reached, not while the room is
+--           under Maintenance.
 --        b. Update booking:
 --             SET status = 'Checked-In',
 --                 actual_checkin_time = NOW()
@@ -50,13 +53,18 @@ CREATE OR REPLACE PROCEDURE perform_checkin(p_booking_id UUID)
 LANGUAGE plpgsql
 AS $$
 DECLARE
-    v_status  booking_status;
+    v_status      booking_status;
+    v_ci          DATE;
+    v_co          DATE;
+    v_room_status room_status;
 BEGIN
     -- A concurrent second check-in waits here, then sees 'Checked-In'
-    SELECT status INTO v_status
-      FROM booking
-     WHERE booking_id = p_booking_id
-       FOR UPDATE;
+    SELECT b.status, b.check_in_date, b.check_out_date, r.status
+      INTO v_status, v_ci, v_co, v_room_status
+      FROM booking b
+      JOIN room r ON r.room_id = b.room_id
+     WHERE b.booking_id = p_booking_id
+       FOR UPDATE OF b;
 
     IF NOT FOUND THEN
         RAISE EXCEPTION 'Booking not found';
@@ -64,6 +72,20 @@ BEGIN
 
     IF v_status <> 'Booked' THEN
         RAISE EXCEPTION 'Only Booked bookings can be checked in';
+    END IF;
+
+    -- No early check-in: the room would show Occupied and charges would
+    -- cover the wrong period
+    IF CURRENT_DATE < v_ci THEN
+        RAISE EXCEPTION 'Check-in is not allowed before %', v_ci;
+    END IF;
+
+    IF CURRENT_DATE >= v_co THEN
+        RAISE EXCEPTION 'This booking''s stay period has already ended';
+    END IF;
+
+    IF v_room_status = 'Maintenance' THEN
+        RAISE EXCEPTION 'Room is under maintenance';
     END IF;
 
     UPDATE booking 

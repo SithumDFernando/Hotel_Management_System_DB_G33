@@ -57,11 +57,14 @@ CREATE OR REPLACE FUNCTION trg_check_double_booking()
 RETURNS TRIGGER
 LANGUAGE plpgsql
 AS $$
+DECLARE
+    v_room_number VARCHAR;
 BEGIN
     IF NEW.status NOT IN ('Cancelled', 'Checked-Out') THEN
         -- Serialize concurrent bookings for the same room: a second
-        -- transaction waits here until the first commits, then sees its row
-        PERFORM 1 FROM room WHERE room_id = NEW.room_id FOR UPDATE;
+        -- transaction waits here until the first commits, then sees its row.
+        -- The room number (not the UUID) goes into the message the API shows.
+        SELECT room_number INTO v_room_number FROM room WHERE room_id = NEW.room_id FOR UPDATE;
 
         IF EXISTS (
             SELECT 1
@@ -72,7 +75,7 @@ BEGIN
               AND check_in_date < NEW.check_out_date
               AND check_out_date > NEW.check_in_date
         ) THEN
-            RAISE EXCEPTION 'Room % is already booked for the selected dates.', NEW.room_id;
+            RAISE EXCEPTION 'Room % is already booked for the selected dates.', v_room_number;
         END IF;
     END IF;
 

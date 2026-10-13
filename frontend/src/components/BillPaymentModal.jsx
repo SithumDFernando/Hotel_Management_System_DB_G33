@@ -1,28 +1,33 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { generateBill, getBill, getPayments, recordPayment } from '@/api/billing';
 import BillTable from '@/components/BillTable';
 import Button from '@/components/ui/Button';
-import Icon from '@/components/ui/Icon';
 import { Modal } from '@/components/ui/Modal';
 import { ErrorState, InlineAlert, Skeleton } from '@/components/ui/States';
 import { useToast } from '@/components/ui/Toast';
-import { bookingRef, errorMessage, formatCurrency, formatDate } from '@/utils/formatters';
+import { bookingRef, errorMessage, fieldErrors, formatCurrency, formatNumericDate } from '@/utils/formatters';
 
 const METHODS = ['Cash', 'Credit Card', 'Bank Transfer'];
 
 // Staff billing view for one booking: (re)generates the bill, shows charges and
-// payment history, records payments. booking = BookingListOut.
+// payment history, takes payments. booking = BookingListOut.
 // onChanged() fires after any change so the caller can refresh; onCheckout()
 // (optional) shows a "Check out now" action once the balance is settled.
-export default function BillPaymentModal({ booking, onClose, onChanged, onCheckout }) {
+// notice (optional): shown as an error banner, e.g. the 402 from a check-out;
+// the amount field is focused when it's set.
+export default function BillPaymentModal({ booking, onClose, onChanged, onCheckout, notice }) {
   const toast = useToast();
   const [state, setState] = useState({ loading: true });
   const [discount, setDiscount] = useState('');
+  const [showDiscount, setShowDiscount] = useState(false);
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState('Cash');
   const [notes, setNotes] = useState('');
   const [amountError, setAmountError] = useState('');
+  const [discountError, setDiscountError] = useState('');
   const [busy, setBusy] = useState(false);
+  const amountRef = useRef(null);
+  const guestName = booking.guest.full_name;
 
   const load = useCallback(
     async (regenerate, discountValue) => {
@@ -33,8 +38,10 @@ export default function BillPaymentModal({ booking, onClose, onChanged, onChecko
         setState({ bill, payments });
         setAmount(Number(bill.outstanding_balance) > 0 ? String(Number(bill.outstanding_balance).toFixed(2)) : '');
         setDiscount(Number(bill.discount_amount) > 0 ? String(Number(bill.discount_amount)) : '');
+        return bill;
       } catch (err) {
         setState({ error: errorMessage(err) });
+        return null;
       }
     },
     [booking.booking_id],
@@ -48,15 +55,38 @@ export default function BillPaymentModal({ booking, onClose, onChanged, onChecko
   const { bill, payments } = state;
   const outstanding = bill ? Number(bill.outstanding_balance) : 0;
   const settled = bill && outstanding <= 0;
+  const canPay = bill && !settled && booking.status !== 'Cancelled';
+
+  // Opened from a 402 on check-out: go straight to the amount.
+  useEffect(() => {
+    if (notice && canPay) amountRef.current?.focus();
+  }, [notice, canPay]);
+
+  const focusPayment = () => {
+    amountRef.current?.focus();
+    amountRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  };
 
   const applyDiscount = async () => {
     const d = Number(discount || 0);
-    if (!Number.isFinite(d) || d < 0) return toast.error('Enter a valid discount amount.');
+    if (!Number.isFinite(d) || d < 0) return setDiscountError('Enter a discount of 0 or more.');
+    setDiscountError('');
     setBusy(true);
-    await load(true, d);
-    onChanged?.();
-    toast.success('Bill recalculated');
-    setBusy(false);
+    try {
+      // generateBill errors (e.g. discount larger than the subtotal) surface under the field.
+      const updated = await generateBill(booking.booking_id, d);
+      const fresh = await getPayments(booking.booking_id);
+      setState({ bill: updated, payments: fresh });
+      setAmount(Number(updated.outstanding_balance) > 0 ? String(Number(updated.outstanding_balance).toFixed(2)) : '');
+      onChanged?.();
+      toast.success(`Bill recalculated for ${guestName} with a ${formatCurrency(updated.discount_amount)} discount`);
+      setShowDiscount(false);
+    } catch (err) {
+      setDiscountError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+    return undefined;
   };
 
   const submitPayment = async (e) => {
@@ -74,18 +104,17 @@ export default function BillPaymentModal({ booking, onClose, onChanged, onChecko
         payment_method: method,
         notes: notes.trim() || null,
       });
-      toast.success(`Payment of ${formatCurrency(value)} recorded`);
+      toast.success(`Payment taken: ${formatCurrency(value)} by ${method}, ${guestName}`);
       setNotes('');
       await load(false);
       onChanged?.();
     } catch (err) {
-      setAmountError(errorMessage(err));
+      setAmountError(fieldErrors(err).amount || errorMessage(err));
     } finally {
       setBusy(false);
     }
+    return undefined;
   };
-
-  const canPay = bill && !settled && booking.status !== 'Cancelled';
 
   const printFolio = () => {
     document.body.classList.add('print-folio');
@@ -97,24 +126,25 @@ export default function BillPaymentModal({ booking, onClose, onChanged, onChecko
     window.print();
   };
 
+  const room = `${booking.room.type_name ? `${booking.room.type_name} ` : ''}${booking.room.room_number}`;
+  const editable = booking.status !== 'Checked-Out' && booking.status !== 'Cancelled';
+
   return (
     <Modal
       open
       printable
       onClose={onClose}
       size="lg"
-      title={`Bill · ${booking.guest.full_name}`}
-      subtitle={`${bookingRef(booking.booking_id)} · ${booking.room.type_name || ''} Room ${booking.room.room_number} · ${formatDate(booking.check_in_date)} – ${formatDate(booking.check_out_date)}`}
+      title={`Bill · ${guestName}, ${room}`}
+      subtitle={`${bookingRef(booking.booking_id)} · ${formatNumericDate(booking.check_in_date)} → ${formatNumericDate(booking.check_out_date)}`}
       footer={
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex gap-2">
-            <Button variant="ghost" onClick={onClose}>Close</Button>
-            {bill && <Button variant="outline" onClick={printFolio}><Icon name="print" /> Print folio</Button>}
+            <Button variant="secondary" onClick={onClose}>Close</Button>
+            {bill && <Button variant="ghost" onClick={printFolio}>Print bill</Button>}
           </div>
           {settled && onCheckout && booking.status === 'Checked-In' && (
-            <Button onClick={() => onCheckout(booking)}>
-              <Icon name="logout" /> Check out now
-            </Button>
+            <Button onClick={() => onCheckout(booking)}>Check out now</Button>
           )}
         </div>
       }
@@ -125,65 +155,91 @@ export default function BillPaymentModal({ booking, onClose, onChanged, onChecko
         <ErrorState message={state.error} onRetry={() => { setState({ loading: true }); load(booking.status !== 'Checked-Out'); }} />
       ) : (
         <div className="space-y-6">
-          <BillTable bill={bill} payments={payments} />
+          {notice && canPay && <div className="print-hide"><InlineAlert>{notice}</InlineAlert></div>}
 
-          {booking.status !== 'Checked-Out' && booking.status !== 'Cancelled' && (
-            <section aria-label="Discount" className="print-hide rounded-xl border border-navy-100 p-4">
-              <label htmlFor="discount" className="label">Discount (LKR)</label>
-              <div className="flex gap-2">
-                <input id="discount" type="number" min="0" step="0.01" className="input" placeholder="0.00" value={discount} onChange={(e) => setDiscount(e.target.value)} />
-                <Button variant="outline" onClick={applyDiscount} disabled={busy}>Apply</Button>
-              </div>
-              <p className="mt-1 text-[11px] text-navy-400">Applied before tax. Recalculates the bill.</p>
+          <BillTable bill={bill} payments={payments} booking={booking} onTakePayment={canPay ? focusPayment : undefined} />
+
+          {editable && (
+            <section aria-label="Discount" className="print-hide border-t border-ink-100 pt-4">
+              {showDiscount ? (
+                <div>
+                  <label htmlFor="discount" className="label">Discount (LKR)</label>
+                  <div className="flex gap-2">
+                    <input
+                      id="discount"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      className="input max-w-xs"
+                      placeholder="0.00"
+                      value={discount}
+                      onChange={(e) => { setDiscount(e.target.value); setDiscountError(''); }}
+                      aria-invalid={Boolean(discountError)}
+                      aria-describedby={discountError ? 'discount-error' : 'discount-help'}
+                    />
+                    <Button variant="secondary" onClick={applyDiscount} loading={busy}>Apply discount</Button>
+                    <Button variant="ghost" onClick={() => { setShowDiscount(false); setDiscountError(''); }}>Cancel</Button>
+                  </div>
+                  {discountError ? (
+                    <p id="discount-error" role="alert" className="mt-1.5 text-[13px] text-signal-700">{discountError}</p>
+                  ) : (
+                    <p id="discount-help" className="mt-1.5 text-2xs text-ink-600">Applied before tax. The bill is recalculated.</p>
+                  )}
+                </div>
+              ) : (
+                <Button variant="secondary" size="sm" onClick={() => setShowDiscount(true)}>Apply discount</Button>
+              )}
             </section>
           )}
 
           {canPay ? (
-            <form onSubmit={submitPayment} noValidate className="print-hide rounded-xl bg-navy-50 p-4">
-              <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold">
-                <Icon name="card" className="h-4 w-4 text-gold-700" /> Record new payment
-              </h3>
-              <div className="grid gap-3 sm:grid-cols-2">
+            <form onSubmit={submitPayment} noValidate className="print-hide border-t border-ink-100 pt-4" aria-labelledby="take-payment">
+              <h3 id="take-payment" className="mb-3 text-sm font-semibold text-ink-900">Take payment</h3>
+              <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <label htmlFor="pay-amount" className="label">Amount (LKR)</label>
-                  <div className="relative">
-                    <input
-                      id="pay-amount"
-                      type="number"
-                      min="0.01"
-                      step="0.01"
-                      className={`input pr-28 ${amountError ? '!border-red-400' : ''}`}
-                      value={amount}
-                      onChange={(e) => { setAmount(e.target.value); setAmountError(''); }}
-                      aria-invalid={Boolean(amountError)}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => { setAmount(outstanding.toFixed(2)); setAmountError(''); }}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-gold-300 px-2.5 py-1 text-[11px] font-semibold text-navy-900 hover:bg-gold-400"
-                    >
-                      Pay full balance
-                    </button>
+                  <input
+                    ref={amountRef}
+                    id="pay-amount"
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    className={`input tabular ${amountError ? 'border-signal-700' : ''}`}
+                    value={amount}
+                    onChange={(e) => { setAmount(e.target.value); setAmountError(''); }}
+                    aria-invalid={Boolean(amountError)}
+                    aria-describedby={amountError ? 'pay-amount-error pay-amount-help' : 'pay-amount-help'}
+                  />
+                  {amountError && <p id="pay-amount-error" role="alert" className="mt-1.5 text-[13px] text-signal-700">{amountError}</p>}
+                  <p id="pay-amount-help" className="mt-1.5 text-2xs text-ink-600">
+                    Balance due {formatCurrency(outstanding)}.{' '}
+                    {Number(amount) !== outstanding && (
+                      <button type="button" className="rounded-sm text-tea-700 underline" onClick={() => { setAmount(outstanding.toFixed(2)); setAmountError(''); }}>
+                        Use full balance
+                      </button>
+                    )}
+                  </p>
+                </div>
+                <fieldset>
+                  <legend className="label">Method</legend>
+                  <div className="flex flex-wrap gap-x-4 gap-y-2 pt-1">
+                    {METHODS.map((m) => (
+                      <label key={m} className="flex items-center gap-2 text-sm text-ink-900">
+                        <input type="radio" name="pay-method" value={m} checked={method === m} onChange={() => setMethod(m)} className="h-4 w-4 accent-tea-700" />
+                        {m}
+                      </label>
+                    ))}
                   </div>
-                </div>
-                <div>
-                  <label htmlFor="pay-method" className="label">Method</label>
-                  <select id="pay-method" className="input" value={method} onChange={(e) => setMethod(e.target.value)}>
-                    {METHODS.map((m) => <option key={m}>{m}</option>)}
-                  </select>
-                </div>
+                </fieldset>
                 <div className="sm:col-span-2">
-                  <label htmlFor="pay-notes" className="label">Notes (optional)</label>
-                  <input id="pay-notes" className="input" maxLength={255} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="e.g. Partial payment at check-in" />
+                  <label htmlFor="pay-notes" className="label">Note (optional)</label>
+                  <input id="pay-notes" className="input" maxLength={255} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="e.g. Part payment at check-in" />
                 </div>
               </div>
-              {amountError && <p role="alert" className="mt-2 text-xs text-red-600">{amountError}</p>}
-              <Button type="submit" className="mt-4 w-full" loading={busy}>
-                <Icon name="check" /> Record payment
-              </Button>
+              <Button type="submit" className="mt-4" loading={busy}>Take payment</Button>
             </form>
           ) : (
-            settled && <InlineAlert tone="success">This bill is fully settled.</InlineAlert>
+            settled && <div className="print-hide"><InlineAlert tone="info">This bill is fully paid.</InlineAlert></div>
           )}
         </div>
       )}
