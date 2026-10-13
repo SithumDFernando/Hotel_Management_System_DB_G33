@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { getRooms } from '@/api/rooms';
 import { getBranches } from '@/api/auth';
+import useAuth from '@/hooks/useAuth';
 import useFetch from '@/hooks/useFetch';
 import RoomCard from '@/components/RoomCard';
 import StaySearch from '@/components/StaySearch';
@@ -11,6 +12,9 @@ import { calculateNights, formatStayRange } from '@/utils/formatters';
 
 // Job: a guest (or a receptionist in ?mode=booking) narrows the list to rooms free
 // for their dates and picks one.
+// Branch staff (receptionist, manager) only see their own branch: the API refuses
+// their bookings anywhere else. With dates set they also see that branch's rooms
+// that are already booked, listed after the free ones with booking disabled.
 
 const SORTS = [
   { key: 'recommended', label: 'Recommended' },
@@ -41,6 +45,8 @@ function CardSkeleton() {
 
 export default function RoomsBrowse() {
   const [params, setParams] = useSearchParams();
+  const { user } = useAuth();
+  const staffBranchId = ['receptionist', 'manager'].includes(user?.role) ? user.branch_id || null : null;
 
   // All filters live in the URL so searches are shareable and survive back/forward.
   const value = {
@@ -74,51 +80,69 @@ export default function RoomsBrowse() {
   const rooms = useFetch(
     // Without dates this is the catalogue: room.status is tonight's occupancy, so
     // filtering on it would hide rooms that are free on other dates.
-    (signal) => getRooms(datesValid ? { check_in: value.check_in, check_out: value.check_out } : {}, signal),
-    [datesValid, value.check_in, value.check_out],
+    async (signal) => {
+      const branch = { branch_id: staffBranchId };
+      if (!datesValid) return { free: await getRooms(branch, signal), booked: [] };
+      const dated = { ...branch, check_in: value.check_in, check_out: value.check_out };
+      if (!staffBranchId) return { free: await getRooms(dated, signal), booked: [] };
+      // The dated search drops rooms with an overlapping booking; the branch's full
+      // list minus that result is what is booked for these dates.
+      const [free, every] = await Promise.all([getRooms(dated, signal), getRooms(branch, signal)]);
+      const freeIds = new Set(free.map((r) => r.room_id));
+      return { free, booked: every.filter((r) => !freeIds.has(r.room_id)) };
+    },
+    [datesValid, value.check_in, value.check_out, staffBranchId],
     { failMessage: "Couldn't load rooms." },
   );
 
   const branchList = branches.data?.branches || [];
-  const all = useMemo(() => (rooms.data || []).filter((r) => r.status !== 'Maintenance'), [rooms.data]);
+  // undefined for guests (branch filter stays), null while staff's branch loads.
+  const myBranch = staffBranchId ? branchList.find((b) => b.branch_id === staffBranchId) || null : undefined;
+  const city = staffBranchId ? myBranch?.city || '' : value.city;
+  const all = useMemo(() => (rooms.data?.free || []).filter((r) => r.status !== 'Maintenance'), [rooms.data]);
+  const bookedRooms = useMemo(() => (rooms.data?.booked || []).filter((r) => r.status !== 'Maintenance'), [rooms.data]);
 
-  const types = useMemo(() => [...new Set(all.map((r) => r.room_type.type_name))].sort(), [all]);
+  const types = useMemo(() => [...new Set([...all, ...bookedRooms].map((r) => r.room_type.type_name))].sort(), [all, bookedRooms]);
   const amenityOptions = useMemo(() => {
     const names = new Set();
-    all.forEach((r) => r.amenities.forEach((a) => names.add(a.amenity_name)));
+    [...all, ...bookedRooms].forEach((r) => r.amenities.forEach((a) => names.add(a.amenity_name)));
     return [...names].sort();
-  }, [all]);
+  }, [all, bookedRooms]);
 
+  // Staff rooms are already limited to their branch by the API.
+  const matches = (r) =>
+    r.room_type.capacity >= Number(value.guests) &&
+    (!value.type || r.room_type.type_name === value.type) &&
+    (Boolean(staffBranchId) || !value.city || r.branch.city === value.city) &&
+    amenitySel.every((a) => r.amenities.some((x) => x.amenity_name === a));
   const visible = useMemo(
-    () =>
-      all
-        .filter(
-          (r) =>
-            r.room_type.capacity >= Number(value.guests) &&
-            (!value.type || r.room_type.type_name === value.type) &&
-            (!value.city || r.branch.city === value.city) &&
-            amenitySel.every((a) => r.amenities.some((x) => x.amenity_name === a)),
-        )
-        .sort(sorters[sort] || sorters.recommended),
+    () => all.filter(matches).sort(sorters[sort] || sorters.recommended),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [all, value.guests, value.type, value.city, amenitySel.join('|'), sort],
+    [all, value.guests, value.type, value.city, staffBranchId, amenitySel.join('|'), sort],
+  );
+  const visibleBooked = useMemo(
+    () => bookedRooms.filter(matches).sort(sorters[sort] || sorters.recommended),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [bookedRooms, value.guests, value.type, amenitySel.join('|'), sort],
   );
 
   const toggleAmenity = (a) => update({}, amenitySel.includes(a) ? amenitySel.filter((x) => x !== a) : [...amenitySel, a]);
-  const filtersActive = value.city || value.type || amenitySel.length || value.guests !== '1' || value.check_in;
+  const filtersActive = (!staffBranchId && value.city) || value.type || amenitySel.length || value.guests !== '1' || value.check_in;
   const clearAll = () => setParams(bookingMode ? { mode: 'booking' } : {}, { replace: true });
 
   // Live context line: "12 rooms free in Kandy, 14/11–16/11" or "All rooms".
-  const where = value.city ? ` in ${value.city}` : '';
+  const where = city ? ` in ${city}` : '';
   const range = formatStayRange(value.check_in, value.check_out);
   const n = visible.length;
+  const nBooked = visibleBooked.length;
+  const bookedNote = nBooked ? `, ${nBooked} booked` : '';
   const summary = rooms.isLoading
     ? 'Checking rooms…'
     : datesValid
-      ? `${n} ${n === 1 ? 'room' : 'rooms'} free${where}, ${range} (${nights} night${nights > 1 ? 's' : ''})`
+      ? `${n} ${n === 1 ? 'room' : 'rooms'} free${bookedNote}${where}, ${range} (${nights} night${nights > 1 ? 's' : ''})`
       : filtersActive
         ? `${n} ${n === 1 ? 'room' : 'rooms'}${where}. Choose dates to see which are free.`
-        : `All rooms. Choose dates to see which are free.`;
+        : `All rooms${where}. Choose dates to see which are free.`;
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
@@ -137,6 +161,7 @@ export default function RoomsBrowse() {
           types={types}
           value={value}
           showType
+          lockedBranch={myBranch}
           onChange={(v) => update(v)}
           error={datesInvalid ? 'Choose a check-out date after check-in.' : undefined}
         />
@@ -188,16 +213,31 @@ export default function RoomsBrowse() {
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {[...Array(6)].map((_, i) => <CardSkeleton key={i} />)}
           </div>
-        ) : visible.length === 0 ? (
-          <EmptyState
-            title={datesValid ? `No rooms free for ${range}${where}` : `No rooms match${where ? where : ' these filters'}`}
-            message={datesValid ? 'Try other dates or another branch.' : 'Remove a filter to see more rooms.'}
-            action={filtersActive ? <Button variant="secondary" onClick={clearAll}>Clear filters</Button> : null}
-          />
         ) : (
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {visible.map((r) => <RoomCard key={r.room_id} room={r} stay={value} />)}
-          </div>
+          <>
+            {visible.length === 0 ? (
+              <EmptyState
+                title={datesValid ? `No rooms free for ${range}${where}` : `No rooms match${where ? where : ' these filters'}`}
+                message={datesValid ? `Try other dates${staffBranchId ? '' : ' or another branch'}.` : 'Remove a filter to see more rooms.'}
+                action={filtersActive ? <Button variant="secondary" onClick={clearAll}>Clear filters</Button> : null}
+              />
+            ) : (
+              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                {visible.map((r) => <RoomCard key={r.room_id} room={r} stay={value} />)}
+              </div>
+            )}
+            {nBooked > 0 && (
+              <section aria-labelledby="booked-heading" className="mt-10">
+                <h2 id="booked-heading" className="text-base font-semibold text-ink-900">
+                  Booked for these dates <span className="tabular font-normal text-ink-600">· {nBooked}</span>
+                </h2>
+                <p className="mt-0.5 text-sm text-ink-600">Another booking overlaps {range}. Choose other dates to book one of these.</p>
+                <div className="mt-4 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                  {visibleBooked.map((r) => <RoomCard key={r.room_id} room={r} stay={value} booked />)}
+                </div>
+              </section>
+            )}
+          </>
         )}
       </div>
     </div>

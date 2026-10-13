@@ -12,11 +12,11 @@
 | `/rooms` | `RoomsBrowse` | Public | Browse available rooms with filters |
 | `/login` | `Login` | Public | Login form |
 | `/register` | `Register` | Public | Guest self-signup (`POST /api/auth/signup`), then auto sign-in |
-| `/my-bookings` | `MyBookings` | Guest | Own bookings (upcoming / past / cancelled), cancel `Booked`, view bill + services. A guest login with no linked guest profile sees a "contact the front desk" empty state instead (no API call). |
+| `/my-bookings` | `MyBookings` | Guest | Own bookings (upcoming / past / cancelled), cancel `Booked`, view bill + services, and a collapsed "Services during your stay" price list under Upcoming. A guest login with no linked guest profile sees a "contact the front desk" empty state instead (no API call). |
 | `/profile` | `Profile` | Any signed-in role | Account details; guests edit contact details (`PATCH /api/auth/profile`); everyone changes their password (`POST /api/auth/change-password`). Email and NIC/passport are read-only. |
 | `/booking/:roomId` | `BookingCheckout` | Guest, Receptionist, Manager | Booking form + summary |
 | `/services/:bookingId` | `ServiceRequest` | Receptionist, Manager | Add services to a checked-in booking |
-| `/dashboard/receptionist` | `ReceptionistDashboard` | Receptionist | "Today": departures, arrivals and in-house task lists; check-in/out, payments |
+| `/dashboard/receptionist` | `ReceptionistDashboard` | Receptionist | Tabs (`?tab=`): **Today** (departures, arrivals and in-house task lists; check-in/out, payments), **Rooms** (status counts by type, room list), **Guests** (directory, profile, edit), **Services** (price list) |
 | `/dashboard/manager` | `ManagerDashboard` | Manager | Overview, reports, rooms, service catalogue |
 | `/dashboard/admin` | `AdminDashboard` | Admin | Overview, branches, accounts, reports, bookings, rooms, service catalogue |
 
@@ -49,9 +49,10 @@
 - Room grid displaying `RoomCard` components
 - Each card shows: room type, capacity, daily rate, amenities; "Available for your dates" once dates are picked
 - "Book Now" button on each card → navigates to `/booking/:roomId`
+- **Branch staff** (receptionist, manager) see only their own branch: the branch field is fixed text ("Staff book rooms in their own branch.") and every request carries `branch_id`, since `POST /bookings` refuses other branches anyway. With dates they also get a **Booked for these dates** section after the free rooms: the branch's rooms missing from the dated result, each with an outlined "Booked" chip and a disabled "Book this room" button reading "Booked for these dates". The summary counts both ("1 room free, 2 booked in Colombo, …"). Guests and visitors are unchanged: all branches, booked rooms hidden.
 - Without dates the page is the catalogue: every room except `Maintenance`, headed "N rooms" with "Choose dates to check availability." `room.status` is tonight's occupancy, so it is **not** used to filter (an `Occupied` room is free on other dates). With dates the API's booking anti-join decides availability.
 
-**API calls:** `GET /api/rooms` (no dates) or `GET /api/rooms?check_in=&check_out=` (Maintenance rooms are hidden client-side in both)
+**API calls:** `GET /api/rooms` (no dates) or `GET /api/rooms?check_in=&check_out=` (Maintenance rooms are hidden client-side in both). Branch staff add `branch_id=` to both, and with dates also call `GET /api/rooms?branch_id=` to find the booked ones.
 
 **Components used:** `Navbar`, `RoomCard`
 
@@ -117,9 +118,11 @@
 
 ### 6. `ReceptionistDashboard.jsx`
 
-**Purpose:** The receptionist's landing page, "Today": a task list, not a KPI wall (spec 11 §8).
+**Purpose:** The receptionist's console. It lands on "Today": a task list, not a KPI wall (spec 11 §8).
 
-**Layout:** `h1` "Today" + date, a `SummaryStrip` (arrivals today, in-house, departures due, rooms available), one search box that filters every list, and a ghost Refresh with "Updated HH:MM". Then three stacked task tables (row cards on phones): **Departures due**, **Arrivals today**, **Staying on** (in-house guests not due out, so nobody is listed twice). **Upcoming arrivals** sit in a collapsed section below. Each row has one visible action (Check in / Check out primary, Add service secondary); the rest are in a `RowMenu` (⋯). A blocked check-in shows its reason as text in the row.
+**Tabs** (URL `?tab=`, underline `Tabs`): **Today** (default, no param), **Rooms**, **Guests**, **Services**. The header (`h1` = tab name, then the date on Today or one line of context on the others) keeps **Register guest** and **New booking** on every tab.
+
+**Today layout:** `h1` "Today" + date, a `SummaryStrip` (arrivals today, in-house, departures due, rooms available), one search box that filters every list, and a ghost Refresh with "Updated HH:MM". Then three stacked task tables (row cards on phones): **Departures due**, **Arrivals today**, **Staying on** (in-house guests not due out, so nobody is listed twice). **Upcoming arrivals** sit in a collapsed section below. Each row has one visible action (Check in / Check out primary, Add service secondary); the rest are in a `RowMenu` (⋯). A blocked check-in shows its reason as text in the row.
 
 **Sections:**
 
@@ -136,7 +139,13 @@
 
 Summary strip: arrivals, in-house, departures due, rooms available (`GET /rooms?status=Available`). There is no "balance due" figure because receptionists cannot call `/reports/*`, and the bookings list has no balance, so Departures always offer Check out (a 402 opens the payment window with "Balance due: LKR …. Take payment before checking out.").
 
-**Components used:** `Navbar`, `SummaryStrip`, `RowMenu`, `BillTable`, `BillPaymentModal`, `GuestFormDrawer`
+**Rooms tab** (`RoomStatusBoard`): `SummaryStrip` (rooms, available tonight, occupied with % of rooms in service, maintenance); a **By room type** table (type, sleeps, Available / Occupied / Maintenance / Total, with an "All types" total row); then every room with status filter tabs (All / Available / Occupied / Maintenance, with counts): room, type, rate, status chip, and for occupied rooms the in-house guest and departure date. Stacked rows on phones. Uses `GET /rooms?branch_id=` (no dates, so status is tonight's occupancy) and `GET /bookings?status=Checked-In`; no `/reports/*` access is needed.
+
+**Guests tab** (`GuestDirectory`): debounced search (name, NIC/passport, email) over `GET /guests?search=`, 15 per page. **Open profile** opens a drawer from `GET /guests/:id`: details, then the booking history (room, branch, dates, reference, status). **Edit details** opens `GuestFormDrawer` in edit mode (`PUT /guests/:id`, "Save changes", toast "Saved: {name}"); a 409 shows the server's duplicate message. Guest profiles are shared by all branches, so the list is not branch-scoped. Empty optional fields are left unchanged (the API ignores nulls).
+
+**Services tab** (`ServicePriceList searchable`): active services by category with prices (`GET /services`), read-only. Services are still added from an in-house guest's row (`/services/:bookingId`).
+
+**Components used:** `Navbar`, `Tabs`, `SummaryStrip`, `RowMenu`, `BillTable`, `BillPaymentModal`, `GuestFormDrawer`, `RoomStatusBoard`, `GuestDirectory`, `ServicePriceList`
 
 ---
 
@@ -205,7 +214,7 @@ Shared UI primitives (Button, Badge, Modal/Drawer, Toast, Tabs, Pagination, Summ
 |------|-----------|
 | Public (not logged in) | Home, Rooms, Sign in |
 | Guest | Home, Rooms, My bookings, Profile, Sign out |
-| Receptionist | Today, Rooms, New booking, Profile, Sign out |
+| Receptionist | Today, Rooms (`?tab=rooms`), Guests (`?tab=guests`), New booking, Profile, Sign out |
 | Manager | Overview, Reports, Profile, Sign out |
 | Admin | Overview, Branches, Accounts, Reports, Profile, Sign out |
 

@@ -1,5 +1,5 @@
 import { useEffect, useId, useState } from 'react';
-import { createGuest, searchGuests } from '@/api/guests';
+import { createGuest, searchGuests, updateGuest } from '@/api/guests';
 import { errorMessage, fieldErrors } from '@/utils/formatters';
 import Button from '@/components/ui/Button';
 import Icon from '@/components/ui/Icon';
@@ -11,8 +11,9 @@ import { useToast } from '@/components/ui/Toast';
 const EMPTY = { full_name: '', nic_passport: '', email: '', phone: '', nationality: '', date_of_birth: '', company_name: '' };
 
 // Register-guest drawer, reused by the booking flow and the front-desk dashboard.
+// guest (optional): edit that profile instead (PUT /guests/:id); onCreated gets the saved guest.
 // onFindExisting(nic) (optional): on a 409 duplicate, offer to search for that guest instead.
-export function GuestFormDrawer({ open, onClose, onCreated, onFindExisting }) {
+export function GuestFormDrawer({ open, onClose, onCreated, onFindExisting, guest = null }) {
   const toast = useToast();
   const [f, setF] = useState(EMPTY);
   const [corporate, setCorporate] = useState(false);
@@ -23,12 +24,14 @@ export function GuestFormDrawer({ open, onClose, onCreated, onFindExisting }) {
 
   useEffect(() => {
     if (open) {
-      setF(EMPTY);
-      setCorporate(false);
+      // Prefill from the profile being edited; nulls become empty inputs.
+      setF(guest ? Object.fromEntries(Object.keys(EMPTY).map((k) => [k, guest[k] ?? ''])) : EMPTY);
+      setCorporate(guest?.guest_type === 'Corporate');
       setErrors({});
       setServerError('');
       setDuplicate(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
@@ -48,7 +51,7 @@ export function GuestFormDrawer({ open, onClose, onCreated, onFindExisting }) {
     setServerError('');
     setDuplicate(false);
     try {
-      const guest = await createGuest({
+      const payload = {
         full_name: f.full_name.trim(),
         nic_passport: f.nic_passport.trim(),
         email: f.email.trim(),
@@ -57,9 +60,10 @@ export function GuestFormDrawer({ open, onClose, onCreated, onFindExisting }) {
         date_of_birth: f.date_of_birth || null,
         guest_type: corporate ? 'Corporate' : 'Individual',
         company_name: corporate ? f.company_name.trim() : null,
-      });
-      toast.success(`Registered: ${guest.full_name}`);
-      onCreated(guest);
+      };
+      const saved = guest ? await updateGuest(guest.guest_id, payload) : await createGuest(payload);
+      toast.success(`${guest ? 'Saved' : 'Registered'}: ${saved.full_name}`);
+      onCreated(saved);
       onClose();
     } catch (err) {
       const fields = fieldErrors(err);
@@ -75,12 +79,12 @@ export function GuestFormDrawer({ open, onClose, onCreated, onFindExisting }) {
     <Drawer
       open={open}
       onClose={onClose}
-      title="Register new guest"
-      subtitle="Create a guest profile for a walk-in or phone booking."
+      title={guest ? `Edit guest · ${guest.full_name}` : 'Register new guest'}
+      subtitle={guest ? 'Correct contact or ID details. Bookings and bills keep this guest.' : 'Create a guest profile for a walk-in or phone booking.'}
       footer={
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" form="guest-form" loading={busy}>Register guest</Button>
+          <Button type="submit" form="guest-form" loading={busy}>{guest ? 'Save changes' : 'Register guest'}</Button>
         </div>
       }
     >
@@ -88,7 +92,7 @@ export function GuestFormDrawer({ open, onClose, onCreated, onFindExisting }) {
         {serverError && (
           <InlineAlert>
             {serverError}
-            {duplicate && ' Open the existing guest instead.'}
+            {duplicate && !guest && ' Open the existing guest instead.'}
             {duplicate && onFindExisting && (
               <div className="mt-2">
                 <Button variant="secondary" size="sm" onClick={() => { onFindExisting(f.nic_passport.trim()); onClose(); }}>

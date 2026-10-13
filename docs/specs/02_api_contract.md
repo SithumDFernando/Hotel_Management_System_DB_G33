@@ -306,8 +306,38 @@ Staff accounts get `branch_name` (manager/receptionist) and `guest: null`.
 ### GET `/api/guests/:guest_id`
 > Receptionist, Manager, Admin, or the guest themselves
 
+**Response (200):** `GuestOut` plus `bookings`, newest check-in first. `branch_name` is included because room numbers repeat across branches.
+```json
+{
+  "guest_id": "uuid-...",
+  "full_name": "Kamal Perera",
+  "...": "other GuestOut fields",
+  "bookings": [
+    {
+      "booking_id": "uuid-...",
+      "room_id": "uuid-...",
+      "room_number": "302",
+      "branch_name": "SkyNest Galle",
+      "check_in_date": "2026-10-05",
+      "check_out_date": "2026-10-07",
+      "rate_at_booking": 5500.0,
+      "status": "Booked",
+      "payment_option": "Cash",
+      "actual_checkin_time": null,
+      "actual_checkout_time": null
+    }
+  ]
+}
+```
+
+**Errors:** `403` a guest asking for another guest's profile · `404` no such guest
+
 ### PUT `/api/guests/:guest_id`
 > Receptionist, Admin (managers get `403`)
+
+Partial update with the `POST` fields and limits; fields that are missing or `null` are left unchanged. Setting `guest_type` to `Corporate` needs `company_name` in the same request. **Response (200):** `GuestOut`.
+
+**Errors:** `400 No fields provided for update.` · `404` no such guest · `409` NIC/passport or email already used by another guest · `422` invalid value
 
 ---
 

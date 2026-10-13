@@ -1,10 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { cancelBooking, checkInBooking, checkOutBooking, listBookings } from '@/api/bookings';
 import { getRooms } from '@/api/rooms';
 import useAuth from '@/hooks/useAuth';
 import useFetch from '@/hooks/useFetch';
 import BillPaymentModal from '@/components/BillPaymentModal';
+import GuestDirectory from '@/components/GuestDirectory';
 import { GuestFormDrawer } from '@/components/GuestPicker';
+import RoomStatusBoard from '@/components/RoomStatusBoard';
+import ServicePriceList from '@/components/ServicePriceList';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import Icon from '@/components/ui/Icon';
@@ -13,6 +17,7 @@ import Pagination from '@/components/ui/Pagination';
 import RowMenu from '@/components/ui/RowMenu';
 import { EmptyState, ErrorState, Skeleton } from '@/components/ui/States';
 import SummaryStrip from '@/components/ui/SummaryStrip';
+import Tabs from '@/components/ui/Tabs';
 import { useToast } from '@/components/ui/Toast';
 import {
   bookingRef, calculateNights, errorMessage, formatCurrency, formatNumericDate, formatStayRange, todayISO,
@@ -29,10 +34,70 @@ const balanceDueMessage = (err) => {
     : 'There is a balance due. Take payment before checking out.';
 };
 
-// Spec 11 §8: the receptionist lands on Today, a task list (departures due,
-// arrivals, in-house) with one visible action per row.
+const TABS = [
+  { key: 'today', label: 'Today' },
+  { key: 'rooms', label: 'Rooms' },
+  { key: 'guests', label: 'Guests' },
+  { key: 'services', label: 'Services' },
+];
+
+const SUBTITLES = {
+  rooms: 'Tonight’s status for every room in your branch.',
+  guests: 'Guest profiles are shared by all three hotels.',
+  services: 'Prices are the same at every branch. Add a service from an in-house guest’s row on Today.',
+};
+
+// Front-desk console. Tabs (URL ?tab=): Today (the landing task list), Rooms,
+// Guests and Services. Branch scoping is applied server-side from the JWT.
 export default function ReceptionistDashboard() {
   const { user } = useAuth();
+  const [params, setParams] = useSearchParams();
+  const tab = TABS.some((t) => t.key === params.get('tab')) ? params.get('tab') : 'today';
+  const [guestDrawer, setGuestDrawer] = useState(false);
+  // Bumped when a guest is registered, so the Guests list reloads.
+  const [registered, setRegistered] = useState(0);
+
+  const setTab = (t) => {
+    const next = new URLSearchParams(params);
+    if (t === 'today') next.delete('tab');
+    else next.set('tab', t);
+    setParams(next, { replace: true });
+  };
+
+  return (
+    <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold text-ink-900">{TABS.find((t) => t.key === tab).label}</h1>
+          <p className="mt-0.5 text-sm text-ink-600">
+            {tab === 'today'
+              ? new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+              : SUBTITLES[tab]}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" onClick={() => setGuestDrawer(true)}>Register guest</Button>
+          <Button variant="secondary" to="/rooms?mode=booking">New booking</Button>
+        </div>
+      </header>
+
+      <Tabs idBase="desk" tabs={TABS} value={tab} onChange={setTab} className="mb-6 mt-3" />
+
+      <div role="tabpanel" id={`desk-panel-${tab}`} aria-labelledby={`desk-tab-${tab}`}>
+        {tab === 'today' && <TodayPanel branchId={user.branch_id} />}
+        {tab === 'rooms' && <RoomStatusBoard branchId={user.branch_id} />}
+        {tab === 'guests' && <GuestDirectory registerSignal={registered} />}
+        {tab === 'services' && <ServicePriceList searchable />}
+      </div>
+
+      <GuestFormDrawer open={guestDrawer} onClose={() => setGuestDrawer(false)} onCreated={() => setRegistered((n) => n + 1)} />
+    </div>
+  );
+}
+
+// Spec 11 §8: the receptionist lands on Today, a task list (departures due,
+// arrivals, in-house) with one visible action per row.
+function TodayPanel({ branchId }) {
   const toast = useToast();
   const today = todayISO();
 
@@ -41,11 +106,9 @@ export default function ReceptionistDashboard() {
   const [billNotice, setBillNotice] = useState('');
   const [checkoutFor, setCheckoutFor] = useState(null);
   const [cancelFor, setCancelFor] = useState(null);
-  const [guestDrawer, setGuestDrawer] = useState(false);
   const [busyId, setBusyId] = useState(null);
   const [updatedAt, setUpdatedAt] = useState(null);
 
-  // Branch scoping is applied server-side from the JWT.
   const bookings = useFetch(async (signal) => {
     const [booked, inHouse] = await Promise.all([
       listBookings({ status: 'Booked' }, signal),
@@ -53,7 +116,7 @@ export default function ReceptionistDashboard() {
     ]);
     return { booked: booked.bookings, inHouse: inHouse.bookings };
   }, [], { failMessage: "Couldn't load today's bookings." });
-  const rooms = useFetch((s) => getRooms({ branch_id: user.branch_id, status: 'Available' }, s), [user.branch_id]);
+  const rooms = useFetch((s) => getRooms({ branch_id: branchId, status: 'Available' }, s), [branchId]);
 
   useEffect(() => {
     if (bookings.data) setUpdatedAt(new Date());
@@ -196,22 +259,8 @@ export default function ReceptionistDashboard() {
   const sectionProps = { loading, rowActions, blockedReason, flags, today };
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold text-ink-900">Today</h1>
-          <p className="mt-0.5 text-sm text-ink-600">
-            {new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" onClick={() => setGuestDrawer(true)}>Register guest</Button>
-          <Button variant="secondary" to="/rooms?mode=booking">New booking</Button>
-        </div>
-      </header>
-
+    <>
       <SummaryStrip
-        className="mt-4"
         items={[
           { label: 'Arrivals today', value: lists.arrivals.length, loading },
           { label: 'In-house', value: lists.inhouse.length, loading },
@@ -324,9 +373,7 @@ export default function ReceptionistDashboard() {
           </p>
         )}
       </Modal>
-
-      <GuestFormDrawer open={guestDrawer} onClose={() => setGuestDrawer(false)} onCreated={() => {}} />
-    </div>
+    </>
   );
 }
 

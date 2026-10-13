@@ -10,14 +10,15 @@ export const amenityList = (amenities = []) =>
   amenities.map((a) => `${a.count > 1 ? `${a.count}× ` : ''}${a.amenity_name}`).join(', ');
 
 // room: RoomOut from GET /api/rooms (nested). `stay` = { check_in, check_out, guests }.
-export default function RoomCard({ room, stay = {} }) {
+// booked: another booking overlaps the chosen dates (front desk sees these, guests don't).
+export default function RoomCard({ room, stay = {}, booked = false }) {
   const reasonId = useId();
   const { room_type: type, branch } = room;
   const nights = calculateNights(stay.check_in, stay.check_out);
   const hasDates = nights > 0;
   // room.status is tonight's occupancy, not future availability: an Occupied
   // room can still be booked for other dates (checked at checkout).
-  const bookable = room.status !== 'Maintenance';
+  const bookable = room.status !== 'Maintenance' && !booked;
 
   const q = new URLSearchParams();
   if (hasDates) {
@@ -36,7 +37,8 @@ export default function RoomCard({ room, stay = {} }) {
         <div className="flex items-start justify-between gap-3">
           <h3 className="text-base font-semibold text-ink-900">{title}</h3>
           {hasDates && bookable && <Badge status="Available">Free for your dates</Badge>}
-          {!bookable && <Badge status="Maintenance" />}
+          {booked && <Badge status="Booked" />}
+          {!booked && !bookable && <Badge status="Maintenance" />}
         </div>
         <p className="mt-0.5 text-sm text-ink-600">
           {branch.name} · Sleeps {type.capacity}
@@ -60,7 +62,7 @@ export default function RoomCard({ room, stay = {} }) {
           ) : (
             <div className="text-right">
               <Button size="sm" disabled aria-describedby={reasonId}>Book this room</Button>
-              <p id={reasonId} className="mt-1 text-2xs text-ink-600">Under maintenance</p>
+              <p id={reasonId} className="mt-1 text-2xs text-ink-600">{booked ? 'Booked for these dates' : 'Under maintenance'}</p>
             </div>
           )}
         </div>

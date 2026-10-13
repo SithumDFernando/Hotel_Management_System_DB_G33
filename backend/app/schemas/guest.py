@@ -126,6 +126,7 @@ class BookingSummary(BaseModel):
     booking_id: UUID
     room_id: UUID
     room_number: str
+    branch_name: Optional[str] = None  # room numbers repeat across branches
     check_in_date: date
     check_out_date: date
     rate_at_booking: float

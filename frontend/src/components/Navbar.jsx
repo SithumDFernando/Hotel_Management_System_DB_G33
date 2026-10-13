@@ -24,7 +24,8 @@ const NAV = {
   ],
   receptionist: [
     { to: '/dashboard/receptionist', label: 'Today' },
-    { to: '/rooms', label: 'Rooms' },
+    { to: '/dashboard/receptionist?tab=rooms', label: 'Rooms' },
+    { to: '/dashboard/receptionist?tab=guests', label: 'Guests' },
     { to: '/rooms?mode=booking', label: 'New booking' },
   ],
   manager: [

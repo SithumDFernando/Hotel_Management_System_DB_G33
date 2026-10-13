@@ -6,7 +6,9 @@ import useAuth from '@/hooks/useAuth';
 import useFetch from '@/hooks/useFetch';
 import BillTable from '@/components/BillTable';
 import BookingSummary from '@/components/BookingSummary';
+import ServicePriceList from '@/components/ServicePriceList';
 import Button from '@/components/ui/Button';
+import Icon from '@/components/ui/Icon';
 import { Modal } from '@/components/ui/Modal';
 import { EmptyState, ErrorState, InlineAlert, Skeleton } from '@/components/ui/States';
 import Tabs from '@/components/ui/Tabs';
@@ -165,6 +167,22 @@ export default function MyBookings() {
             </BookingSummary>
           ))}
         </div>
+      )}
+
+      {/* Guests can't add services themselves (staff-only); this says what exists and what it costs. */}
+      {!noProfile && !error && tab === 'upcoming' && grouped.upcoming.length > 0 && (
+        <details className="group mt-8 rounded-lg border border-ink-100 bg-paper-50">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-lg px-4 py-3 text-sm font-medium text-ink-900">
+            Services during your stay
+            <Icon name="chevronDown" className="h-4 w-4 text-ink-600 transition-transform group-open:rotate-180" />
+          </summary>
+          <div className="border-t border-ink-100 px-4 py-4">
+            <p className="mb-4 text-sm text-ink-600">
+              Ask the front desk for any of these while you’re checked in. They’re added to your bill at these prices, before tax.
+            </p>
+            <ServicePriceList />
+          </div>
+        </details>
       )}
 
       {billFor && <BillModal booking={billFor} onClose={() => setBillFor(null)} />}

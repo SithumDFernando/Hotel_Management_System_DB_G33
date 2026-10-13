@@ -30,7 +30,7 @@ Every mock account uses the password `SkyNest@2026`. The full list of emails and
 
 | Member       | Contribution                                                                                  |
 | :----------- | :-------------------------------------------------------------------------------------------- |
-| **Sithum**   | Core Technical Architecrue, Shemas, Indexes, Auth, Frontend, CI/CD pipeline, cloud deployment |
+| **Sithum**   | Core Technical Architecrue, Shemas, Indexes, Auth, Frontend, CI/CD pipeline, containerization |
 | **Vinuji**   | Reservations and front desk: bookings, check-in/out, double-booking prevention                |
 | **Sheereen** | Billing and payments: rate calculation, invoices, payment recording                           |
 | **Chamika**  | Rooms, amenities and services: service requests, price-lock trigger                           |

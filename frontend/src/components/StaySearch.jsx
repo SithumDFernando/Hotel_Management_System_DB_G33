@@ -4,7 +4,8 @@ import Button from '@/components/ui/Button';
 
 // Shared stay search form (Home opening + Rooms filter bar).
 // value: { city, type, check_in, check_out, guests }
-export default function StaySearch({ branches = [], types = [], value, onChange, onSubmit, submitLabel = 'Check availability', showType = false, compact = false, error }) {
+// lockedBranch (branch staff): the branch is fixed and shown, not chosen.
+export default function StaySearch({ branches = [], types = [], value, onChange, onSubmit, submitLabel = 'Check availability', showType = false, compact = false, error, lockedBranch }) {
   const today = todayISO();
   const errorId = useId();
   const set = (patch) => {
@@ -25,15 +26,26 @@ export default function StaySearch({ branches = [], types = [], value, onChange,
       }}
       className={`grid items-start gap-3 sm:grid-cols-2 ${cols}`}
     >
-      <label className="block">
-        <span className="label">Branch</span>
-        <select className="input" value={value.city || ''} onChange={(e) => set({ city: e.target.value })}>
-          <option value="">All branches</option>
-          {branches.map((b) => (
-            <option key={b.branch_id} value={b.city}>{b.city} · {b.name}</option>
-          ))}
-        </select>
-      </label>
+      {lockedBranch !== undefined ? (
+        // Shown as text, not a disabled select: disabled text is too faint to read.
+        <div>
+          <span className="label">Branch</span>
+          <p className="input truncate bg-paper-200 text-ink-900">
+            {lockedBranch ? `${lockedBranch.city} · ${lockedBranch.name}` : 'Your branch'}
+          </p>
+          <span className="mt-1 block text-2xs text-ink-600">Staff book rooms in their own branch.</span>
+        </div>
+      ) : (
+        <label className="block">
+          <span className="label">Branch</span>
+          <select className="input" value={value.city || ''} onChange={(e) => set({ city: e.target.value })}>
+            <option value="">All branches</option>
+            {branches.map((b) => (
+              <option key={b.branch_id} value={b.city}>{b.city} · {b.name}</option>
+            ))}
+          </select>
+        </label>
+      )}
 
       {showType && (
         <label className="block">
