@@ -12,9 +12,10 @@ Developed for **University of Moratuwa — Semester 3 Database Project (Group 33
 Follow this reading order to get started smoothly:
 
 1. **[README.md](README.md)** (this file) — Overview of the hotel system, team responsibilities, and Git rules.
-2. **[docs/SETUP.md](docs/SETUP.md)** — Detailed local development setup instructions:
+2. **[docs/SETUP.md](docs/SETUP.md)** — Detailed setup & deployment instructions:
    - **Docker (Recommended)**: Run `setup.bat`, `.\setup.ps1`, or `docker compose up --build` (database, pgAdmin, backend, and frontend).
    - **Native**: Run `scripts/native/setup.bat` or follow manual setup steps.
+   - **AWS EC2 Cloud Deployment**: Step-by-step guide to deploying the Docker stack on an Ubuntu EC2 instance.
 3. **[docs/work/learn.md](docs/work/learn.md)** — Beginner guide covering DBMS concepts, viva theory, REST architecture, and design patterns.
 4. **[docs/work/architecture.md](docs/work/architecture.md)** — 3-tier architecture, vertical slicing, and subsystem interaction.
 5. **Your Assigned Subsystem Guide** — Read your personal guide linked in the table below.
@@ -126,12 +127,19 @@ Once seed data is loaded (`db/run_all.sql` or Docker compose initialization), al
 | Email | Password | Role | Branch / Scope | Description & Permissions |
 | :--- | :--- | :--- | :--- | :--- |
 | `admin@skynest.lk` | `SkyNest@2026` | `ADMIN` | Global (All Branches) | Superuser: branch setup, user management, full audit reports |
+| `admin.ops@skynest.lk` | `SkyNest@2026` | `ADMIN` | Global (All Branches) | Second admin (demo data) |
 | `mgr.colombo@skynest.lk` | `SkyNest@2026` | `MANAGER` | Colombo | Colombo branch manager: revenue, occupancy analytics & reports |
 | `mgr.kandy@skynest.lk` | `SkyNest@2026` | `MANAGER` | Kandy | Kandy branch manager: revenue, occupancy analytics & reports |
+| `mgr.galle@skynest.lk` | `SkyNest@2026` | `MANAGER` | Galle | Galle branch manager (demo data) |
 | `rec.colombo@skynest.lk` | `SkyNest@2026` | `RECEPTIONIST` | Colombo | Colombo front desk: room assignment, check-in/out, folios & bills |
+| `rec2.colombo@skynest.lk` | `SkyNest@2026` | `RECEPTIONIST` | Colombo | Second Colombo desk (demo data) |
+| `rec.kandy@skynest.lk` | `SkyNest@2026` | `RECEPTIONIST` | Kandy | Kandy front desk (demo data) |
 | `rec.galle@skynest.lk` | `SkyNest@2026` | `RECEPTIONIST` | Galle | Galle front desk: room assignment, check-in/out, folios & bills |
 | `kamal@mail.com` | `SkyNest@2026` | `GUEST` | Guest Profile (Kamal) | Individual guest: catalog browsing, room bookings & invoices |
 | `nimali@mail.com` | `SkyNest@2026` | `GUEST` | Guest Profile (Nimali) | Individual guest: catalog browsing, room bookings & invoices |
+| `ruwan@mail.com`, `kasun@mail.com`, `sanduni@mail.com`, `dilan@mail.com`, `tharindu@mail.com`, `ishara@mail.com`, `travel@ceylontea.lk` | `SkyNest@2026` | `GUEST` | One guest profile each | Demo-data guests, one per scenario; see [docs/specs/07_seed_data.md](docs/specs/07_seed_data.md#demo-data-demo_datasql) |
+
+Demo data (`db/seed/demo_data.sql`) is dated from the day the database is built. Rebuild it on the day you test; the step-by-step manual test guide is [docs/work/manual_testing/MANUAL_TESTING_GUIDE.md](docs/work/manual_testing/MANUAL_TESTING_GUIDE.md).
 
 > [!TIP]
 > **One-Click Demo Logins:** On the web login screen ([`http://localhost:5173/login`](http://localhost:5173/login) or [`http://localhost:8080/login`](http://localhost:8080/login)), click any of the **Demo Account chips** (Admin, Manager, Reception, Guest) to immediately autofill credentials and sign in.
@@ -287,6 +295,13 @@ The database initialization script runs only on an empty volume. Wipe the volume
 ```bash
 docker compose down -v && docker compose up --build
 ```
+
+### Q: 503 "The database is out of date", or a 500 with `procedure … does not exist`?
+Your Docker `pgdata` volume was created before the latest changes in `db/`. `db/docker/init.sh` (which runs `db/run_all.sql`) only runs when the volume is **empty**, so pulling new SQL doesn't update an existing database. The backend checks this at startup: its log shows a `DATABASE SCHEMA IS OUT OF DATE` block listing what's missing, and http://localhost:8000/api/health returns 503 with the same list. Rebuild (this wipes local data and reloads the seed):
+```bash
+docker compose down -v && docker compose up --build
+```
+Don't patch the old volume by applying single `.sql` files: it is usually missing several constraints, triggers and indexes, and a partial patch matches no version of the repo.
 
 ### Q: `uvicorn` fails with `ValidationError: DATABASE_URL field required` (Native mode)?
 You forgot to create the backend `.env` file! Copy it from `.env.example`:

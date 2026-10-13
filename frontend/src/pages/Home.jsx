@@ -5,23 +5,30 @@ import { getBranches } from '@/api/auth';
 import useFetch from '@/hooks/useFetch';
 import Photo from '@/components/Photo';
 import StaySearch from '@/components/StaySearch';
-import { amenityIcon } from '@/components/RoomCard';
-import Button from '@/components/ui/Button';
 import Icon from '@/components/ui/Icon';
 import { ErrorState, Skeleton } from '@/components/ui/States';
-import { branchMedia, HERO_IMAGE, ROOM_TYPE_BLURB, roomImage } from '@/lib/media';
+import { branchMedia, OPENING_IMAGE } from '@/lib/media';
 import { addDays, formatCurrency, todayISO } from '@/utils/formatters';
+
+// Job: a visitor sees SkyNest is three real hotels (Colombo, Kandy, Galle) and checks
+// availability in one step (spec 11 §7.1). The search is the page's one primary action.
+
+const amenityText = (amenities = []) => {
+  const names = amenities.map((a) => a.amenity_name);
+  if (names.length <= 4) return names.join(', ');
+  return `${names.slice(0, 4).join(', ')} and ${names.length - 4} more`;
+};
 
 export default function Home() {
   const navigate = useNavigate();
   const [search, setSearch] = useState({ city: '', check_in: todayISO(), check_out: addDays(todayISO(), 2), guests: '2' });
 
-  const branches = useFetch((s) => getBranches(s), []);
+  const branches = useFetch((s) => getBranches(s), [], { failMessage: "Couldn't load our hotels." });
   const rooms = useFetch((s) => getRooms({}, s), []);
 
   const branchList = branches.data?.branches || [];
 
-  // "From LKR x" per branch, and one highlight card per room type.
+  // "From LKR x" per branch, and one row per room type.
   const { minByBranch, typeHighlights } = useMemo(() => {
     const all = (rooms.data || []).filter((r) => r.status !== 'Maintenance');
     const minByBranch = {};
@@ -43,107 +50,138 @@ export default function Home() {
 
   return (
     <>
-      <section className="relative isolate overflow-hidden bg-navy-900 text-white">
-        <Photo src={HERO_IMAGE} className="absolute inset-0 -z-10 opacity-50">
-          <div className="absolute inset-0 bg-gradient-to-b from-navy-900/70 via-navy-900/40 to-navy-900" />
-        </Photo>
-        <div className="mx-auto max-w-5xl px-4 pb-44 pt-24 text-center sm:px-6 sm:pt-32">
-          <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-gold-200 backdrop-blur">
-            <Icon name="star" className="h-3 w-3" /> Sri Lanka’s boutique collection
-          </span>
-          <h1 className="mt-6 text-5xl font-semibold leading-tight sm:text-6xl">Stay above the ordinary</h1>
-          <p className="mx-auto mt-5 max-w-2xl text-lg text-navy-100">
-            Handcrafted boutique sanctuaries across Sri Lanka’s oceanfronts, historic ramparts and misty mountain highlands.
+      {/* Opening: name, one plain sentence, the availability search; photo beside, never behind. */}
+      <section className="mx-auto grid max-w-7xl gap-8 px-4 pb-16 pt-10 sm:px-6 lg:grid-cols-[1.15fr_1fr] lg:items-center lg:gap-12 lg:pt-16">
+        <div>
+          <h1 className="font-display text-[36px] font-semibold leading-tight text-ink-900 sm:text-[48px]">SkyNest Hotels</h1>
+          <p className="mt-3 max-w-xl text-lg text-ink-600">
+            Three hotels in Colombo, Kandy and Galle. Check a date and book a room online.
           </p>
-          <div className="mt-8 flex flex-wrap justify-center gap-3">
-            <Button to="/rooms" size="lg">Browse rooms <Icon name="arrowRight" /></Button>
-            <a href="#branches" className="inline-flex items-center gap-2 rounded-xl bg-white/10 px-6 py-3 text-sm font-semibold backdrop-blur hover:bg-white/20">
-              Explore our branches
-            </a>
+          <div className="card mt-8 p-4">
+            <StaySearch branches={branchList} value={search} onChange={setSearch} onSubmit={submit} compact />
           </div>
         </div>
+        <Photo src={OPENING_IMAGE.image} alt={OPENING_IMAGE.alt} aspect="4/3" eager className="rounded-lg" />
       </section>
 
-      <div className="relative z-10 mx-auto -mt-32 max-w-6xl px-4 sm:px-6">
-        <div className="card p-5 shadow-lift sm:p-6">
-          <StaySearch branches={branchList} value={search} onChange={setSearch} onSubmit={submit} submitLabel="Search availability" />
-        </div>
-      </div>
+      {/* Three branches: same layout for each; only photo and sentence differ. */}
+      {!(branches.data && branchList.length === 0) && (
+        <section id="branches" aria-labelledby="branches-title" className="mx-auto max-w-7xl px-4 py-16 sm:px-6">
+          <h2 id="branches-title" className="font-display text-[32px] font-semibold leading-tight">Our hotels</h2>
 
-      <section id="branches" className="mx-auto max-w-7xl px-4 pt-20 sm:px-6">
-        <p className="eyebrow">Our branches</p>
-        <h2 className="mt-1 text-4xl font-semibold">Three landscapes, one standard of calm</h2>
-
-        {branches.error ? (
-          <div className="mt-8"><ErrorState message={branches.error} onRetry={branches.refetch} /></div>
-        ) : (
-          <div className="mt-8 grid gap-6 md:grid-cols-3">
-            {branches.isLoading
-              ? [...Array(3)].map((_, i) => <Skeleton key={i} className="h-96 rounded-2xl" />)
-              : branchList.map((b) => {
-                  const m = branchMedia(b.city);
-                  const from = minByBranch[b.branch_id];
-                  return (
-                    <article key={b.branch_id} className="card group overflow-hidden transition hover:-translate-y-0.5 hover:shadow-lift">
-                      <Photo src={m.image} alt={b.name} className="h-48">
-                        <span className="absolute left-3 top-3 rounded-full bg-white/90 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider">
-                          {m.tag}
-                        </span>
-                      </Photo>
-                      <div className="p-5">
-                        <h3 className="text-2xl font-semibold">{b.name}</h3>
-                        <p className="mt-2 text-xs text-navy-500"><Icon name="mapPin" className="mr-1 inline h-3.5 w-3.5" />{b.address}</p>
-                        <p className="mt-1 text-xs text-navy-500"><Icon name="phone" className="mr-1 inline h-3.5 w-3.5" />{b.phone}</p>
-                        <p className="mt-3 text-sm text-navy-600">{m.blurb}</p>
-                        <div className="mt-4 flex items-center justify-between border-t border-navy-100 pt-4 text-sm">
-                          <span className="text-xs text-navy-500">
-                            {Number.isFinite(from) ? <>Rooms from <strong className="text-navy-900">{formatCurrency(from)}</strong></> : ' '}
-                          </span>
-                          <Link to={`/rooms?city=${encodeURIComponent(b.city)}`} className="inline-flex items-center gap-1 font-semibold text-gold-700 hover:underline">
-                            View rooms <Icon name="arrowRight" className="h-3.5 w-3.5" />
-                          </Link>
-                        </div>
+          {branches.error ? (
+            <div className="mt-8"><ErrorState message={branches.error} onRetry={branches.refetch} /></div>
+          ) : (
+            <div className="mt-8 grid gap-6 md:grid-cols-3">
+              {branches.isLoading
+                ? [...Array(3)].map((_, i) => (
+                    <div key={i} className="rounded-lg border border-ink-100 bg-paper-50">
+                      <Skeleton className="aspect-[3/2] w-full rounded-b-none rounded-t-lg" />
+                      <div className="space-y-2 p-5">
+                        <Skeleton className="h-7 w-32" />
+                        <Skeleton className="h-4 w-48" />
+                        <Skeleton className="h-4 w-40" />
                       </div>
-                    </article>
-                  );
-                })}
-          </div>
-        )}
-      </section>
-
-      {typeHighlights.length > 0 && (
-        <section className="mx-auto max-w-7xl px-4 pt-20 sm:px-6">
-          <p className="eyebrow">Room types</p>
-          <h2 className="mt-1 text-4xl font-semibold">A room for every kind of stay</h2>
-          <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-            {typeHighlights.map((t) => (
-              <Link key={t.name} to={`/rooms?type=${encodeURIComponent(t.name)}`} className="card group overflow-hidden transition hover:-translate-y-0.5 hover:shadow-lift">
-                <Photo src={roomImage(t.name)} alt={t.name} className="h-36" />
-                <div className="p-4">
-                  <h3 className="text-lg font-semibold">{t.name}</h3>
-                  <p className="mt-0.5 text-xs text-navy-500">Up to {t.capacity} guest{t.capacity > 1 ? 's' : ''} · from {formatCurrency(t.min)}</p>
-                  <p className="mt-2 text-xs text-navy-600">{ROOM_TYPE_BLURB[t.name]}</p>
-                  <div className="mt-3 flex gap-1.5 text-navy-400">
-                    {t.amenities.slice(0, 5).map((a) => (
-                      <span key={a.amenity_name} title={a.amenity_name}><Icon name={amenityIcon(a.amenity_name)} className="h-4 w-4" /></span>
-                    ))}
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
+                    </div>
+                  ))
+                : branchList.map((b) => {
+                    const m = branchMedia(b.city);
+                    const from = minByBranch[b.branch_id];
+                    return (
+                      <article key={b.branch_id} className="flex flex-col rounded-lg border border-ink-100 bg-paper-50">
+                        <Photo src={m.image} alt={m.alt} aspect="3/2" className="rounded-t-lg" />
+                        <div className="flex flex-1 flex-col p-5">
+                          <h3 className="font-display text-2xl font-semibold leading-tight">{b.city}</h3>
+                          <p className="text-sm text-ink-600">{b.name}</p>
+                          {m.blurb && <p className="mt-3 text-sm text-ink-900">{m.blurb}</p>}
+                          <address className="mb-4 mt-3 text-sm not-italic text-ink-600">
+                            <span className="block">{b.address}</span>
+                            {b.phone && (
+                              <a href={`tel:${b.phone.replace(/\s+/g, '')}`} className="rounded-sm hover:text-ink-900 hover:underline">
+                                {b.phone}
+                              </a>
+                            )}
+                          </address>
+                          <div className="mt-auto flex flex-col items-start gap-1 border-t border-ink-100 pt-4 text-sm">
+                            {Number.isFinite(from) ? (
+                              <span className="text-ink-600">
+                                Rooms from <strong className="font-semibold tabular text-ink-900">{formatCurrency(from)}</strong>
+                              </span>
+                            ) : null}
+                            <Link
+                              to={`/rooms?city=${encodeURIComponent(b.city)}`}
+                              className="inline-flex items-center gap-1 rounded-sm font-medium text-tea-700 hover:underline"
+                            >
+                              See rooms in {b.city} <Icon name="arrowRight" className="h-3.5 w-3.5" />
+                            </Link>
+                          </div>
+                        </div>
+                      </article>
+                    );
+                  })}
+            </div>
+          )}
         </section>
       )}
 
-      <section className="mx-auto mt-20 max-w-7xl px-4 sm:px-6">
-        <div className="flex flex-col items-start justify-between gap-6 rounded-3xl bg-navy-900 p-8 text-white sm:flex-row sm:items-center sm:p-12">
-          <div>
-            <h2 className="text-3xl font-semibold">Ready for your stay?</h2>
-            <p className="mt-2 max-w-lg text-navy-200">Check live availability across all three branches and book in under two minutes.</p>
-          </div>
-          <Button to="/rooms" size="lg">Browse rooms <Icon name="arrowRight" /></Button>
-        </div>
-      </section>
+      {/* Room types: compact list, amenities as text. Hidden on error (branches shows it). */}
+      {!rooms.error && (rooms.isLoading || typeHighlights.length > 0) && (
+        <section aria-labelledby="types-title" className="mx-auto max-w-7xl px-4 pb-8 pt-8 sm:px-6">
+          <h2 id="types-title" className="font-display text-[32px] font-semibold leading-tight">Room types</h2>
+
+          {rooms.isLoading ? (
+            <div className="mt-6 space-y-2">
+              {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
+            </div>
+          ) : (
+            <>
+              {/* sm and up: table */}
+              <div className="mt-6 hidden overflow-hidden rounded-lg border border-ink-100 bg-paper-50 sm:block">
+                <table className="w-full text-sm" aria-label="Room types">
+                  <thead className="bg-paper-200">
+                    <tr>
+                      <th scope="col" className="th">Room type</th>
+                      <th scope="col" className="th text-right">Sleeps</th>
+                      <th scope="col" className="th text-right">From, per night</th>
+                      <th scope="col" className="th">Amenities</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-ink-100">
+                    {typeHighlights.map((t) => (
+                      <tr key={t.name}>
+                        <td className="td">
+                          <Link to={`/rooms?type=${encodeURIComponent(t.name)}`} className="rounded-sm font-medium text-tea-700 hover:underline">
+                            {t.name}
+                          </Link>
+                        </td>
+                        <td className="td text-right tabular">{t.capacity}</td>
+                        <td className="td text-right tabular">{formatCurrency(t.min)}</td>
+                        <td className="td text-ink-600">{amenityText(t.amenities) || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* phone: stacked list */}
+              <ul className="mt-6 divide-y divide-ink-100 rounded-lg border border-ink-100 bg-paper-50 sm:hidden">
+                {typeHighlights.map((t) => (
+                  <li key={t.name} className="px-4 py-3">
+                    <Link to={`/rooms?type=${encodeURIComponent(t.name)}`} className="rounded-sm font-medium text-tea-700 hover:underline">
+                      {t.name}
+                    </Link>
+                    <dl className="mt-1 text-sm text-ink-600">
+                      <div className="flex gap-1"><dt>Sleeps</dt><dd className="tabular text-ink-900">{t.capacity}</dd></div>
+                      <div className="flex gap-1"><dt>From</dt><dd className="tabular text-ink-900">{formatCurrency(t.min)} per night</dd></div>
+                      {t.amenities?.length > 0 && <dd className="mt-1">{amenityText(t.amenities)}</dd>}
+                    </dl>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </section>
+      )}
     </>
   );
 }

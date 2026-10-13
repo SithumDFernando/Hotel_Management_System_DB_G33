@@ -6,7 +6,7 @@ import Button from '@/components/ui/Button';
 import { Input, Select } from '@/components/ui/Field';
 import { ErrorState, InlineAlert, Skeleton } from '@/components/ui/States';
 import { useToast } from '@/components/ui/Toast';
-import { errorMessage, passwordError } from '@/utils/formatters';
+import { errorMessage, fieldErrors, passwordError } from '@/utils/formatters';
 
 const ROLE_LABEL = { admin: 'Administrator', manager: 'Manager', receptionist: 'Receptionist', guest: 'Guest' };
 const GENDERS = ['Male', 'Female', 'Other'];
@@ -17,9 +17,9 @@ const fromGuest = (g) => Object.fromEntries(EDITABLE.map((k) => [k, g?.[k] ?? ''
 function ReadOnly({ label, value, hint }) {
   return (
     <div>
-      <dt className="text-[11px] font-semibold uppercase tracking-wider text-navy-400">{label}</dt>
-      <dd className="mt-0.5 text-sm font-semibold">{value || '—'}</dd>
-      {hint && <dd className="text-xs text-navy-400">{hint}</dd>}
+      <dt className="text-[13px] text-ink-600">{label}</dt>
+      <dd className="mt-0.5 text-sm font-medium text-ink-900">{value || '–'}</dd>
+      {hint && <dd className="mt-0.5 text-2xs text-ink-600">{hint}</dd>}
     </div>
   );
 }
@@ -50,28 +50,30 @@ function DetailsForm({ guest, onSaved }) {
     e.preventDefault();
     setServerError('');
     const v = {};
-    if (f.full_name.trim().length < 2) v.full_name = 'Enter your full name';
-    if (f.phone.replace(/\D/g, '').length < 7) v.phone = 'Enter a valid phone number';
+    if (f.full_name.trim().length < 2) v.full_name = 'Enter your full name.';
+    if (f.phone.replace(/\D/g, '').length < 7) v.phone = 'Enter a phone number with at least 7 digits.';
     setErrors(v);
     if (Object.keys(v).length || !dirty) return;
 
     setBusy(true);
     try {
       const saved = await updateProfile(changes);
-      toast.success('Profile updated');
+      toast.success(`Saved: personal details for ${saved.full_name}`);
       onSaved(saved);
     } catch (err) {
-      setServerError(errorMessage(err));
+      const fields = fieldErrors(err);
+      if (Object.keys(fields).length) setErrors(fields);
+      else setServerError(errorMessage(err));
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <form onSubmit={submit} noValidate className="card space-y-4 p-6">
+    <form onSubmit={submit} noValidate className="card space-y-4 p-4 sm:p-6" aria-labelledby="details-heading">
       <div>
-        <h2 className="text-xl font-semibold">Personal details</h2>
-        <p className="mt-1 text-xs text-navy-500">Used on your bookings and bills.</p>
+        <h2 id="details-heading" className="text-base font-semibold text-ink-900">Personal details</h2>
+        <p className="mt-1 text-[13px] text-ink-600">Used on your bookings and bills.</p>
       </div>
       {serverError && <InlineAlert>{serverError}</InlineAlert>}
 
@@ -88,7 +90,7 @@ function DetailsForm({ guest, onSaved }) {
         </Select>
       </div>
 
-      <dl className="grid gap-4 rounded-xl bg-navy-50 p-4 sm:grid-cols-2">
+      <dl className="grid gap-4 border-t border-ink-100 pt-4 sm:grid-cols-2">
         <ReadOnly label="Email" value={guest.email} hint="Your sign-in email. Ask the front desk to change it." />
         <ReadOnly label="NIC / Passport" value={guest.nic_passport} hint="Ask the front desk to change it." />
       </dl>
@@ -118,10 +120,10 @@ function PasswordForm() {
     e.preventDefault();
     setServerError('');
     const v = {};
-    if (!f.current) v.current = 'Enter your current password';
+    if (!f.current) v.current = 'Enter your current password.';
     if (passwordError(f.next)) v.next = passwordError(f.next);
-    else if (f.next === f.current) v.next = 'Choose a password different from the current one';
-    if (f.confirm !== f.next) v.confirm = 'Passwords do not match';
+    else if (f.next === f.current) v.next = 'Choose a password different from the current one.';
+    if (f.confirm !== f.next) v.confirm = 'This doesn’t match the new password.';
     setErrors(v);
     if (Object.keys(v).length) return;
 
@@ -131,15 +133,22 @@ function PasswordForm() {
       setF(empty);
       toast.success('Password changed. Use the new one next time you sign in.');
     } catch (err) {
-      setServerError(errorMessage(err));
+      // "Current password is incorrect." belongs under that field.
+      if (err.response?.status === 400 && /current password/i.test(err.response?.data?.detail || '')) {
+        setErrors({ current: errorMessage(err) });
+      } else {
+        const fields = fieldErrors(err);
+        if (fields.new_password) setErrors({ next: fields.new_password });
+        else setServerError(errorMessage(err));
+      }
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <form onSubmit={submit} noValidate className="card space-y-4 p-6">
-      <h2 className="text-xl font-semibold">Change password</h2>
+    <form onSubmit={submit} noValidate className="card space-y-4 p-4 sm:p-6" aria-labelledby="password-heading">
+      <h2 id="password-heading" className="text-base font-semibold text-ink-900">Change password</h2>
       {serverError && <InlineAlert>{serverError}</InlineAlert>}
       <Input label="Current password" type="password" required value={f.current} onChange={set('current')} error={errors.current} autoComplete="current-password" />
       <div className="grid gap-4 sm:grid-cols-2">
@@ -155,13 +164,13 @@ function PasswordForm() {
 
 export default function Profile() {
   const { user } = useAuth();
-  const { data, isLoading, error, refetch, setData } = useFetch((s) => getProfile(s), []);
+  const { data, isLoading, error, refetch, setData } = useFetch((s) => getProfile(s), [], { failMessage: "Couldn't load your profile." });
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
+    <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6">
       <header className="mb-6">
-        <p className="eyebrow">{ROLE_LABEL[user.role]} account</p>
-        <h1 className="mt-1 text-4xl font-semibold">Your profile</h1>
+        <h1 className="text-xl font-semibold text-ink-900">Your profile</h1>
+        <p className="mt-0.5 text-sm text-ink-600">{ROLE_LABEL[user.role]} account</p>
       </header>
 
       {error ? (
@@ -170,8 +179,8 @@ export default function Profile() {
         <div className="space-y-4"><Skeleton className="h-24 w-full" /><Skeleton className="h-64 w-full" /></div>
       ) : (
         <div className="space-y-6">
-          <section className="card p-6" aria-label="Account">
-            <h2 className="text-xl font-semibold">Account</h2>
+          <section className="card p-4 sm:p-6" aria-labelledby="account-heading">
+            <h2 id="account-heading" className="text-base font-semibold text-ink-900">Account</h2>
             <dl className="mt-4 grid gap-4 sm:grid-cols-3">
               <ReadOnly label="Sign-in email" value={data.email} />
               <ReadOnly label="Role" value={ROLE_LABEL[data.role] || data.role} />
@@ -182,7 +191,7 @@ export default function Profile() {
           {data.role === 'guest' && (data.guest ? (
             <DetailsForm guest={data.guest} onSaved={(guest) => setData((p) => ({ ...p, guest }))} />
           ) : (
-            <InlineAlert tone="warn">This account has no guest profile yet. Contact the front desk to set it up.</InlineAlert>
+            <InlineAlert tone="info">This account has no guest profile yet. Contact the front desk to set it up.</InlineAlert>
           ))}
 
           <PasswordForm />

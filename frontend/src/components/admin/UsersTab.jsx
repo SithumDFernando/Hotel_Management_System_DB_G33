@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createUser, listUsers, patchUser } from '@/api/admin';
 import useFetch from '@/hooks/useFetch';
-import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import Icon from '@/components/ui/Icon';
 import { Drawer } from '@/components/ui/Modal';
@@ -9,7 +8,7 @@ import { Field, Input, Select } from '@/components/ui/Field';
 import Pagination from '@/components/ui/Pagination';
 import { EmptyState, ErrorState, InlineAlert, Skeleton } from '@/components/ui/States';
 import { useToast } from '@/components/ui/Toast';
-import { errorMessage, initials, passwordError } from '@/utils/formatters';
+import { errorMessage, fieldErrors, passwordError } from '@/utils/formatters';
 
 const PAGE_SIZE = 10;
 const STAFF_ROLES = [
@@ -17,7 +16,7 @@ const STAFF_ROLES = [
   { value: 'manager', label: 'Manager', scope: 'Branch reports, room inventory, service catalogue and billing oversight for one branch.' },
   { value: 'admin', label: 'Administrator', scope: 'Full cross-branch authority: branches, users and all reports.' },
 ];
-const ROLE_TONE = { admin: 'navy', manager: 'blue', receptionist: 'amber', guest: 'gray' };
+const ROLE_LABEL = { admin: 'Administrator', manager: 'Manager', receptionist: 'Receptionist', guest: 'Guest' };
 
 function generatePassword(len = 14) {
   const sets = ['ABCDEFGHJKLMNPQRSTUVWXYZ', 'abcdefghijkmnopqrstuvwxyz', '23456789', '!@#$%&*?'];
@@ -58,9 +57,9 @@ function CreateDrawer({ open, onClose, branches, onSaved }) {
   const submit = async (e) => {
     e.preventDefault();
     const v = {};
-    if (!/^\S+@\S+\.\S+$/.test(f.email)) v.email = 'Enter a valid email';
+    if (!/^\S+@\S+\.\S+$/.test(f.email)) v.email = 'Enter an email address like name@skynest.lk.';
     if (passwordError(f.password)) v.password = passwordError(f.password);
-    if (needsBranch && !f.branch_id) v.branch_id = 'Select a branch';
+    if (needsBranch && !f.branch_id) v.branch_id = 'Choose the branch this account works at.';
     setErrors(v);
     if (Object.keys(v).length) return;
 
@@ -68,11 +67,13 @@ function CreateDrawer({ open, onClose, branches, onSaved }) {
     setServerError('');
     try {
       await createUser({ email: f.email.trim(), password: f.password, role: f.role, branch_id: needsBranch ? f.branch_id : null });
-      toast.success('Staff account created');
+      toast.success(`Created: staff account for ${f.email.trim()} (${ROLE_LABEL[f.role]})`);
       onSaved();
       setCreated({ email: f.email.trim(), password: f.password });
     } catch (err) {
-      setServerError(errorMessage(err));
+      const fields = fieldErrors(err);
+      if (Object.keys(fields).length) setErrors(fields);
+      else setServerError(errorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -92,13 +93,21 @@ function CreateDrawer({ open, onClose, branches, onSaved }) {
     >
       {created ? (
         <div className="space-y-4">
-          <InlineAlert tone="success">Account created. Share these credentials securely — the password is not shown again.</InlineAlert>
-          <div className="rounded-xl bg-navy-50 p-4 font-mono text-sm">
-            <p>{created.email}</p>
-            <p className="mt-1">{created.password}</p>
-          </div>
-          <Button variant="outline" onClick={() => navigator.clipboard?.writeText(`${created.email}\n${created.password}`).then(() => toast.success('Copied'))}>
-            <Icon name="download" /> Copy credentials
+          <p className="rounded-md bg-paper-200 px-4 py-3 text-sm text-ink-900">
+            This password is shown once. Share it with the staff member now.
+          </p>
+          <dl className="rounded-md border border-ink-100 px-4 py-3 font-mono text-sm text-ink-900">
+            <div><dt className="sr-only">Email</dt><dd>{created.email}</dd></div>
+            <div className="mt-1"><dt className="sr-only">Password</dt><dd>{created.password}</dd></div>
+          </dl>
+          <Button
+            variant="secondary"
+            onClick={() =>
+              navigator.clipboard?.writeText(`${created.email}\n${created.password}`)
+                .then(() => toast.success('Copied email and password'))
+                .catch(() => toast.error('Couldn’t copy. Select the text and copy it instead.'))}
+          >
+            Copy email and password
           </Button>
         </div>
       ) : (
@@ -109,8 +118,8 @@ function CreateDrawer({ open, onClose, branches, onSaved }) {
             <div className="relative">
               <input type={show ? 'text' : 'password'} autoComplete="new-password" className="input pr-24 font-mono" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} aria-label="Temporary password" />
               <div className="absolute right-1.5 top-1/2 flex -translate-y-1/2 gap-1">
-                <button type="button" onClick={() => setShow((s) => !s)} aria-label={show ? 'Hide password' : 'Show password'} className="rounded-lg p-1.5 text-navy-400 hover:text-navy-700"><Icon name={show ? 'eyeOff' : 'eye'} /></button>
-                <button type="button" onClick={() => { setF({ ...f, password: generatePassword() }); setShow(true); }} className="rounded-lg bg-gold-100 px-2 text-[11px] font-semibold text-gold-800 hover:bg-gold-200">Generate</button>
+                <button type="button" onClick={() => setShow((s) => !s)} aria-label={show ? 'Hide password' : 'Show password'} aria-pressed={show} className="rounded-md p-1.5 text-ink-600 hover:text-ink-900"><Icon name={show ? 'eyeOff' : 'eye'} /></button>
+                <button type="button" onClick={() => { setF({ ...f, password: generatePassword() }); setShow(true); }} className="rounded-md px-2 text-[13px] font-medium text-tea-700 hover:bg-tea-100">Generate</button>
               </div>
             </div>
           </Field>
@@ -123,9 +132,9 @@ function CreateDrawer({ open, onClose, branches, onSaved }) {
               {branches.map((b) => <option key={b.branch_id} value={b.branch_id}>{b.name}</option>)}
             </Select>
           )}
-          <div className="rounded-xl bg-gold-50 p-4 text-sm text-gold-900">
-            <p className="font-semibold">Access scope</p>
-            <p className="mt-1 text-xs">{role.scope}{needsBranch && branch ? ` Limited to ${branch.name}.` : ''}</p>
+          <div className="border-t border-ink-100 pt-3 text-sm">
+            <p className="font-medium text-ink-900">What this role can do</p>
+            <p className="mt-1 text-[13px] text-ink-600">{role.scope}{needsBranch && branch ? ` Limited to ${branch.name}.` : ''}</p>
           </div>
         </form>
       )}
@@ -161,7 +170,7 @@ function EditDrawer({ user, branches, onClose, onSaved }) {
     setBusy(true);
     try {
       await patchUser(user.account_id, payload);
-      toast.success('Account updated');
+      toast.success(`Saved: ${user.email} is now ${ROLE_LABEL[role]}${needsBranch ? ` at ${branches.find((b) => b.branch_id === branchId)?.name || 'the branch'}` : ''}`);
       onSaved();
       onClose();
     } catch (err) {
@@ -175,8 +184,8 @@ function EditDrawer({ user, branches, onClose, onSaved }) {
     <Drawer
       open={Boolean(user)}
       onClose={onClose}
-      title="Edit access"
-      subtitle={user?.email}
+      title={`Edit access · ${user?.email || ''}`}
+      subtitle="Role and branch for this account"
       footer={<div className="flex justify-end gap-2"><Button variant="ghost" onClick={onClose}>Cancel</Button><Button type="submit" form="edit-user-form" loading={busy}>Save changes</Button></div>}
     >
       <form id="edit-user-form" onSubmit={submit} className="space-y-4" noValidate>
@@ -190,14 +199,14 @@ function EditDrawer({ user, branches, onClose, onSaved }) {
             {branches.map((b) => <option key={b.branch_id} value={b.branch_id}>{b.name}</option>)}
           </Select>
         )}
-        <p className="text-xs text-navy-500">Changes apply the next time the user signs in.</p>
+        <p className="text-[13px] text-ink-600">Changes apply the next time the user signs in.</p>
       </form>
     </Drawer>
   );
 }
 
 export default function UsersTab({ branches }) {
-  const { data, isLoading, error, refetch } = useFetch((s) => listUsers(s), []);
+  const { data, isLoading, error, refetch } = useFetch((s) => listUsers(s), [], { failMessage: "Couldn't load accounts." });
   const [q, setQ] = useState('');
   const [role, setRole] = useState('');
   const [branch, setBranch] = useState('');
@@ -223,8 +232,8 @@ export default function UsersTab({ branches }) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative">
-            <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-navy-400" />
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search email or name…" aria-label="Search users" className="input w-60 pl-9" />
+            <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-600" />
+            <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Email or name" aria-label="Search accounts" className="input w-60 pl-9" />
           </div>
           <select aria-label="Filter by role" className="input !w-auto" value={role} onChange={(e) => setRole(e.target.value)}>
             <option value="">All roles</option>
@@ -235,44 +244,43 @@ export default function UsersTab({ branches }) {
             {branches.map((b) => <option key={b.branch_id} value={b.branch_id}>{b.name}</option>)}
           </select>
         </div>
-        <Button onClick={() => setCreating(true)}><Icon name="user" /> Create staff account</Button>
+        <Button onClick={() => setCreating(true)}>Create staff account</Button>
       </div>
 
       {error ? <ErrorState message={error} onRetry={refetch} /> : isLoading ? (
         <Skeleton className="h-64 w-full" />
       ) : rows.length === 0 ? (
-        <EmptyState icon="users" title="No users match" message="Adjust the search or filters." />
+        <EmptyState title="No accounts match" message="Clear the search or choose another role or branch." />
       ) : (
         <div className="card overflow-hidden">
-          <p className="border-b border-navy-100 px-4 py-2.5 text-xs text-navy-500">Showing {Math.min(rows.length, PAGE_SIZE)} of {rows.length} accounts</p>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[680px]">
-              <thead className="bg-navy-50"><tr><th className="th">User</th><th className="th">Role</th><th className="th">Branch</th><th className="th text-right">Actions</th></tr></thead>
-              <tbody className="divide-y divide-navy-100">
+          <div className="relative overflow-x-auto">
+            <table className="w-full min-w-[640px]" aria-label="Accounts">
+              <thead><tr className="bg-paper-200"><th scope="col" className="th">Account</th><th scope="col" className="th">Role</th><th scope="col" className="th">Branch</th><th scope="col" className="th"><span className="sr-only">Actions</span></th></tr></thead>
+              <tbody className="divide-y divide-ink-100">
                 {rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((u) => (
-                  <tr key={u.account_id} className="hover:bg-navy-50/50">
+                  <tr key={u.account_id} className="hover:bg-paper-100">
                     <td className="td">
-                      <div className="flex items-center gap-3">
-                        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-navy-900 text-[11px] font-bold text-gold-200">{initials(u.guest_name || u.email)}</span>
-                        <div><p className="font-semibold">{u.guest_name || u.email.split('@')[0]}</p><p className="text-xs text-navy-500">{u.email}</p></div>
-                      </div>
+                      <p className="font-medium text-ink-900">{u.guest_name || u.email.split('@')[0]}</p>
+                      <p className="text-2xs text-ink-600">{u.email}</p>
                     </td>
-                    <td className="td"><Badge tone={ROLE_TONE[u.role]}>{u.role}</Badge></td>
-                    <td className="td">{u.branch_name || (u.role === 'admin' ? 'Global (all branches)' : '—')}</td>
+                    <td className="td">{ROLE_LABEL[u.role] || u.role}</td>
+                    <td className="td">{u.branch_name || (u.role === 'admin' ? 'All branches' : '–')}</td>
                     <td className="td text-right">
-                      <Button size="sm" variant="outline" disabled={u.role === 'guest'} title={u.role === 'guest' ? 'Guest accounts are self-managed' : undefined} onClick={() => setEditing(u)}>
-                        <Icon name="edit" className="h-3.5 w-3.5" /> Edit role
-                      </Button>
+                      {u.role === 'guest' ? (
+                        <span className="text-2xs text-ink-600">Managed by the guest</span>
+                      ) : (
+                        <Button size="sm" variant="secondary" onClick={() => setEditing(u)} aria-label={`Edit access for ${u.email}`}>Edit access</Button>
+                      )}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          <div className="border-t border-navy-100"><Pagination page={page} pageSize={PAGE_SIZE} total={rows.length} onChange={setPage} /></div>
+          <div className="border-t border-ink-100"><Pagination page={page} pageSize={PAGE_SIZE} total={rows.length} onChange={setPage} /></div>
         </div>
       )}
-      <p className="text-xs text-navy-400">Accounts can’t be deleted — this preserves booking and payment audit history.</p>
+      <p className="text-2xs text-ink-600">Accounts can’t be deleted, so booking and payment history stays traceable.</p>
 
       <CreateDrawer open={creating} onClose={() => setCreating(false)} branches={branches} onSaved={refetch} />
       <EditDrawer user={editing} branches={branches} onClose={() => setEditing(null)} onSaved={refetch} />

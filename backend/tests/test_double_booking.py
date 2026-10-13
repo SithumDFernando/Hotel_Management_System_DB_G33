@@ -174,3 +174,5 @@ async def test_overlap_through_api_is_409(api, login):
                "check_out_date": "2031-06-06"}
     resp = await api.post("/bookings", json=overlap, headers=headers)
     assert resp.status_code == 409, resp.text
+    # The detail names the room number, never its UUID (UI-10)
+    assert resp.json()["detail"] == "Room 103 is already booked for the selected dates."

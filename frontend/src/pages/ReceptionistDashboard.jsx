@@ -1,7 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { cancelBooking, checkInBooking, checkOutBooking, listBookings } from '@/api/bookings';
 import { getRooms } from '@/api/rooms';
-import { getBranches } from '@/api/auth';
 import useAuth from '@/hooks/useAuth';
 import useFetch from '@/hooks/useFetch';
 import BillPaymentModal from '@/components/BillPaymentModal';
@@ -11,34 +10,40 @@ import Button from '@/components/ui/Button';
 import Icon from '@/components/ui/Icon';
 import { Modal } from '@/components/ui/Modal';
 import Pagination from '@/components/ui/Pagination';
-import StatCard from '@/components/ui/StatCard';
+import RowMenu from '@/components/ui/RowMenu';
 import { EmptyState, ErrorState, Skeleton } from '@/components/ui/States';
-import Tabs from '@/components/ui/Tabs';
+import SummaryStrip from '@/components/ui/SummaryStrip';
 import { useToast } from '@/components/ui/Toast';
 import {
-  bookingRef, calculateNights, errorMessage, formatDate, formatShortDate, todayISO,
+  bookingRef, calculateNights, errorMessage, formatCurrency, formatNumericDate, formatStayRange, todayISO,
 } from '@/utils/formatters';
 
 const PAGE_SIZE = 10;
 
-const greeting = () => {
-  const h = new Date().getHours();
-  return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
+// perform_checkout's 402 detail is "Outstanding balance of LKR 17250.00 — pay before checkout".
+// Spec 11 §9.1 wording, with the amount from the server.
+const balanceDueMessage = (err) => {
+  const amount = /LKR\s*([\d.,]+)/.exec(err.response?.data?.detail || '')?.[1]?.replace(/,/g, '');
+  return amount
+    ? `Balance due: ${formatCurrency(amount)}. Take payment before checking out.`
+    : 'There is a balance due. Take payment before checking out.';
 };
 
+// Spec 11 §8: the receptionist lands on Today, a task list (departures due,
+// arrivals, in-house) with one visible action per row.
 export default function ReceptionistDashboard() {
   const { user } = useAuth();
   const toast = useToast();
   const today = todayISO();
 
-  const [tab, setTab] = useState('arrivals');
   const [q, setQ] = useState('');
-  const [page, setPage] = useState(1);
   const [billFor, setBillFor] = useState(null);
+  const [billNotice, setBillNotice] = useState('');
   const [checkoutFor, setCheckoutFor] = useState(null);
   const [cancelFor, setCancelFor] = useState(null);
   const [guestDrawer, setGuestDrawer] = useState(false);
   const [busyId, setBusyId] = useState(null);
+  const [updatedAt, setUpdatedAt] = useState(null);
 
   // Branch scoping is applied server-side from the JWT.
   const bookings = useFetch(async (signal) => {
@@ -47,10 +52,12 @@ export default function ReceptionistDashboard() {
       listBookings({ status: 'Checked-In' }, signal),
     ]);
     return { booked: booked.bookings, inHouse: inHouse.bookings };
-  }, []);
+  }, [], { failMessage: "Couldn't load today's bookings." });
   const rooms = useFetch((s) => getRooms({ branch_id: user.branch_id, status: 'Available' }, s), [user.branch_id]);
-  const branches = useFetch((s) => getBranches(s), []);
-  const branch = branches.data?.branches.find((b) => b.branch_id === user.branch_id);
+
+  useEffect(() => {
+    if (bookings.data) setUpdatedAt(new Date());
+  }, [bookings.data]);
 
   const booked = bookings.data?.booked || [];
   const inHouse = bookings.data?.inHouse || [];
@@ -65,35 +72,38 @@ export default function ReceptionistDashboard() {
     [booked, inHouse, today],
   );
 
-  const rows = useMemo(() => {
+  // Search filters every section at once.
+  const shown = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    const list = lists[tab];
-    if (!needle) return list;
-    return list.filter((b) =>
+    const match = (b) =>
+      !needle ||
       [b.guest.full_name, b.room.room_number, bookingRef(b.booking_id), b.room.type_name]
         .filter(Boolean)
-        .some((s) => s.toLowerCase().includes(needle)),
-    );
-  }, [lists, tab, q]);
-  const pageRows = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-
-  const tabs = [
-    { key: 'arrivals', label: "Today's arrivals", count: lists.arrivals.length },
-    { key: 'inhouse', label: 'In-house', count: lists.inhouse.length },
-    { key: 'departures', label: 'Departures', count: lists.departures.length },
-    { key: 'upcoming', label: 'Upcoming', count: lists.upcoming.length },
-  ];
+        .some((s) => s.toLowerCase().includes(needle));
+    return {
+      departures: lists.departures.filter(match),
+      arrivals: lists.arrivals.filter(match),
+      // Guests due out are listed under Departures, not twice.
+      staying: lists.inhouse.filter((b) => b.check_out_date > today).filter(match),
+      upcoming: lists.upcoming.filter(match),
+    };
+  }, [lists, q, today]);
 
   const refresh = () => {
     bookings.refetch();
     rooms.refetch();
   };
 
+  const openBill = (b, notice = '') => {
+    setBillNotice(notice);
+    setBillFor(b);
+  };
+
   const doCheckIn = async (b) => {
     setBusyId(b.booking_id);
     try {
       await checkInBooking(b.booking_id);
-      toast.success(`${b.guest.full_name} checked in to Room ${b.room.room_number}`);
+      toast.success(`Checked in: ${b.guest.full_name}, Room ${b.room.room_number}`);
       refresh();
     } catch (err) {
       toast.error(errorMessage(err));
@@ -106,20 +116,17 @@ export default function ReceptionistDashboard() {
     setBusyId(b.booking_id);
     try {
       await checkOutBooking(b.booking_id);
-      toast.success(`${b.guest.full_name} checked out. Room ${b.room.room_number} is now available.`);
+      toast.success(`Checked out: ${b.guest.full_name}. Room ${b.room.room_number} is now available.`);
       setCheckoutFor(null);
       setBillFor(null);
       refresh();
     } catch (err) {
-      const status = err.response?.status;
-      const msg = errorMessage(err);
-      // Unpaid charges (checkout recalculates the bill first): go straight to settlement.
-      if (status === 402) {
-        toast.error(msg);
+      // Unpaid charges (checkout recalculates the bill first): go straight to payment.
+      if (err.response?.status === 402) {
         setCheckoutFor(null);
-        setBillFor(b);
+        openBill(b, balanceDueMessage(err));
       } else {
-        toast.error(msg);
+        toast.error(errorMessage(err));
       }
     } finally {
       setBusyId(null);
@@ -127,10 +134,11 @@ export default function ReceptionistDashboard() {
   };
 
   const doCancel = async () => {
-    setBusyId(cancelFor.booking_id);
+    const b = cancelFor;
+    setBusyId(b.booking_id);
     try {
-      await cancelBooking(cancelFor.booking_id);
-      toast.success(`Booking ${bookingRef(cancelFor.booking_id)} cancelled`);
+      await cancelBooking(b.booking_id);
+      toast.success(`Cancelled: booking ${bookingRef(b.booking_id)} for ${b.guest.full_name}. Room ${b.room.room_number} is free for ${formatStayRange(b.check_in_date, b.check_out_date)}.`);
       setCancelFor(null);
       refresh();
     } catch (err) {
@@ -140,132 +148,138 @@ export default function ReceptionistDashboard() {
     }
   };
 
-  const actions = (b) => {
+  // One visible action per row; the rest go in the row menu.
+  const rowActions = (b, section) => {
     const busy = busyId === b.booking_id;
+    const menuLabel = `More actions for ${b.guest.full_name}, Room ${b.room.room_number}`;
     if (b.status === 'Booked') {
-      // Same rules as perform_checkin: not before arrival, not once the stay has ended
-      const early = b.check_in_date > today;
-      const ended = b.check_out_date <= today;
-      const blockedReason = early
-        ? `Arrives on ${formatDate(b.check_in_date)}`
-        : ended ? 'The stay period has ended' : undefined;
-      return (
-        <>
-          <Button size="sm" loading={busy} disabled={Boolean(blockedReason)} title={blockedReason} onClick={() => doCheckIn(b)}>
-            Check in
-          </Button>
-          <Button size="sm" variant="dangerOutline" onClick={() => setCancelFor(b)}>Cancel</Button>
-        </>
-      );
+      return {
+        primary: section === 'arrivals' && b.check_out_date > today && (
+          <Button size="sm" loading={busy} onClick={() => doCheckIn(b)}>Check in</Button>
+        ),
+        menu: <RowMenu label={menuLabel} items={[{ label: 'Cancel booking', onClick: () => setCancelFor(b) }]} />,
+      };
     }
-    return (
-      <>
-        <Button size="sm" variant="outline" to={`/services/${b.booking_id}`}>Services</Button>
-        <Button size="sm" variant="outline" onClick={() => setBillFor(b)}>Bill</Button>
-        <Button size="sm" variant="dark" loading={busy} onClick={() => setCheckoutFor(b)}>Check out</Button>
-      </>
-    );
+    const services = { label: 'Add service', to: `/services/${b.booking_id}` };
+    const bill = { label: 'Bill and payments', onClick: () => openBill(b) };
+    if (section === 'departures') {
+      return {
+        primary: <Button size="sm" loading={busy} onClick={() => setCheckoutFor(b)}>Check out</Button>,
+        menu: <RowMenu label={menuLabel} items={[bill, services]} />,
+      };
+    }
+    return {
+      primary: <Button size="sm" variant="secondary" to={services.to}>Add service</Button>,
+      menu: <RowMenu label={menuLabel} items={[bill, { label: 'Check out', onClick: () => setCheckoutFor(b) }]} />,
+    };
   };
 
+  // Same rules as perform_checkin: not before arrival, not once the stay has ended.
+  const blockedReason = (b) => {
+    if (b.status !== 'Booked') return null;
+    if (b.check_in_date > today) return `Arrives on ${formatNumericDate(b.check_in_date)}`;
+    if (b.check_out_date <= today) return 'Stay period has ended; cancel or rebook';
+    return null;
+  };
+
+  const flags = (b) => (
+    <>
+      {b.status === 'Booked' && b.check_in_date < today && <Badge kind="problem">Overdue arrival</Badge>}
+      {b.status === 'Checked-In' && b.check_out_date < today && <Badge kind="problem">Overdue checkout</Badge>}
+      {b.status === 'Checked-In' && b.check_out_date === today && <Badge>Departs today</Badge>}
+    </>
+  );
+
+  const loading = bookings.isLoading && !bookings.data;
+  const nothingToday = !q && !lists.departures.length && !lists.arrivals.length && !lists.inhouse.length;
+
+  const sectionProps = { loading, rowActions, blockedReason, flags, today };
+
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
-      <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
+    <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
+      <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="eyebrow">Front desk{branch ? ` · ${branch.name}` : ''}</p>
-          <h1 className="mt-1 text-4xl font-semibold">{greeting()}</h1>
-          <p className="mt-1 text-sm text-navy-500">
-            <Icon name="calendar" className="mr-1 inline h-3.5 w-3.5" />
+          <h1 className="text-xl font-semibold text-ink-900">Today</h1>
+          <p className="mt-0.5 text-sm text-ink-600">
             {new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={() => setGuestDrawer(true)}><Icon name="user" /> Register guest</Button>
-          <Button to="/rooms?mode=booking"><Icon name="plus" /> New booking</Button>
+          <Button variant="secondary" onClick={() => setGuestDrawer(true)}>Register guest</Button>
+          <Button variant="secondary" to="/rooms?mode=booking">New booking</Button>
         </div>
       </header>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Arrivals today" icon="calendar" value={lists.arrivals.length} sub="Awaiting check-in" loading={bookings.isLoading} />
-        <StatCard label="In-house guests" icon="users" tone="green" value={lists.inhouse.length} sub="Currently checked in" loading={bookings.isLoading} />
-        <StatCard label="Departures due" icon="logout" tone="gold" value={lists.departures.length} sub="Check-out today or overdue" loading={bookings.isLoading} />
-        <StatCard label="Rooms available" icon="bed" value={rooms.data?.length ?? '–'} sub="Ready to sell now" loading={rooms.isLoading} />
+      <SummaryStrip
+        className="mt-4"
+        items={[
+          { label: 'Arrivals today', value: lists.arrivals.length, loading },
+          { label: 'In-house', value: lists.inhouse.length, loading },
+          { label: 'Departures due', value: lists.departures.length, loading },
+          { label: 'Rooms available', value: rooms.data?.length ?? '–', loading: rooms.isLoading && !rooms.data },
+        ]}
+      />
+
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <div className="relative w-full sm:w-80">
+          <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-600" />
+          <input
+            type="search"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Guest, room or booking reference"
+            aria-label="Search guest, room or booking reference"
+            className="input pl-9"
+          />
+        </div>
+        <Button variant="ghost" size="md" onClick={refresh} aria-label="Refresh lists" className="px-2.5">
+          <Icon name="refresh" />
+        </Button>
+        {updatedAt && (
+          <span className="text-2xs tabular text-ink-600">
+            Updated {updatedAt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+          </span>
+        )}
       </div>
 
-      <section className="card mt-6">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-navy-100 p-4">
-          <Tabs tabs={tabs} value={tab} onChange={(t) => { setTab(t); setPage(1); }} className="max-w-full" />
-          <div className="flex items-center gap-2">
-            <div className="relative">
-              <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-navy-400" />
-              <input value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} placeholder="Search guest, room or ref…" aria-label="Search bookings" className="input w-64 pl-9" />
-            </div>
-            <Button variant="outline" size="md" onClick={refresh} aria-label="Refresh"><Icon name="refresh" /></Button>
-          </div>
-        </div>
-
-        {bookings.error ? (
-          <div className="p-6"><ErrorState message={bookings.error} onRetry={bookings.refetch} /></div>
-        ) : bookings.isLoading ? (
-          <div className="space-y-3 p-4">{[...Array(4)].map((_, i) => <Skeleton key={i} className="h-14 w-full" />)}</div>
-        ) : rows.length === 0 ? (
-          <div className="p-6">
+      {bookings.error ? (
+        <div className="mt-4"><ErrorState message={bookings.error} onRetry={bookings.refetch} /></div>
+      ) : (
+        <div className="mt-6 space-y-8">
+          {!loading && nothingToday ? (
             <EmptyState
-              icon="calendar"
-              title={q ? 'No matching bookings' : 'Nothing here right now'}
-              message={q ? 'Try a different search term.' : tab === 'arrivals' ? 'No guests are waiting to check in.' : undefined}
-              action={tab === 'arrivals' && !q ? <Button to="/rooms?mode=booking">Create a booking</Button> : null}
+              title="Nothing due today"
+              message="New bookings appear here on their arrival date."
+              action={<Button variant="secondary" to="/rooms?mode=booking">New booking</Button>}
             />
-          </div>
-        ) : (
-          <>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[820px]">
-                <thead className="bg-navy-50">
-                  <tr><th className="th">Booking</th><th className="th">Guest</th><th className="th">Room</th><th className="th">Dates</th><th className="th">Status</th><th className="th text-right">Actions</th></tr>
-                </thead>
-                <tbody className="divide-y divide-navy-100">
-                  {pageRows.map((b) => {
-                    const overdueArrival = b.status === 'Booked' && b.check_in_date < today;
-                    const overdueDeparture = b.status === 'Checked-In' && b.check_out_date < today;
-                    return (
-                      <tr key={b.booking_id} className="hover:bg-navy-50/50">
-                        <td className="td font-mono text-xs text-navy-500">{bookingRef(b.booking_id)}</td>
-                        <td className="td font-semibold">{b.guest.full_name}</td>
-                        <td className="td">
-                          <span className="font-semibold">Room {b.room.room_number}</span>
-                          <span className="block text-xs text-navy-500">{b.room.type_name}</span>
-                        </td>
-                        <td className="td whitespace-nowrap">
-                          {formatShortDate(b.check_in_date)} → {formatDate(b.check_out_date)}
-                          <span className="block text-xs text-navy-500">{calculateNights(b.check_in_date, b.check_out_date)} nights</span>
-                        </td>
-                        <td className="td">
-                          <div className="flex flex-wrap gap-1">
-                            <Badge status={b.status} />
-                            {overdueArrival && <Badge tone="red">Overdue arrival</Badge>}
-                            {overdueDeparture && <Badge tone="red">Overdue checkout</Badge>}
-                            {!overdueDeparture && b.status === 'Checked-In' && b.check_out_date === today && <Badge tone="amber">Departs today</Badge>}
-                          </div>
-                        </td>
-                        <td className="td"><div className="flex flex-wrap justify-end gap-1.5">{actions(b)}</div></td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            <div className="border-t border-navy-100"><Pagination page={page} pageSize={PAGE_SIZE} total={rows.length} onChange={setPage} /></div>
-          </>
-        )}
-      </section>
+          ) : (
+            <>
+              <TaskSection id="departures" title="Departures due" rows={shown.departures} empty={q ? 'No matching departures.' : 'No departures due.'} {...sectionProps} />
+              <TaskSection id="arrivals" title="Arrivals today" rows={shown.arrivals} empty={q ? 'No matching arrivals.' : 'No arrivals left today.'} {...sectionProps} />
+              <TaskSection id="staying" title="Staying on" rows={shown.staying} empty={q ? 'No matching in-house guests.' : 'No in-house guests staying past today.'} {...sectionProps} />
+            </>
+          )}
 
-      <p className="mt-4 text-xs text-navy-400">
-        Need to add charges? Use <strong>Services</strong> on a checked-in guest. Bills are recalculated whenever you open them.
-      </p>
+          {!loading && lists.upcoming.length > 0 && (
+            <details className="group rounded-lg border border-ink-100 bg-paper-50" open={Boolean(q) || undefined}>
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-lg px-4 py-3 text-sm font-medium text-ink-900">
+                <span>
+                  Upcoming arrivals <span className="tabular font-normal text-ink-600">· {shown.upcoming.length}</span>
+                </span>
+                <Icon name="chevronDown" className="h-4 w-4 text-ink-600 transition-transform group-open:rotate-180" />
+              </summary>
+              <div className="border-t border-ink-100">
+                <TaskSection id="upcoming" bare rows={shown.upcoming} empty="No matching upcoming arrivals." {...sectionProps} />
+              </div>
+            </details>
+          )}
+        </div>
+      )}
 
       {billFor && (
         <BillPaymentModal
           booking={billFor}
+          notice={billNotice}
           onClose={() => setBillFor(null)}
           onChanged={refresh}
           onCheckout={(b) => { setBillFor(null); setCheckoutFor(b); }}
@@ -276,19 +290,18 @@ export default function ReceptionistDashboard() {
         open={Boolean(checkoutFor)}
         onClose={() => setCheckoutFor(null)}
         size="sm"
-        title="Check out guest?"
+        title={checkoutFor ? `Check out ${checkoutFor.guest.full_name}?` : ''}
         footer={
           <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setCheckoutFor(null)}>Not yet</Button>
-            <Button loading={busyId === checkoutFor?.booking_id} onClick={() => doCheckOut(checkoutFor)}>Confirm check-out</Button>
+            <Button variant="ghost" onClick={() => setCheckoutFor(null)}>Not now</Button>
+            <Button loading={busyId === checkoutFor?.booking_id} onClick={() => doCheckOut(checkoutFor)}>Check out</Button>
           </div>
         }
       >
         {checkoutFor && (
-          <div className="space-y-2 text-sm text-navy-600">
-            <p><strong className="text-navy-900">{checkoutFor.guest.full_name}</strong> · Room {checkoutFor.room.room_number}</p>
-            <p>The bill must be fully paid. If a balance remains, you’ll be taken to payment.</p>
-          </div>
+          <p className="text-sm text-ink-900">
+            Room {checkoutFor.room.room_number} becomes available. The bill is recalculated first; if a balance is due, the payment window opens instead.
+          </p>
         )}
       </Modal>
 
@@ -304,10 +317,124 @@ export default function ReceptionistDashboard() {
           </div>
         }
       >
-        {cancelFor && <p className="text-sm text-navy-600">{cancelFor.guest.full_name} · Room {cancelFor.room.room_number} · {formatDate(cancelFor.check_in_date)}. This can’t be undone.</p>}
+        {cancelFor && (
+          <p className="text-sm text-ink-900">
+            {cancelFor.guest.full_name}: Room {cancelFor.room.room_number} becomes available for{' '}
+            {formatStayRange(cancelFor.check_in_date, cancelFor.check_out_date)}. This can’t be undone.
+          </p>
+        )}
       </Modal>
 
       <GuestFormDrawer open={guestDrawer} onClose={() => setGuestDrawer(false)} onCreated={() => {}} />
     </div>
+  );
+}
+
+// One task list: a table from md up, stacked row cards on phones.
+function TaskSection({ id, title, rows, empty, loading, bare, rowActions, blockedReason, flags }) {
+  const [page, setPage] = useState(1);
+  const pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const current = Math.min(page, pages);
+  const pageRows = rows.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
+  const headingId = `${id}-heading`;
+
+  const body = loading ? (
+    <div className="space-y-2 p-4">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
+  ) : rows.length === 0 ? (
+    <p className="px-4 py-4 text-sm text-ink-600">{empty}</p>
+  ) : (
+    <>
+      <div className="relative hidden overflow-x-auto md:block">
+        {/* Fixed columns so the stacked sections line up. */}
+        <table className="w-full min-w-[720px] table-fixed" aria-labelledby={title ? headingId : undefined} aria-label={title ? undefined : 'Upcoming arrivals'}>
+          <colgroup>
+            <col className="w-[24%]" /><col className="w-[12%]" /><col className="w-[16%]" /><col className="w-[22%]" /><col />
+          </colgroup>
+          <thead>
+            <tr className="bg-paper-200">
+              <th scope="col" className="th">Guest</th>
+              <th scope="col" className="th">Room</th>
+              <th scope="col" className="th">Stay</th>
+              <th scope="col" className="th">Status</th>
+              <th scope="col" className="th"><span className="sr-only">Actions</span></th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-ink-100">
+            {pageRows.map((b) => {
+              const { primary, menu } = rowActions(b, id);
+              const reason = blockedReason(b);
+              const n = calculateNights(b.check_in_date, b.check_out_date);
+              return (
+                <tr key={b.booking_id} className="hover:bg-paper-100">
+                  <td className="td">
+                    <span className="font-medium text-ink-900">{b.guest.full_name}</span>
+                    <span className="block font-mono text-2xs text-ink-600">{bookingRef(b.booking_id)}</span>
+                  </td>
+                  <td className="td">
+                    <span className="tabular">{b.room.room_number}</span>
+                    <span className="block text-2xs text-ink-600">{b.room.type_name}</span>
+                  </td>
+                  <td className="td whitespace-nowrap tabular">
+                    {formatStayRange(b.check_in_date, b.check_out_date)}
+                    <span className="block text-2xs text-ink-600">{n} night{n === 1 ? '' : 's'}</span>
+                  </td>
+                  <td className="td">
+                    <div className="flex flex-wrap gap-1"><Badge status={b.status} />{flags(b)}</div>
+                  </td>
+                  <td className="td">
+                    <div className="flex items-center justify-end gap-2">
+                      {reason && <span className="text-2xs text-ink-600">{reason}</span>}
+                      {primary}
+                      {menu}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <ul className="divide-y divide-ink-100 md:hidden">
+        {pageRows.map((b) => {
+          const { primary, menu } = rowActions(b, id);
+          const reason = blockedReason(b);
+          return (
+            <li key={b.booking_id} className="space-y-2 px-4 py-3">
+              <div className="flex items-start justify-between gap-2">
+                <p className="min-w-0 text-sm">
+                  <span className="font-medium text-ink-900">{b.guest.full_name}</span>
+                  <span className="text-ink-600"> · Room {b.room.room_number}{b.room.type_name ? `, ${b.room.type_name}` : ''}</span>
+                </p>
+                {menu}
+              </div>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-ink-600">
+                <span className="tabular">{formatStayRange(b.check_in_date, b.check_out_date)}</span>
+                <span className="font-mono">{bookingRef(b.booking_id)}</span>
+                <Badge status={b.status} />
+                {flags(b)}
+              </div>
+              {reason && <p className="text-2xs text-ink-600">{reason}</p>}
+              {primary && <div className="[&>*]:w-full">{primary}</div>}
+            </li>
+          );
+        })}
+      </ul>
+      {rows.length > PAGE_SIZE && (
+        <div className="border-t border-ink-100">
+          <Pagination page={current} pageSize={PAGE_SIZE} total={rows.length} onChange={setPage} />
+        </div>
+      )}
+    </>
+  );
+
+  if (bare) return body;
+  return (
+    <section aria-labelledby={headingId}>
+      <h2 id={headingId} className="mb-2 text-base font-semibold text-ink-900">
+        {title} <span className="tabular font-normal text-ink-600">· {loading ? '…' : rows.length}</span>
+      </h2>
+      <div className="overflow-hidden rounded-lg border border-ink-100 bg-paper-50">{body}</div>
+    </section>
   );
 }

@@ -26,6 +26,30 @@
   | foreign-key violation | 404 | A referenced record does not exist. |
   | check / not-null violation | 422 | The request violates a data rule. / A required field is missing. |
   | value too long / numeric overflow / other data error | 422 | A value is too long. / A numeric value is out of range. / Invalid input. |
+  | undefined function / table / object (DB older than `run_all.sql`) | 503 | The database is out of date. Ask the system admin to rebuild it. |
+
+- **Out-of-date schema (ISSUE-15).** At startup the API checks the DB for every procedure, function, view, trigger, named constraint and index it depends on (`app/schema_check.py`). If any is missing it logs one error block with the list and the fix command, and every `/api/*` request except `GET /api/health` returns `503 { "detail": "The database is out of date. Ask the system admin to rebuild it." }` until the DB is rebuilt and the API restarted. `GET /` (liveness) is unaffected.
+
+---
+
+## 0. Health
+
+### GET `/`
+Liveness. Always `200 { "status": "ok", "service": "SkyNest API" }` while the process is up.
+
+### GET `/api/health`
+Readiness (public). `200 { "status": "ok" }` when the DB schema matches what the API needs, otherwise:
+
+```json
+503
+{
+  "status": "schema_out_of_date",
+  "missing": { "procedures": ["cancel_booking"], "constraints": ["chk_payment_method"] },
+  "fix": "docker compose down -v && docker compose up --build"
+}
+```
+
+`missing` keys are any of `procedures`, `functions`, `views`, `triggers`, `constraints`, `indexes`; only kinds with missing objects appear. The result is computed once at startup.
 
 ---
 

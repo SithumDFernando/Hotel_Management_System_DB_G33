@@ -20,16 +20,16 @@
 --   1. BRANCH           (3 rows)
 --   2. ROOM_TYPE        (4 rows)
 --   3. AMENITY          (8 rows)
---   4. ROOM_AMENITY     (16 junction rows)
+--   4. ROOM_AMENITY     (21 junction rows)
 --   5. ROOM_RATE        (12 rows — one per branch × room_type)
 --   6. ROOM             (12 rooms across 3 branches)
 --   7. GUEST            (6 guests — mix of Individual + Corporate)
 --   8. USER_ACCOUNT     (7 accounts — admin, managers, receptionist, guests)
 --   9. SERVICE          (6 services)
---   10. BOOKING         (6 bookings in various states + edge cases)
---   11. SERVICE_USAGE   (5 rows — only for Checked-In/Checked-Out bookings)
---   12. BILL            (2 rows — for completed bookings)
---   13. PAYMENT         (3 rows — full, partial, and multi-payment)
+--   10. BOOKING         (7 bookings in various states + edge cases)
+--   11. SERVICE_USAGE   (9 rows — only for Checked-In/Checked-Out bookings)
+--   12. BILL            (4 rows — 3 completed bookings + 1 provisional)
+--   13. PAYMENT         (4 rows — full, partial, and multi-payment)
 -- =============================================================================
 
 BEGIN;

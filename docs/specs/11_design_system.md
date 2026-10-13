@@ -34,6 +34,7 @@ The Tailwind theme **replaces** the default palette (`theme.colors`, not `theme.
 | `tea-900` | `#173A2B` | Primary button hover, text on `tea-100` |
 | `tea-700` | `#24513D` | **Primary actions**, links, active nav item, "Checked in" chip |
 | `tea-500` | `#3D7A5C` | Focus ring, chart primary series, non-text accents |
+| `tea-300` | `#9CC2AD` | **Charts only:** third series, when one is unavoidable. Never text. |
 | `tea-100` | `#E3EEE7` | Selected row, "Available"/"Paid" chip background, success toast |
 | `signal-700` | `#B3261E` | **Problems only**: errors, "Balance due", destructive confirm |
 | `signal-100` | `#FBE9E7` | Background of error banners and "Balance due" chips |
@@ -119,11 +120,20 @@ Chips: radius `sm`, 12px, weight 500, `px-2 py-0.5`. No status dot unless it's n
 | `Tabs` | Text tabs with a 2px `tea-700` underline on the active tab. No pill tabs. |
 | `Modal` / drawer | The only place `overlay` shadow appears. Title states the object ("Bill · Booking for Kamal Perera, Suite 101"). |
 | `Toast` | Says what happened with the specific object: "Checked in: Kamal Perera, Room 101". No "Success!". Success is ink text with a tea-500 left rule; error is signal. |
-| `StatCard` | Replace with a **summary strip**: one row of `label: number` pairs in text, separated by hairlines, not tile cards. |
+| `SummaryStrip` | One row of `label: value` pairs in text, separated by hairlines (two columns on phones), not tile cards. `problem: true` shows a value in `signal-700` (e.g. Balance due > 0). Replaced `StatCard`, which is deleted. |
+| `RowMenu` | The `⋯` menu for a table row's secondary actions, so each row shows one visible action. Portalled (a table's scroll box can't clip it); Enter/Space opens, arrows move, Esc closes and returns focus. |
+| `Logo` | The brand mark, optionally with the wordmark (§6.1). `variant` mark/full, `tone` default/inverse, `size` sm/md/lg. |
 | Tables | White, hairline row dividers, header row `paper-200`, sticky header, numbers right-aligned `tabular-nums`, scroll inside their own container. |
 | `States` | Every data view designs loading (skeleton in `paper-200`), empty (says what to do next), error (says what failed + Retry), populated. |
-| Charts (recharts) | Series colours: `tea-700`, then `ink-300`, then `tea-300` tint if a third is unavoidable. Bars start at zero, axes labelled with units (LKR), direct value labels where readable, no gradients, no donut charts. |
+| Charts (recharts) | Series colours: `tea-700`, then `ink-300`, then `tea-300` tint if a third is unavoidable. Bars start at zero, axes labelled with units (LKR), direct value labels where readable, no gradients, no donut charts. recharts needs raw colours, so their hex values live **only** in `src/lib/chartTheme.js` (mirroring `tailwind.config.js`). `ink-300` is under 3:1 on white, so a chart using it carries value labels and a table view ("Show as table"). |
 | Focus | Visible `tea-500` 2px ring with offset on every interactive element. |
+
+### 6.1 Brand
+
+- The canonical mark is `frontend/src/assets/skynest-mark.svg`: a `paper-200` (`#EEEBE3`) circle with the bird and waves in `tea-900` (`#173A2B`). `skynest-mark-mono.svg` uses `currentColor` for dark surfaces (footer). Favicons and app icons in `frontend/public/` are rendered from it.
+- Minimum size 16px (favicon). Navbar 32px, footer 28px, sign-in pages 48px.
+- The wordmark "SkyNest" is set in Source Serif 4 600 next to the mark; it is text, not part of the SVG.
+- Don't recolour, outline, add shadows to or place the mark on a photo.
 
 ---
 
@@ -176,7 +186,7 @@ Pages: `ReceptionistDashboard`, `ManagerDashboard`, `AdminDashboard`, `ServiceRe
 
 ### 9.1 Error messages
 
-All API errors go through `errorMessage()` in `src/api/client.js`. Show the server's `detail` when it is a readable sentence; otherwise use these patterns. Messages sit next to the control that caused them and stay until corrected.
+All API errors go through `errorMessage()` in `src/utils/formatters.js`. Show the server's `detail` when it is a readable sentence (short, with no SQL, constraint or UUID text); otherwise use these patterns. Messages sit next to the control that caused them and stay until corrected. `fieldErrors()` (same file) turns a FastAPI 422 list into `{ field: message }` for the inline errors under each `Field`. `useFetch(…, { failMessage })` puts what failed first: "Couldn't load rooms. …". A 503 with the "database is out of date" detail (ISSUE-15) is shown as is.
 
 | HTTP | Situation | Message pattern |
 |---|---|---|
@@ -211,7 +221,7 @@ Three quick tests: (1) cover the logo — could this page be any hotel anywhere?
 
 ## 11. Migration from the current UI
 
-Applies to the redesign issue (planned as a separate issue after the current fixes).
+**Done 2026-10-12** (UI-00 to UI-11, `docs/work/ui_ux/Tasklist.md`). No legacy colour, shape or type class remains in `frontend/src`. Kept for reference.
 
 | Current | New |
 |---|---|

@@ -4,22 +4,28 @@ import useAuth from '@/hooks/useAuth';
 import { homeForRole } from '@/context/AuthContext';
 import { errorMessage } from '@/utils/formatters';
 import Button from '@/components/ui/Button';
-import Icon from '@/components/ui/Icon';
-import { InlineAlert } from '@/components/ui/States';
-import { HERO_IMAGE } from '@/lib/media';
+import Logo from '@/components/ui/Logo';
 
 // Seeded accounts (db/seed/sample_data.sql) — shown only in dev builds so the
 // team can sign in with one click while demoing.
 const DEMO_ACCOUNTS = [
   { label: 'Admin', email: 'admin@skynest.lk' },
   { label: 'Manager', email: 'mgr.colombo@skynest.lk' },
-  { label: 'Reception', email: 'rec.colombo@skynest.lk' },
+  { label: 'Receptionist', email: 'rec.colombo@skynest.lk' },
   { label: 'Guest', email: 'kamal@mail.com' },
 ];
 const DEMO_PASSWORD = 'SkyNest@2026';
 
 // Only follow same-site relative redirects.
 const safeNext = (next) => (next && next.startsWith('/') && !next.startsWith('//') ? next : null);
+
+// Spec 11 §9.1 sign-in messages.
+const loginError = (err) => {
+  const status = err.response?.status;
+  if (status === 401) return 'Email or password is incorrect.';
+  if (status === 429) return 'Too many sign-in attempts. Wait a minute and try again.';
+  return errorMessage(err);
+};
 
 export default function Login() {
   const { login, isAuthenticated, user } = useAuth();
@@ -43,117 +49,98 @@ export default function Login() {
       const me = await login(email.trim(), password);
       navigate(next || homeForRole(me.role), { replace: true });
     } catch (err) {
-      setError(err.response?.status === 401 ? 'Invalid email or password.' : errorMessage(err));
+      setError(loginError(err));
       setBusy(false);
     }
   };
 
+  const invalid = error ? { 'aria-invalid': true, 'aria-describedby': 'login-error' } : {};
+
   return (
-    <div className="grid min-h-[calc(100vh-4rem)] lg:grid-cols-2">
-      <aside className="relative hidden overflow-hidden bg-navy-900 lg:block">
-        <img src={HERO_IMAGE} alt="" className="absolute inset-0 h-full w-full object-cover opacity-40" onError={(e) => (e.currentTarget.style.display = 'none')} />
-        <div className="absolute inset-0 bg-gradient-to-t from-navy-900 via-navy-900/60 to-navy-800/30" />
-        <div className="relative flex h-full flex-col justify-end p-12 text-white">
-          <span className="mb-6 h-px w-14 bg-gold-400" />
-          <h2 className="max-w-md text-4xl font-semibold leading-tight">“Your sky-high stay, effortlessly managed.”</h2>
-          <p className="mt-4 max-w-sm text-sm text-navy-200">
-            Centralised reservations, billing and guest services across Colombo, Kandy and Galle.
-          </p>
+    <div className="mx-auto w-full max-w-sm px-4 py-12 sm:py-16">
+      <div className="text-center">
+        <Logo variant="mark" size="lg" className="justify-center" />
+        <h1 className="mt-4 font-display text-[32px] font-semibold leading-tight text-ink-900">Sign in to SkyNest</h1>
+      </div>
+
+      <form onSubmit={submit} className="card mt-8 space-y-4 p-6" noValidate>
+        <div>
+          <label htmlFor="email" className="label">Email</label>
+          <input
+            id="email"
+            type="email"
+            autoComplete="username"
+            required
+            autoFocus
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="input"
+            {...invalid}
+          />
         </div>
-      </aside>
 
-      <section className="flex items-center justify-center px-4 py-12">
-        <div className="w-full max-w-md">
-          <div className="card p-8">
-            <div className="mb-6 text-center">
-              <span className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-navy-50 text-gold-700">
-                <Icon name="building" className="h-6 w-6" />
-              </span>
-              <h1 className="text-3xl font-semibold">Welcome back</h1>
-              <p className="mt-1 text-sm text-navy-500">Sign in to your SkyNest account</p>
-            </div>
-
-            <form onSubmit={submit} className="space-y-4" noValidate>
-              {error && <InlineAlert>{error}</InlineAlert>}
-
-              <div>
-                <label htmlFor="email" className="label">Email address</label>
-                <input
-                  id="email"
-                  type="email"
-                  autoComplete="username"
-                  required
-                  autoFocus
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="input"
-                  placeholder="you@example.com"
-                />
-              </div>
-
-              <div>
-                <label htmlFor="password" className="label">Password</label>
-                <div className="relative">
-                  <input
-                    id="password"
-                    type={show ? 'text' : 'password'}
-                    autoComplete="current-password"
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="input pr-11"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShow((s) => !s)}
-                    aria-label={show ? 'Hide password' : 'Show password'}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-navy-400 hover:text-navy-700"
-                  >
-                    <Icon name={show ? 'eyeOff' : 'eye'} />
-                  </button>
-                </div>
-              </div>
-
-              <Button type="submit" size="lg" className="w-full" loading={busy} disabled={!email || !password}>
-                Sign in <Icon name="arrowRight" />
-              </Button>
-            </form>
-
-            {import.meta.env.DEV && (
-              <div className="mt-6 border-t border-navy-100 pt-5">
-                <p className="mb-2 text-center text-[11px] font-semibold uppercase tracking-wider text-navy-400">
-                  Demo accounts (dev only)
-                </p>
-                <div className="flex flex-wrap justify-center gap-2">
-                  {DEMO_ACCOUNTS.map((a) => (
-                    <button
-                      key={a.email}
-                      type="button"
-                      onClick={() => {
-                        setEmail(a.email);
-                        setPassword(DEMO_PASSWORD);
-                        setError('');
-                      }}
-                      className="rounded-full border border-navy-200 bg-navy-50 px-3 py-1 text-xs font-semibold text-navy-700 hover:bg-gold-100"
-                    >
-                      {a.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+        <div>
+          <div className="flex items-baseline justify-between">
+            <label htmlFor="password" className="label">Password</label>
+            <button
+              type="button"
+              onClick={() => setShow((s) => !s)}
+              aria-pressed={show}
+              aria-controls="password"
+              className="rounded-sm text-[13px] font-medium text-tea-700 hover:underline"
+            >
+              {show ? 'Hide' : 'Show'}
+            </button>
           </div>
-
-          <p className="mt-6 text-center text-sm text-navy-500">
-            New guest?{' '}
-            <Link to="/register" className="font-semibold text-gold-700 underline-offset-2 hover:underline">
-              Create an account
-            </Link>
-            <span className="mx-2">·</span>
-            Staff accounts are issued by your branch manager.
-          </p>
+          <input
+            id="password"
+            type={show ? 'text' : 'password'}
+            autoComplete="current-password"
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="input"
+            {...invalid}
+          />
+          {error && (
+            <p id="login-error" role="alert" className="mt-2 text-[13px] text-signal-700">{error}</p>
+          )}
         </div>
-      </section>
+
+        <Button type="submit" className="w-full" loading={busy} disabled={!email || !password}>
+          Sign in
+        </Button>
+
+        {import.meta.env.DEV && (
+          <details className="border-t border-ink-100 pt-4 text-sm">
+            <summary className="cursor-pointer rounded-sm text-[13px] text-ink-600">Demo accounts (dev only)</summary>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {DEMO_ACCOUNTS.map((a) => (
+                <Button
+                  key={a.email}
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    setEmail(a.email);
+                    setPassword(DEMO_PASSWORD);
+                    setError('');
+                  }}
+                >
+                  {a.label}
+                </Button>
+              ))}
+            </div>
+          </details>
+        )}
+      </form>
+
+      <p className="mt-6 text-center text-sm text-ink-600">
+        New guest?{' '}
+        <Link to="/register" className="rounded-sm font-medium text-tea-700 hover:underline">
+          Create an account
+        </Link>
+      </p>
+      <p className="mt-2 text-center text-2xs text-ink-600">Staff accounts are created by the system admin.</p>
     </div>
   );
 }

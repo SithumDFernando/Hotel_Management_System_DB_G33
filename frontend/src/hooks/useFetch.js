@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { errorMessage } from '@/utils/formatters';
 
-// useFetch(fetcher, deps) -> { data, isLoading, error, refetch }
+// useFetch(fetcher, deps, { enabled, failMessage }) -> { data, isLoading, error, refetch }
 // `fetcher` is called with an AbortSignal; stale responses are ignored.
-export default function useFetch(fetcher, deps = [], { enabled = true } = {}) {
+// failMessage ("Couldn't load bookings.") leads the error text, so ErrorState says
+// what failed before why.
+export default function useFetch(fetcher, deps = [], { enabled = true, failMessage } = {}) {
   const [data, setData] = useState(null);
   const [isLoading, setLoading] = useState(enabled);
   const [error, setError] = useState(null);
@@ -25,7 +27,7 @@ export default function useFetch(fetcher, deps = [], { enabled = true } = {}) {
       })
       .catch((err) => {
         if (ctrl.signal.aborted || err?.code === 'ERR_CANCELED') return;
-        setError(errorMessage(err));
+        setError(failMessage ? `${failMessage} ${errorMessage(err)}` : errorMessage(err));
       })
       .finally(() => {
         if (!ctrl.signal.aborted) setLoading(false);
